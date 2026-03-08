@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  lndk:
+    image: alex71btc/lndk:v0.3.0
+    container_name: lndk
+    restart: unless-stopped
+
+    command: >
+      lndk
+      --address=https://YOUR_NODE_IP:10009
+      --cert-path=/secrets/tls.cert
+      --macaroon-path=/secrets/admin.macaroon
+      --data-dir=/data
+      --grpc-host=0.0.0.0
+      --grpc-port=7000
+
+    volumes:
+      - lndk_data:/data
+      - /root/lndk-secrets:/secrets:ro
+
+    ports:
+      - "7000:7000"
+
+volumes:
+  lndk_data:

@@ -5,3 +5,21 @@ lndk.conf*
 # Ignore nix outputs
 result
 result-[0-9]*
+# secrets
+secrets/
+*.macaroon
+*.pem
+*.cert
+.env
+
+# local junk
+*.log
+*.tar
+*.tar.gz
+.DS_Store
+Thumbs.db
+
+# editor / git
+.vscode/
+.idea/
+*.swp
