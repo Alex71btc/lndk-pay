@@ -1,25 +1,4 @@
-/target
-lndk.conf*
-/.vscode
-
-# Ignore nix outputs
-result
-result-[0-9]*
-# secrets
-secrets/
-*.macaroon
-*.pem
-*.cert
+.venv/
+__pycache__/
+*.pyc
 .env
-
-# local junk
-*.log
-*.tar
-*.tar.gz
-.DS_Store
-Thumbs.db
-
-# editor / git
-.vscode/
-.idea/
-*.swp
