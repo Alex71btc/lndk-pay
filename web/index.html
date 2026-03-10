@@ -12,6 +12,8 @@
       --muted: #a7b0c3;
       --accent: #6ea8fe;
       --border: #26324a;
+      --danger: #ff7b72;
+      --ok: #8fe388;
     }
     * { box-sizing: border-box; }
     body {
@@ -30,7 +32,7 @@
       background: rgba(18, 26, 43, 0.96);
       border: 1px solid var(--border);
       border-radius: 24px;
-      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
       padding: 28px;
     }
     .top {
@@ -43,6 +45,10 @@
       margin: 0 0 8px;
       font-size: 2rem;
       line-height: 1.1;
+    }
+    h2 {
+      margin: 0 0 8px;
+      font-size: 1.15rem;
     }
     .sub {
       color: var(--muted);
@@ -63,7 +69,7 @@
       padding: 18px;
       border: 1px solid var(--border);
       border-radius: 18px;
-      background: rgba(255,255,255,0.02);
+      background: rgba(255, 255, 255, 0.02);
     }
     .label {
       font-size: .92rem;
@@ -95,7 +101,14 @@
       text-decoration: none;
       transition: transform .12s ease, opacity .12s ease;
     }
-    button:hover, .btn:hover { transform: translateY(-1px); }
+    button:hover, .btn:hover {
+      transform: translateY(-1px);
+    }
+    button:disabled {
+      opacity: .65;
+      cursor: wait;
+      transform: none;
+    }
     .btn.secondary, button.secondary {
       background: transparent;
       color: var(--text);
@@ -116,14 +129,23 @@
       font-size: .92rem;
       line-height: 1.5;
     }
-    .ok { color: #8fe388; }
+    .status {
+      margin-top: 18px;
+      font-size: .95rem;
+      min-height: 1.4em;
+    }
+    .status.ok { color: var(--ok); }
+    .status.error { color: var(--danger); }
     .qrWrap {
       display: grid;
       gap: 12px;
       justify-items: center;
       text-align: center;
     }
-    #qrcode {
+    #qrcode, #offerQr {
+      min-height: 24px;
+    }
+    .qrBox {
       background: white;
       padding: 14px;
       border-radius: 20px;
@@ -133,8 +155,8 @@
       place-items: center;
       overflow: hidden;
     }
-    #qrcode img,
-    #qrcode canvas {
+    .qrBox img,
+    .qrBox canvas {
       max-width: 100%;
       height: auto;
       display: block;
@@ -149,26 +171,35 @@
       }
     }
     @media (max-width: 560px) {
-      .card { padding: 20px; border-radius: 20px; }
-      h1 { font-size: 1.6rem; }
-      #qrcode { min-height: 220px; min-width: 220px; }
+      .card {
+        padding: 20px;
+        border-radius: 20px;
+      }
+      h1 {
+        font-size: 1.6rem;
+      }
+      .qrBox {
+        min-height: 220px;
+        min-width: 220px;
+      }
     }
   </style>
 </head>
 <body>
   <main class="card">
     <div class="pill">BOLT12 / BIP353</div>
+
     <div class="top">
       <section>
         <h1>bolt12@alex71btc.com</h1>
-        <div class="sub">Kleine statische Pay-Seite für deine human-readable Lightning-Adresse.</div>
+        <div class="sub">Mobile Pay-Seite für deine human-readable Lightning-Adresse mit QR, Wallet-Links und direkter Offer-Erzeugung.</div>
 
         <section class="section">
           <label class="label">Adresse</label>
           <div class="mono" id="addressText">bolt12@alex71btc.com</div>
           <div class="row">
             <a class="btn" id="payLink" href="bitcoin:bolt12@alex71btc.com">Mit Wallet öffnen</a>
-            <button class="secondary" id="copyAddressBtn">Adresse kopieren</button>
+            <button class="secondary" id="copyAddressBtn" type="button">Adresse kopieren</button>
           </div>
           <div class="hint">
             Standardmäßig nutzt der Button <span class="mono">bitcoin:bolt12@alex71btc.com</span>. Für manche Wallets kann
@@ -182,59 +213,125 @@
         <div id="qrcode"></div>
         <div class="tiny" id="qrTargetText">bitcoin:bolt12@alex71btc.com</div>
         <div class="row">
-          <button class="secondary" id="downloadQrBtn">QR herunterladen</button>
+          <button class="secondary" id="downloadQrBtn" type="button">QR herunterladen</button>
         </div>
       </section>
     </div>
 
     <section class="section">
-      <label class="label" for="customUri">Alternative URI für Tests</label>
-      <input id="customUri" value="bitcoin:bolt12@alex71btc.com" />
+      <label class="label">Schnellauswahl</label>
       <div class="row">
-        <button id="openCustomBtn">Alternative öffnen</button>
-        <button class="secondary" id="useLightningBtn">lightning:-Schema einsetzen</button>
-        <button class="secondary" id="regenQrBtn">QR aktualisieren</button>
+        <button class="secondary quickAmountBtn" data-amount="1" type="button">1 sat</button>
+        <button class="secondary quickAmountBtn" data-amount="1000" type="button">1k sats</button>
+        <button class="secondary quickAmountBtn" data-amount="10000" type="button">10k sats</button>
+        <button class="secondary quickAmountBtn" data-amount="21000" type="button">21k sats</button>
       </div>
       <div class="hint">
-        Gut zum Testen, falls eine Wallet auf <span class="mono">bitcoin:</span> nicht reagiert, aber auf <span class="mono">lightning:</span>.
+        Diese Buttons bauen passende Wallet-URIs. Für die echte Offer-Erzeugung nutzt du den Button <span class="mono">Offer erzeugen</span>.
       </div>
     </section>
 
     <section class="section">
-      <label class="label">Optional: direktes Offer</label>
-      <div class="mono" id="offerText">Hier später dein aktuelles lno... Offer eintragen</div>
+      <label class="label" for="amountInput">Mindestbetrag in sats</label>
+      <input id="amountInput" type="number" min="1" step="1" placeholder="Leer = Backend nutzt 1 sat" />
+
+      <label class="label" for="messageInput" style="margin-top:14px;">Beschreibung / Label</label>
+      <input id="messageInput" type="text" placeholder="z. B. coffee, tip, donation" />
+
+      <label class="label" for="customUri" style="margin-top:14px;">Alternative URI für Tests</label>
+      <input id="customUri" value="bitcoin:bolt12@alex71btc.com" />
+
       <div class="row">
-        <button class="secondary" id="copyOfferBtn">Offer kopieren</button>
+        <button id="createOfferBtn" type="button">Offer erzeugen</button>
+        <button id="buildBitcoinBtn" type="button">bitcoin:-URI bauen</button>
+        <button class="secondary" id="useLightningBtn" type="button">lightning:-Schema einsetzen</button>
+        <button class="secondary" id="openCustomBtn" type="button">Alternative öffnen</button>
+        <button class="secondary" id="regenQrBtn" type="button">QR aktualisieren</button>
       </div>
       <div class="hint">
-        Für deine spätere Umbrel-App kannst du hier zusätzlich das aktuelle <span class="mono">lno...</span>-Offer anzeigen.
+        <span class="mono">Offer erzeugen</span> ruft dein lokales Backend unter <span class="mono">/api/create-offer</span> auf. Leer bedeutet aktuell 1 sat Mindestbetrag.
       </div>
     </section>
 
-    <p class="hint ok" id="status"></p>
+    <section class="section">
+      <label class="label">Aktuelles Offer</label>
+      <input id="offerInput" type="text" placeholder="Hier erscheint das erzeugte lno... Offer" />
+      <div class="row">
+        <button class="secondary" id="copyOfferBtn" type="button">Offer kopieren</button>
+        <button class="secondary" id="makeOfferQrBtn" type="button">Offer-QR erzeugen</button>
+      </div>
+      <div class="hint">
+        Der Offer-QR nutzt jetzt bewusst nur den reinen <span class="mono">lno...</span>-String, damit pWallet ihn direkt scannen kann.
+      </div>
+    </section>
+
+    <section class="section">
+      <label class="label">Direkter Offer-QR</label>
+      <div id="offerQr" class="qrWrap"></div>
+      <div class="hint">
+        Dieser Bereich bleibt leer, bis ein echtes <span class="mono">lno...</span>-Offer vorhanden ist.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Offer bezahlen (privat)</h2>
+      <label class="label" for="payOfferInput">Offer zum Bezahlen</label>
+      <input id="payOfferInput" type="text" placeholder="lno..." />
+
+      <label class="label" for="payAmountInput" style="margin-top:14px;">Zahlbetrag in sats</label>
+      <input id="payAmountInput" type="number" min="1" step="1" placeholder="z. B. 1000" />
+
+      <label class="label" for="payerNoteInput" style="margin-top:14px;">Payer Note (optional)</label>
+      <input id="payerNoteInput" type="text" placeholder="z. B. test" />
+
+      <div class="row">
+        <button id="payOfferBtn" type="button">Offer bezahlen</button>
+        <button class="secondary" id="useCurrentOfferBtn" type="button">Aktuelles Offer übernehmen</button>
+      </div>
+      <div class="hint">
+        Das funktioniert nur, wenn dein Backend mit <span class="mono">ALLOW_PAY_OFFER=true</span> gestartet wurde. Diese Funktion ist für private Nutzung gedacht.
+      </div>
+    </section>
+
+    <div class="status" id="status"></div>
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
     const address = 'bolt12@alex71btc.com';
+    const quickButtons = document.querySelectorAll('.quickAmountBtn');
     const payLink = document.getElementById('payLink');
     const statusEl = document.getElementById('status');
     const customUri = document.getElementById('customUri');
-    const offerText = document.getElementById('offerText');
+    const offerInput = document.getElementById('offerInput');
     const qrTargetText = document.getElementById('qrTargetText');
     const qrContainer = document.getElementById('qrcode');
-    let qr;
+    const amountInput = document.getElementById('amountInput');
+    const messageInput = document.getElementById('messageInput');
+    const offerQr = document.getElementById('offerQr');
+    const createOfferBtn = document.getElementById('createOfferBtn');
+    const payOfferInput = document.getElementById('payOfferInput');
+    const payAmountInput = document.getElementById('payAmountInput');
+    const payerNoteInput = document.getElementById('payerNoteInput');
+    const payOfferBtn = document.getElementById('payOfferBtn');
+    const useCurrentOfferBtn = document.getElementById('useCurrentOfferBtn');
 
-    function setStatus(msg) {
+    function setStatus(msg, type = 'ok') {
       statusEl.textContent = msg;
-      window.setTimeout(() => {
-        if (statusEl.textContent === msg) statusEl.textContent = '';
-      }, 2500);
+      statusEl.className = `status ${type}`;
+    }
+
+    function createQrMarkup(targetElement) {
+      targetElement.innerHTML = '';
+      const box = document.createElement('div');
+      box.className = 'qrBox';
+      targetElement.appendChild(box);
+      return box;
     }
 
     function renderQr(text) {
-      qrContainer.innerHTML = '';
-      qr = new QRCode(qrContainer, {
+      const qrBox = createQrMarkup(qrContainer);
+      new QRCode(qrBox, {
         text,
         width: 220,
         height: 220,
@@ -243,14 +340,51 @@
       qrTargetText.textContent = text;
     }
 
+    function buildUri(scheme = 'bitcoin') {
+      return `${scheme}:${address}`;
+    }
+    function renderOfferQr(offer) {
+      offerQr.innerHTML = '';
+
+      if (!offer || !offer.startsWith('lno')) {
+        setStatus('Bitte zuerst ein gültiges lno... Offer eintragen.', 'error');
+        return;
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'qrWrap';
+
+      const code = document.createElement('div');
+      code.className = 'qrBox';
+
+      const text = document.createElement('div');
+      text.className = 'tiny mono';
+      text.textContent = offer;
+
+      wrapper.appendChild(code);
+      wrapper.appendChild(text);
+      offerQr.appendChild(wrapper);
+
+      new QRCode(code, {
+        text: offer,
+        width: 220,
+        height: 220,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+
     document.getElementById('copyAddressBtn').addEventListener('click', async () => {
       await navigator.clipboard.writeText(address);
       setStatus('Adresse kopiert.');
     });
 
     document.getElementById('copyOfferBtn').addEventListener('click', async () => {
-      const text = offerText.textContent.trim();
-      await navigator.clipboard.writeText(text);
+      const value = offerInput.value.trim();
+      if (!value) {
+        setStatus('Noch kein Offer vorhanden.', 'error');
+        return;
+      }
+      await navigator.clipboard.writeText(value);
       setStatus('Offer kopiert.');
     });
 
@@ -258,10 +392,31 @@
       window.location.href = customUri.value.trim();
     });
 
+    document.getElementById('buildBitcoinBtn').addEventListener('click', () => {
+      const uri = buildUri('bitcoin');
+      customUri.value = uri;
+      payLink.href = uri;
+      renderQr(uri);
+      setStatus('bitcoin:-URI aktualisiert.');
+    });
+
+    quickButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        amountInput.value = btn.dataset.amount;
+        const scheme = customUri.value.startsWith('lightning:') ? 'lightning' : 'bitcoin';
+        const uri = buildUri(scheme);
+        customUri.value = uri;
+        payLink.href = uri;
+        renderQr(uri);
+        setStatus(`Betrag gesetzt: ${btn.dataset.amount} sats.`);
+      });
+    });
+
     document.getElementById('useLightningBtn').addEventListener('click', () => {
-      customUri.value = `lightning:${address}`;
-      payLink.href = `lightning:${address}`;
-      renderQr(customUri.value.trim());
+      const uri = buildUri('lightning');
+      customUri.value = uri;
+      payLink.href = uri;
+      renderQr(uri);
       setStatus('lightning:-Schema gesetzt.');
     });
 
@@ -270,23 +425,135 @@
       setStatus('QR aktualisiert.');
     });
 
+    document.getElementById('makeOfferQrBtn').addEventListener('click', () => {
+      renderOfferQr(offerInput.value.trim());
+    });
+
     document.getElementById('downloadQrBtn').addEventListener('click', () => {
       const canvas = qrContainer.querySelector('canvas');
       const img = qrContainer.querySelector('img');
       const link = document.createElement('a');
       link.download = 'bolt12-qr.png';
+
       if (canvas) {
         link.href = canvas.toDataURL('image/png');
       } else if (img) {
         link.href = img.src;
       } else {
-        setStatus('QR noch nicht bereit.');
+        setStatus('QR noch nicht bereit.', 'error');
         return;
       }
+
       link.click();
     });
 
-    renderQr(`bitcoin:${address}`);
+    createOfferBtn.addEventListener('click', async () => {
+      const amountValue = amountInput.value.trim();
+      const descriptionValue = messageInput.value.trim() || address;
+      const payload = { description: descriptionValue };
+
+      if (amountValue) {
+        payload.amount = Number(amountValue);
+      }
+
+      createOfferBtn.disabled = true;
+      createOfferBtn.textContent = 'Erzeuge...';
+      setStatus('Erzeuge Offer...');
+
+      try {
+        const response = await fetch('/api/create-offer', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Offer konnte nicht erzeugt werden.');
+        }
+
+        offerInput.value = data.offer;
+        renderOfferQr(data.offer);
+        setStatus('Offer erfolgreich erzeugt.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(`Fehler: ${message}`, 'error');
+      } finally {
+        createOfferBtn.disabled = false;
+        createOfferBtn.textContent = 'Offer erzeugen';
+      }
+    });
+
+    useCurrentOfferBtn.addEventListener('click', () => {
+      payOfferInput.value = offerInput.value.trim();
+      setStatus('Aktuelles Offer in das Zahlungsfeld übernommen.');
+    });
+
+    payOfferBtn.addEventListener('click', async () => {
+      const offer = payOfferInput.value.trim();
+      const amountSat = payAmountInput.value.trim();
+      const payerNote = payerNoteInput.value.trim();
+
+      if (!offer || !offer.startsWith('lno')) {
+        setStatus('Bitte ein gültiges lno... Offer zum Bezahlen eingeben.', 'error');
+        return;
+      }
+      if (!amountSat) {
+        setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error');
+        return;
+      }
+
+      const payload = {
+        offer,
+        amount_sat: Number(amountSat)
+      };
+      if (payerNote) {
+        payload.payer_note = payerNote;
+      }
+
+      payOfferBtn.disabled = true;
+      payOfferBtn.textContent = 'Bezahle...';
+      setStatus('Bezahle Offer...');
+
+      try {
+        const response = await fetch('/api/pay-offer', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Offer konnte nicht bezahlt werden.');
+        }
+
+        setStatus(data.raw_output || 'Offer erfolgreich bezahlt.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(`Fehler: ${message}`, 'error');
+      } finally {
+        payOfferBtn.disabled = false;
+        payOfferBtn.textContent = 'Offer bezahlen';
+      }
+    });
+
+    console.assert(buildUri('bitcoin').startsWith('bitcoin:'), 'bitcoin URI sollte mit bitcoin: beginnen');
+    console.assert(buildUri('lightning').startsWith('lightning:'), 'lightning URI sollte mit lightning: beginnen');
+    console.assert(typeof renderOfferQr === 'function', 'renderOfferQr sollte definiert sein');
+    console.assert(typeof fetch === 'function', 'fetch sollte im Browser verfügbar sein');
+
+    const initialUri = address;
+
+    customUri.value = initialUri;
+    payLink.href = `lightning:${address}`;
+
+   renderQr(initialUri);
   </script>
 </body>
 </html>
