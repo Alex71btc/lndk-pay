@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  lndk:
+    image: alex71btc/lndk:v0.3.0
+    container_name: lndk
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/wait-for-lnd.sh"]
+    command:
+      - lndk
+      - --address=https://YOUR_NODE_IP:10009
+      - --cert-path=/secrets/tls.cert
+      - --macaroon-path=/secrets/admin.macaroon
+      - --data-dir=/data
+      - --grpc-host=0.0.0.0
+      - --grpc-port=7000
+    environment:
+      LND_HOST: YOUR_NODE_IP
+      LND_PORT: "10009"
+    ports:
+      - "7000:7000"
+    volumes:
+      - lndk_lndk_data:/data
+      - lndk_secrets:/secrets:ro
+      - /data/scripts/wait-for-lnd.sh:/wait-for-lnd.sh:ro
+
+volumes:
+  lndk_lndk_data:
+    external: true
+  lndk_secrets:
+    external: true
+

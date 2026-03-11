@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  bolt12-pay:
+    image: alex71btc/bolt12-pay:0.1.0
+    container_name: bolt12-pay
+    restart: unless-stopped
+    ports:
+      - "8091:8081"
+    environment:
+      LNDK_CLI: /usr/local/bin/lndk-cli
+      LNDK_NETWORK: bitcoin
+      LNDK_GRPC_HOST: https://YOUR_NODE_IP
+      LNDK_GRPC_PORT: "7000"
+      LNDK_CERT_PATH: /secrets/lndk-tls-cert.pem
+      LNDK_MACAROON_PATH: /secrets/admin.macaroon
+      LNDK_TIMEOUT_SECONDS: "30"
+      ALLOW_PAY_OFFER: "true"
+      CORS_ORIGINS: "*"
+    volumes:
+      - lndk_secrets:/secrets:ro
+
+volumes:
+  lndk_secrets:
+    external: true
