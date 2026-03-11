@@ -1,3 +1,80 @@
+## Current working deployment
+
+This repository currently contains a working self-hosted BOLT12 payment setup built around:
+
+- `lndk` on Umbrel / Portainer
+- `bolt12-pay` as separate FastAPI + frontend container
+- Cloudflare Tunnel for public access
+- Cloudflare Access for protecting `/admin`, `/api/pay-offer`, `/api/decode-offer`
+
+### Public URLs
+
+- `/`
+- `/api/create-offer`
+
+### Protected URLs
+
+- `/admin`
+- `/api/pay-offer`
+- `/api/decode-offer`
+
+## Persistent Docker volumes
+
+### `lndk_lndk_data`
+Persistent data volume for the `lndk` container.
+
+### `lndk_secrets`
+Persistent secret volume shared by both `lndk` and `bolt12-pay`.
+
+Current required files inside `lndk_secrets`:
+
+- `tls.cert` -> LND TLS certificate
+- `admin.macaroon` -> LND admin macaroon
+- `lndk-tls-cert.pem` -> TLS certificate presented by the running LNDK gRPC server
+
+## Portainer stack files
+
+Saved stack definitions:
+
+- `deploy/portainer-lndk.yml`
+- `deploy/portainer-bolt12-pay.yml`
+
+## Umbrel reboot note
+
+After Umbrel reboots, `lndk` may start before the Lightning node is fully ready.
+To avoid this race condition, `lndk` should be started via `scripts/wait-for-lnd.sh`.
+
+This script waits for:
+- `/secrets/tls.cert`
+- `/secrets/admin.macaroon`
+- LND gRPC on `192.168.188.39:10009`
+
+before starting `lndk`.
+
+## Manual recovery notes
+
+If `lndk` starts but `bolt12-pay` cannot connect securely, verify that:
+
+- `lndk` is listening on port `7000`
+- `lndk_secrets` contains `lndk-tls-cert.pem`
+- `bolt12-pay` uses:
+
+```yaml
+LNDK_CERT_PATH: /secrets/lndk-tls-cert.pem
+LNDK_MACAROON_PATH: /secrets/admin.macaroon
+
+Security note
+
+Secrets, certificates, macaroons, and local environment data must never be committed to git.
+
+
+---
+
+# Schritt 6 — `.gitignore` prüfen
+
+```bash
+nano ~/lndk-pay/.gitignore
+
 # LNDK
 
 LNDK is a standalone daemon that connects to [LND](https://github.com/lightningnetwork/lnd) (via its grpc API) that aims to implement [bolt 12](https://github.com/lightning/bolts/pull/798) functionality _externally_ to LND. LNDK leverages the [lightning development kit](https://github.com/lightningdevkit/rust-lightning) to provide functionality, acting as a thin "shim" between LND's APIs and LDK's lightning library.
