@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .env
 target/
+secrets/
+app/secrets/
+*.pem
+*.macaroon
