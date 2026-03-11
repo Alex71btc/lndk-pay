@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOLT12 Admin</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #121a2b;
+      --text: #eef2ff;
+      --muted: #a7b0c3;
+      --accent: #6ea8fe;
+      --border: #26324a;
+      --danger: #ff7b72;
+      --ok: #8fe388;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1220, #0f172a);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 900px;
+      background: rgba(18, 26, 43, 0.96);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+      padding: 28px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+      line-height: 1.1;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1.15rem;
+    }
+    .sub {
+      color: var(--muted);
+      margin-bottom: 22px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(110, 168, 254, 0.14);
+      border: 1px solid rgba(110, 168, 254, 0.3);
+      color: #dce8ff;
+      font-size: .95rem;
+      margin-bottom: 16px;
+    }
+    .section {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .label {
+      font-size: .92rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+      display: block;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      word-break: break-all;
+      font-size: .92rem;
+      line-height: 1.5;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    button {
+      appearance: none;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #091120;
+      font-weight: 700;
+      padding: 12px 16px;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: transform .12s ease, opacity .12s ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .65; cursor: wait; transform: none; }
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+    }
+    input, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #0c1322;
+      color: var(--text);
+      font-size: 1rem;
+    }
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+    }
+    .hint {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: .92rem;
+      line-height: 1.5;
+    }
+    .status {
+      margin-top: 18px;
+      font-size: .95rem;
+      min-height: 1.4em;
+    }
+    .status.ok { color: var(--ok); }
+    .status.error { color: var(--danger); }
+
+    .qrWrap {
+      display: grid;
+      gap: 12px;
+      justify-items: center;
+      text-align: center;
+    }
+    #offerQr {
+      min-height: 24px;
+    }
+    .qrBox {
+      background: white;
+      padding: 14px;
+      border-radius: 20px;
+      min-height: 252px;
+      min-width: 252px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+    .qrBox img,
+    .qrBox canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    @media (max-width: 560px) {
+      .card {
+        padding: 20px;
+        border-radius: 20px;
+      }
+      h1 {
+        font-size: 1.6rem;
+      }
+      .qrBox {
+        min-height: 220px;
+        min-width: 220px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="pill">BOLT12 Admin</div>
+    <h1>BOLT12 Admin</h1>
+    <div class="sub">Private Admin-Seite für Offer-Erzeugung, Offer-Zahlung und Tests mit LNDK.</div>
+
+    <section class="section">
+      <h2>Offer erzeugen</h2>
+
+      <label class="label" for="amountInput">Mindestbetrag in sats</label>
+      <input id="amountInput" type="number" min="1" step="1" placeholder="Leer = Backend nutzt 1 sat" />
+
+      <label class="label" for="messageInput" style="margin-top:14px;">Beschreibung / Label</label>
+      <input id="messageInput" type="text" placeholder="z. B. coffee, tip, donation" />
+
+      <div class="row">
+        <button id="createOfferBtn" type="button">Offer erzeugen</button>
+      </div>
+
+      <label class="label" for="offerInput" style="margin-top:14px;">Aktuelles Offer</label>
+      <input id="offerInput" type="text" placeholder="Hier erscheint das lno... Offer" />
+
+      <div class="row">
+        <button class="secondary" id="copyOfferBtn" type="button">Offer kopieren</button>
+        <button class="secondary" id="makeOfferQrBtn" type="button">Offer-QR erzeugen</button>
+      </div>
+
+      <div class="hint">
+        Der Offer-QR enthält den reinen <span class="mono">lno...</span>-String.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Offer-QR</h2>
+      <div id="offerQr" class="qrWrap"></div>
+      <div class="hint">
+        Praktisch zum Testen mit pWallet und anderen Wallets, die direkt <span class="mono">lno...</span> scannen.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Offer bezahlen</h2>
+
+      <label class="label" for="payOfferInput">Offer oder BIP353-Adresse</label>
+      <input id="payOfferInput" type="text" placeholder="lno... oder bolt12@alex71btc.com" />
+
+      <label class="label" for="payAmountInput" style="margin-top:14px;">Zahlbetrag in sats</label>
+      <input id="payAmountInput" type="number" min="1" step="1" placeholder="z. B. 1000" />
+
+      <label class="label" for="payerNoteInput" style="margin-top:14px;">Payer Note (optional)</label>
+      <input id="payerNoteInput" type="text" placeholder="z. B. test" />
+
+      <div class="row">
+        <button id="payOfferBtn" type="button">Offer bezahlen</button>
+        <button class="secondary" id="useCurrentOfferBtn" type="button">Aktuelles Offer übernehmen</button>
+      </div>
+
+      <div class="hint">
+        Funktioniert nur mit <span class="mono">ALLOW_PAY_OFFER=true</span>.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Offer decoden</h2>
+
+      <label class="label" for="decodeInput">Offer oder BIP353-Adresse</label>
+      <input id="decodeInput" type="text" placeholder="lno... oder user@domain" />
+
+      <div class="row">
+        <button id="decodeBtn" type="button">Decode</button>
+      </div>
+
+      <label class="label" for="decodeOutput" style="margin-top:14px;">Decode-Ausgabe</label>
+      <textarea id="decodeOutput" class="mono" readonly placeholder="Hier erscheint die Decode-Ausgabe..."></textarea>
+    </section>
+
+    <div class="status" id="status"></div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    const address = 'bolt12@alex71btc.com';
+    const statusEl = document.getElementById('status');
+    const amountInput = document.getElementById('amountInput');
+    const messageInput = document.getElementById('messageInput');
+    const offerInput = document.getElementById('offerInput');
+    const offerQr = document.getElementById('offerQr');
+
+    const payOfferInput = document.getElementById('payOfferInput');
+    const payAmountInput = document.getElementById('payAmountInput');
+    const payerNoteInput = document.getElementById('payerNoteInput');
+
+    const decodeInput = document.getElementById('decodeInput');
+    const decodeOutput = document.getElementById('decodeOutput');
+
+    function setStatus(msg, type = 'ok') {
+      statusEl.textContent = msg;
+      statusEl.className = `status ${type}`;
+    }
+
+    function renderOfferQr(offer) {
+      offerQr.innerHTML = '';
+
+      if (!offer || !offer.startsWith('lno')) {
+        setStatus('Bitte zuerst ein gültiges lno... Offer eintragen.', 'error');
+        return;
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'qrWrap';
+
+      const code = document.createElement('div');
+      code.className = 'qrBox';
+
+      const text = document.createElement('div');
+      text.className = 'mono';
+      text.textContent = offer;
+
+      wrapper.appendChild(code);
+      wrapper.appendChild(text);
+      offerQr.appendChild(wrapper);
+
+      new QRCode(code, {
+        text: offer,
+        width: 220,
+        height: 220,
+        correctLevel: QRCode.CorrectLevel.M,
+        colorDark: '#000000',
+        colorLight: '#ffffff'
+      });
+    }
+
+    document.getElementById('createOfferBtn').addEventListener('click', async () => {
+      const amountValue = amountInput.value.trim();
+      const descriptionValue = messageInput.value.trim() || address;
+      const payload = { description: descriptionValue };
+
+      if (amountValue) payload.amount = Number(amountValue);
+
+      const btn = document.getElementById('createOfferBtn');
+      btn.disabled = true;
+      btn.textContent = 'Erzeuge...';
+      setStatus('Erzeuge Offer...');
+
+      try {
+        const response = await fetch('/api/create-offer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Offer konnte nicht erzeugt werden.');
+
+        offerInput.value = data.offer;
+        renderOfferQr(data.offer);
+        setStatus('Offer erfolgreich erzeugt.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(`Fehler: ${message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Offer erzeugen';
+      }
+    });
+
+    document.getElementById('copyOfferBtn').addEventListener('click', async () => {
+      const value = offerInput.value.trim();
+      if (!value) {
+        setStatus('Noch kein Offer vorhanden.', 'error');
+        return;
+      }
+      await navigator.clipboard.writeText(value);
+      setStatus('Offer kopiert.');
+    });
+
+    document.getElementById('makeOfferQrBtn').addEventListener('click', () => {
+      renderOfferQr(offerInput.value.trim());
+    });
+
+    document.getElementById('useCurrentOfferBtn').addEventListener('click', () => {
+      const currentOffer = offerInput.value.trim();
+      payOfferInput.value = currentOffer;
+      if (currentOffer.startsWith('lno')) {
+        renderOfferQr(currentOffer);
+      }
+      setStatus('Aktuelles Offer übernommen.');
+    });
+
+    document.getElementById('payOfferBtn').addEventListener('click', async () => {
+      const offer = payOfferInput.value.trim();
+      const amountSat = payAmountInput.value.trim();
+      const payerNote = payerNoteInput.value.trim();
+
+      if (!offer) {
+        setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error');
+        return;
+      }
+      if (!amountSat) {
+        setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error');
+        return;
+      }
+
+      const payload = {
+        offer,
+        amount_sat: Number(amountSat)
+      };
+      if (payerNote) payload.payer_note = payerNote;
+
+      const btn = document.getElementById('payOfferBtn');
+      btn.disabled = true;
+      btn.textContent = 'Bezahle...';
+      setStatus('Bezahle Offer...');
+
+      try {
+        const response = await fetch('/api/pay-offer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Offer konnte nicht bezahlt werden.');
+        setStatus(data.raw_output || 'Offer erfolgreich bezahlt.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(`Fehler: ${message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Offer bezahlen';
+      }
+    });
+
+    document.getElementById('decodeBtn').addEventListener('click', async () => {
+      const offer = decodeInput.value.trim();
+      if (!offer) {
+        setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('decodeBtn');
+      btn.disabled = true;
+      btn.textContent = 'Decodiere...';
+      setStatus('Decodiere...');
+
+      try {
+        const response = await fetch('/api/decode-offer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ offer })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Decode fehlgeschlagen.');
+        decodeOutput.value = data.raw_output;
+        setStatus('Decode erfolgreich.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(`Fehler: ${message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Decode';
+      }
+    });
+  </script>
+</body>
+</html>
