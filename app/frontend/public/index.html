@@ -306,7 +306,7 @@
     <div class="row">
       <button class="secondary" id="installBtn" type="button" hidden>App installieren</button>
       <button class="secondary" id="copyActiveBtn" type="button">Aktiven Inhalt kopieren</button>
-      <button class="secondary" id="walletOpenBtn" type="button">Mit Wallet öffnen</button>
+      <button class="secondary" id="walletOpenBtn" type="button">Mit Wallet / WebLN öffnen</button>
     </div>
 
     <section class="section">
@@ -315,9 +315,14 @@
         Lade Adresse...
       </div>
 
-      <label class="label" style="margin-top:14px;">LNURL Fallback</label>
+      <label class="label" style="margin-top:14px;">LNURL Fallback (Lightning Address)</label>
       <div id="fallbackAddressBox" class="valueBox mono copyable" title="Antippen = kopieren + QR auf LNURL-Fallback umschalten">
-        sats@alex71btc.com
+        pay@yourdomain.com
+      </div>
+
+      <div class="row">
+        <input id="fallbackAddressInput" type="text" placeholder="z. B. pay@yourdomain.com" />
+        <button class="secondary" id="applyFallbackBtn" type="button">LNURL Alias setzen</button>
       </div>
 
       <label class="label" style="margin-top:14px;">Aktuelles Offer</label>
@@ -327,7 +332,7 @@
 
       <div class="hint">
         Standardmäßig zeigt der QR die BOLT12-Adresse <span class="mono">bolt12@alex71btc.com</span>.  
-        Wenn du <span class="mono">sats@alex71btc.com</span> antippst, wechselt der QR bewusst auf den LNURL-Fallback.
+        Beim LNURL-Fallback wird automatisch aus der Lightning Address ein <span class="mono">lnurl1...</span> generiert und als QR angezeigt.
       </div>
     </section>
 
@@ -372,12 +377,15 @@
     const messageInput = document.getElementById('messageInput');
     const createOfferBtn = document.getElementById('createOfferBtn');
     const walletOpenBtn = document.getElementById('walletOpenBtn');
+    const fallbackAddressInput = document.getElementById('fallbackAddressInput');
+    const applyFallbackBtn = document.getElementById('applyFallbackBtn');
 
     let deferredPrompt = null;
     let statusTimer = null;
     let currentAddress = 'bolt12@alex71btc.com';
-    let fallbackAddress = 'sats@alex71btc.com';
+    let fallbackAddress = 'pay@yourdomain.com';
     let currentOffer = '';
+    let currentLnurl = '';
     let activeQrMode = 'address';
 
     function setStatus(message, type = 'ok', persist = false) {
@@ -414,7 +422,7 @@
 
     function getActiveQrValue() {
       if (activeQrMode === 'offer') return currentOffer;
-      if (activeQrMode === 'fallback') return fallbackAddress;
+      if (activeQrMode === 'fallback') return currentLnurl || fallbackAddress;
       return currentAddress;
     }
 
@@ -431,7 +439,7 @@
       if (mode === 'offer') {
         qrModeBadge.textContent = 'QR: Offer';
       } else if (mode === 'fallback') {
-        qrModeBadge.textContent = 'QR: LNURL Fallback';
+        qrModeBadge.textContent = 'QR: LNURL';
       } else {
         qrModeBadge.textContent = 'QR: BOLT12 Adresse';
       }
@@ -448,6 +456,22 @@
       });
     }
 
+    async function loadLnurlFallback() {
+      if (!fallbackAddress) {
+        currentLnurl = '';
+        return;
+      }
+
+      const response = await fetch(`/api/lnurl/address/${encodeURIComponent(fallbackAddress)}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.detail || 'LNURL konnte nicht geladen werden');
+      }
+
+      currentLnurl = data.lnurl || '';
+    }
+
     async function loadPublicInfo() {
       try {
         const response = await fetch('/api/info');
@@ -457,16 +481,19 @@
           throw new Error(data?.detail || 'Public info konnte nicht geladen werden');
         }
 
-        currentAddress = 'bolt12@alex71btc.com';
-        fallbackAddress = 'sats@alex71btc.com';
+        currentAddress = data.address || 'bolt12@alex71btc.com';
+        fallbackAddress = localStorage.getItem('lnurl_fallback_address') || data.fallback_address || 'pay@yourdomain.com';
         currentOffer = data.offer || '';
+
+        await loadLnurlFallback();
 
         addressBox.textContent = currentAddress || 'Keine Adresse';
         fallbackAddressBox.textContent = fallbackAddress || 'Kein Fallback';
+        fallbackAddressInput.value = fallbackAddress || '';
         offerBox.textContent = currentOffer || 'Kein Offer';
 
         renderQrForValue(currentAddress, 'address');
-        setStatus('Public Daten geladen.');
+        setStatus(currentLnurl ? 'Public Daten inkl. LNURL geladen.' : 'Public Daten geladen.');
       } catch (error) {
         console.error('Public load error:', error);
         setStatus(`Load failed: ${error?.message || error}`, 'error', true);
@@ -485,9 +512,34 @@
         activeQrMode === 'offer'
           ? 'Offer kopiert.'
           : activeQrMode === 'fallback'
-            ? 'LNURL Fallback-Adresse kopiert.'
+            ? currentLnurl
+              ? 'LNURL kopiert.'
+              : 'Fallback-Adresse kopiert.'
             : 'BOLT12 Adresse kopiert.'
       );
+    });
+
+
+
+    applyFallbackBtn.addEventListener('click', async () => {
+      const customAddress = fallbackAddressInput.value.trim().toLowerCase();
+      if (!customAddress || !customAddress.includes('@')) {
+        setStatus('Bitte gültige Lightning Address eingeben (z. B. pay@yourdomain.com).', 'error');
+        return;
+      }
+
+      fallbackAddress = customAddress;
+      localStorage.setItem('lnurl_fallback_address', fallbackAddress);
+      fallbackAddressBox.textContent = fallbackAddress;
+
+      try {
+        await loadLnurlFallback();
+        renderQrForValue(currentLnurl || fallbackAddress, 'fallback');
+        setStatus('LNURL Alias gespeichert und QR aktualisiert.');
+      } catch (error) {
+        currentLnurl = '';
+        setStatus(`LNURL konnte nicht geladen werden: ${error?.message || error}`, 'error', true);
+      }
     });
 
     addressBox.addEventListener('click', async () => {
@@ -498,8 +550,17 @@
 
     fallbackAddressBox.addEventListener('click', async () => {
       if (!fallbackAddress) return;
-      renderQrForValue(fallbackAddress, 'fallback');
-      await copyText(fallbackAddress, 'LNURL Fallback-Adresse kopiert.');
+      if (!currentLnurl) {
+        try {
+          await loadLnurlFallback();
+        } catch (error) {
+          setStatus(`LNURL konnte nicht geladen werden: ${error?.message || error}`, 'error', true);
+        }
+      }
+
+      const fallbackValue = currentLnurl || fallbackAddress;
+      renderQrForValue(fallbackValue, 'fallback');
+      await copyText(fallbackValue, currentLnurl ? 'LNURL kopiert.' : 'Fallback-Adresse kopiert.');
     });
 
     offerBox.addEventListener('click', async () => {
@@ -520,7 +581,9 @@
         activeQrMode === 'offer'
           ? 'Offer kopiert.'
           : activeQrMode === 'fallback'
-            ? 'LNURL Fallback-Adresse kopiert.'
+            ? currentLnurl
+              ? 'LNURL kopiert.'
+              : 'Fallback-Adresse kopiert.'
             : 'BOLT12 Adresse kopiert.'
       );
     });
@@ -572,12 +635,24 @@
       }
     });
 
-    walletOpenBtn.addEventListener('click', () => {
+    walletOpenBtn.addEventListener('click', async () => {
       const value = getActiveQrValue();
       if (!value) {
         setStatus('Noch kein aktiver Inhalt vorhanden.', 'error');
         return;
       }
+
+      if (activeQrMode === 'offer' && window.webln?.enable && window.webln?.sendPayment) {
+        try {
+          await window.webln.enable();
+          await window.webln.sendPayment(value);
+          setStatus('Offer über WebLN an Wallet übergeben.');
+          return;
+        } catch (error) {
+          setStatus('WebLN nicht verfügbar oder Offer nicht unterstützt, nutze Deep-Link.', 'warn');
+        }
+      }
+
       window.location.href = `lightning:${value}`;
     });
 
