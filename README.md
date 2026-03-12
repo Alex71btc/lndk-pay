@@ -10,7 +10,7 @@ Use a local bind mount for secrets:
 
 and mount:
 
-volumes:
+-  volumes:
   - ./secrets:/secrets:ro
 
 ### Umbrel deployment
