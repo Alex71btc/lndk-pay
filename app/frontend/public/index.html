@@ -2,20 +2,31 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BOLT12 Public Pay</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BOLT12 Pay</title>
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="manifest" href="/public.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
   <style>
     :root {
       --bg: #0b1220;
       --card: #121a2b;
       --text: #eef2ff;
       --muted: #a7b0c3;
-      --accent: #6ea8fe;
+      --accent: #f7931a;
       --border: #26324a;
       --danger: #ff7b72;
       --ok: #8fe388;
+      --warn: #ffd166;
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -24,42 +35,81 @@
       min-height: 100vh;
       display: grid;
       place-items: center;
-      padding: 24px;
+      padding: 18px;
     }
+
+    .toastWrap {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(760px, calc(100vw - 20px));
+      z-index: 3000;
+      pointer-events: none;
+    }
+
+    .statusBar {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #0c1322;
+      font-size: .95rem;
+      line-height: 1.4;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+      pointer-events: auto;
+      text-align: center;
+    }
+
+    .statusBar.show { display: block; }
+    .statusBar.ok {
+      border-color: rgba(143, 227, 136, .35);
+      background: rgba(143, 227, 136, .10);
+      color: var(--ok);
+    }
+    .statusBar.error {
+      border-color: rgba(255, 123, 114, .35);
+      background: rgba(255, 123, 114, .10);
+      color: var(--danger);
+    }
+    .statusBar.warn {
+      border-color: rgba(255, 209, 102, .35);
+      background: rgba(255, 209, 102, .10);
+      color: var(--warn);
+    }
+
     .card {
       width: 100%;
-      max-width: 820px;
+      max-width: 760px;
       background: rgba(18, 26, 43, 0.96);
       border: 1px solid var(--border);
       border-radius: 24px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
-      padding: 28px;
+      padding: 24px;
     }
-    .top {
-      display: grid;
-      grid-template-columns: 1.2fr .8fr;
-      gap: 22px;
-      align-items: start;
+
+    .pill {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(247, 147, 26, 0.12);
+      border: 1px solid rgba(247, 147, 26, 0.3);
+      color: #ffd9a3;
+      font-size: .95rem;
+      margin-bottom: 16px;
     }
+
     h1 {
       margin: 0 0 8px;
       font-size: 2rem;
       line-height: 1.1;
     }
+
     .sub {
       color: var(--muted);
-      margin-bottom: 22px;
-    }
-    .pill {
-      display: inline-block;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(110, 168, 254, 0.14);
-      border: 1px solid rgba(110, 168, 254, 0.3);
-      color: #dce8ff;
-      font-size: .95rem;
       margin-bottom: 16px;
     }
+
     .section {
       margin-top: 18px;
       padding: 18px;
@@ -67,25 +117,53 @@
       border-radius: 18px;
       background: rgba(255, 255, 255, 0.02);
     }
+
     .label {
       font-size: .92rem;
       color: var(--muted);
       margin-bottom: 8px;
       display: block;
     }
+
     .mono {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       word-break: break-all;
       font-size: .92rem;
       line-height: 1.5;
     }
+
+    .copyable {
+      cursor: pointer;
+      user-select: all;
+    }
+
+    .copyable:hover {
+      opacity: 0.92;
+    }
+
+    .valueBox {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #0c1322;
+      color: var(--text);
+      min-height: 48px;
+    }
+
+    .valueBox.active {
+      border-color: rgba(247, 147, 26, 0.55);
+      box-shadow: 0 0 0 1px rgba(247, 147, 26, 0.25) inset;
+    }
+
     .row {
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
       margin-top: 14px;
     }
-    button, .btn {
+
+    button, a.btn {
       appearance: none;
       border: 1px solid var(--accent);
       background: var(--accent);
@@ -94,16 +172,26 @@
       padding: 12px 16px;
       border-radius: 14px;
       cursor: pointer;
-      text-decoration: none;
       transition: transform .12s ease, opacity .12s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
-    button:hover, .btn:hover { transform: translateY(-1px); }
+
+    button:hover, a.btn:hover { transform: translateY(-1px); }
     button:disabled { opacity: .65; cursor: wait; transform: none; }
-    .btn.secondary, button.secondary {
+
+    button.secondary, a.btn.secondary {
       background: transparent;
       color: var(--text);
       border-color: var(--border);
     }
+
+    input, button {
+      font-size: 16px;
+    }
+
     input {
       width: 100%;
       padding: 12px 14px;
@@ -113,96 +201,142 @@
       color: var(--text);
       font-size: 1rem;
     }
+
     .hint {
       margin-top: 12px;
       color: var(--muted);
       font-size: .92rem;
       line-height: 1.5;
     }
-    .status {
-      margin-top: 18px;
-      font-size: .95rem;
-      min-height: 1.4em;
-    }
-    .status.ok { color: var(--ok); }
-    .status.error { color: var(--danger); }
+
     .qrWrap {
       display: grid;
       gap: 12px;
       justify-items: center;
       text-align: center;
     }
-    #qrcode, #offerQr {
-      min-height: 24px;
-    }
+
     .qrBox {
       background: white;
-      padding: 14px;
-      border-radius: 20px;
-      min-height: 252px;
-      min-width: 252px;
+      padding: 24px;
+      border-radius: 22px;
+      min-height: 320px;
+      min-width: 320px;
       display: grid;
       place-items: center;
       overflow: hidden;
+      cursor: pointer;
     }
-    .qrBox img, .qrBox canvas {
+
+    .qrBox img,
+    .qrBox canvas {
+      display: block;
       max-width: 100%;
       height: auto;
-      display: block;
     }
+
     .tiny {
       font-size: .82rem;
       color: var(--muted);
     }
-    @media (max-width: 760px) {
-      .top { grid-template-columns: 1fr; }
+
+    .modeBadge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(247, 147, 26, 0.12);
+      border: 1px solid rgba(247, 147, 26, 0.28);
+      color: #ffd9a3;
+      font-size: .82rem;
     }
-    @media (max-width: 560px) {
-      .card { padding: 20px; border-radius: 20px; }
-      h1 { font-size: 1.6rem; }
-      .qrBox { min-height: 220px; min-width: 220px; }
+
+    @media (max-width: 700px) {
+      body {
+        padding: 10px;
+      }
+
+      .card {
+        padding: 14px;
+        border-radius: 16px;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      .section {
+        padding: 14px;
+        margin-top: 12px;
+      }
+
+      .row {
+        gap: 8px;
+      }
+
+      button, a.btn {
+        width: 100%;
+      }
+
+      .qrBox {
+        min-width: 250px;
+        min-height: 250px;
+        padding: 18px;
+      }
     }
   </style>
 </head>
 <body>
+  <div class="toastWrap">
+    <div class="statusBar" id="statusBar"></div>
+  </div>
+
   <main class="card">
-    <div class="pill">BOLT12 / BIP353</div>
+    <div class="pill">BOLT12 Public Pay</div>
+    <h1>⚡ Lightning Pay</h1>
+    <div class="sub">Öffentliche BOLT12-Zahlungsseite mit Human-Readable Address, aktuellem Offer und LNURL-Fallback.</div>
 
-    <div class="top">
-      <section>
-        <h1>bolt12@alex71btc.com</h1>
-        <div class="sub">Öffentliche Pay-Seite für deine BOLT12-Adresse mit QR und Offer-Erzeugung.</div>
+    <section class="section">
+      <div class="qrWrap">
+        <div id="qrModeBadge" class="modeBadge">QR: BOLT12 Adresse</div>
+        <div id="qrBox" class="qrBox" title="Antippen = aktiven QR-Inhalt kopieren"></div>
+        <div id="qrValueText" class="tiny mono">Lade QR...</div>
+      </div>
+    </section>
 
-        <section class="section">
-          <label class="label">Adresse</label>
-          <div class="mono">bolt12@alex71btc.com</div>
-          <div class="row">
-            <a class="btn" id="payLink" href="lightning:bolt12@alex71btc.com">Mit Wallet öffnen</a>
-            <button class="secondary" id="copyAddressBtn" type="button">Adresse kopieren</button>
-          </div>
-          <div class="hint">
-            Der große QR zeigt nur die nackte Adresse, damit Wallets damit besser zurechtkommen.
-          </div>
-        </section>
-      </section>
-
-      <section class="section qrWrap">
-        <label class="label">Adress-QR</label>
-        <div id="qrcode"></div>
-        <div class="tiny mono" id="qrTargetText">bolt12@alex71btc.com</div>
-        <div class="row">
-          <button class="secondary" id="downloadQrBtn" type="button">QR herunterladen</button>
-        </div>
-      </section>
+    <div class="row">
+      <button class="secondary" id="installBtn" type="button" hidden>App installieren</button>
+      <button class="secondary" id="copyActiveBtn" type="button">Aktiven Inhalt kopieren</button>
+      <button class="secondary" id="walletOpenBtn" type="button">Mit Wallet öffnen</button>
     </div>
+
+    <section class="section">
+      <label class="label">BOLT12 Adresse</label>
+      <div id="addressBox" class="valueBox mono copyable active" title="Antippen = kopieren + QR auf BOLT12-Adresse umschalten">
+        Lade Adresse...
+      </div>
+
+      <label class="label" style="margin-top:14px;">LNURL Fallback</label>
+      <div id="fallbackAddressBox" class="valueBox mono copyable" title="Antippen = kopieren + QR auf LNURL-Fallback umschalten">
+        sats@alex71btc.com
+      </div>
+
+      <label class="label" style="margin-top:14px;">Aktuelles Offer</label>
+      <div id="offerBox" class="valueBox mono copyable" title="Antippen = kopieren + QR auf Offer umschalten">
+        Lade Offer...
+      </div>
+
+      <div class="hint">
+        Standardmäßig zeigt der QR die BOLT12-Adresse <span class="mono">bolt12@alex71btc.com</span>.  
+        Wenn du <span class="mono">sats@alex71btc.com</span> antippst, wechselt der QR bewusst auf den LNURL-Fallback.
+      </div>
+    </section>
 
     <section class="section">
       <label class="label">Schnellauswahl</label>
       <div class="row">
-        <button class="secondary quickAmountBtn" data-amount="1" type="button">1 sat</button>
+        <button class="secondary quickAmountBtn" data-amount="21" type="button">21 sats</button>
         <button class="secondary quickAmountBtn" data-amount="1000" type="button">1k sats</button>
         <button class="secondary quickAmountBtn" data-amount="10000" type="button">10k sats</button>
-        <button class="secondary quickAmountBtn" data-amount="21000" type="button">21k sats</button>
       </div>
       <div class="hint">
         Diese Auswahl setzt den Mindestbetrag für ein neues Offer.
@@ -214,158 +348,202 @@
       <input id="amountInput" type="number" min="1" step="1" placeholder="Leer = Backend nutzt 1 sat" />
 
       <label class="label" for="messageInput" style="margin-top:14px;">Beschreibung / Label</label>
-      <input id="messageInput" type="text" placeholder="z. B. coffee, tip, donation" />
+      <input id="messageInput" type="text" placeholder="z. B. bolt12, coffee, donation" />
 
       <div class="row">
         <button id="createOfferBtn" type="button">Offer erzeugen</button>
       </div>
+
       <div class="hint">
-        Erzeugt über dein Backend ein neues Offer und zeigt es als QR.
+        Erzeugt ein neues BOLT12-Offer über dein Backend und schaltet den QR automatisch auf das neue Offer.
       </div>
     </section>
-
-    <section class="section">
-      <label class="label">Aktuelles Offer</label>
-      <input id="offerInput" type="text" placeholder="Hier erscheint das erzeugte lno... Offer" />
-      <div class="row">
-        <button class="secondary" id="copyOfferBtn" type="button">Offer kopieren</button>
-        <button class="secondary" id="makeOfferQrBtn" type="button">Offer-QR erzeugen</button>
-      </div>
-      <div class="hint">
-        Der Offer-QR enthält nur den reinen <span class="mono">lno...</span>-String für bessere Wallet-Kompatibilität.
-      </div>
-    </section>
-
-    <section class="section">
-      <label class="label">Offer-QR</label>
-      <div id="offerQr" class="qrWrap"></div>
-    </section>
-
-    <div class="status" id="status"></div>
   </main>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
-    const address = 'bolt12@alex71btc.com';
-    const quickButtons = document.querySelectorAll('.quickAmountBtn');
-    const payLink = document.getElementById('payLink');
-    const statusEl = document.getElementById('status');
-    const offerInput = document.getElementById('offerInput');
-    const qrTargetText = document.getElementById('qrTargetText');
-    const qrContainer = document.getElementById('qrcode');
+    const statusBar = document.getElementById('statusBar');
+    const addressBox = document.getElementById('addressBox');
+    const fallbackAddressBox = document.getElementById('fallbackAddressBox');
+    const offerBox = document.getElementById('offerBox');
+    const qrBox = document.getElementById('qrBox');
+    const qrValueText = document.getElementById('qrValueText');
+    const qrModeBadge = document.getElementById('qrModeBadge');
     const amountInput = document.getElementById('amountInput');
     const messageInput = document.getElementById('messageInput');
-    const offerQr = document.getElementById('offerQr');
     const createOfferBtn = document.getElementById('createOfferBtn');
+    const walletOpenBtn = document.getElementById('walletOpenBtn');
 
-    function setStatus(msg, type = 'ok') {
-      statusEl.textContent = msg;
-      statusEl.className = `status ${type}`;
+    let deferredPrompt = null;
+    let statusTimer = null;
+    let currentAddress = 'bolt12@alex71btc.com';
+    let fallbackAddress = 'sats@alex71btc.com';
+    let currentOffer = '';
+    let activeQrMode = 'address';
+
+    function setStatus(message, type = 'ok', persist = false) {
+      statusBar.textContent = message;
+      statusBar.className = `statusBar show ${type}`;
+
+      if (statusTimer) {
+        clearTimeout(statusTimer);
+        statusTimer = null;
+      }
+
+      if (!persist) {
+        statusTimer = setTimeout(() => {
+          statusBar.className = 'statusBar';
+          statusBar.textContent = '';
+        }, 4200);
+      }
     }
 
-    function createQrMarkup(targetElement) {
-      targetElement.innerHTML = '';
-      const box = document.createElement('div');
-      box.className = 'qrBox';
-      targetElement.appendChild(box);
-      return box;
+    async function copyText(value, successMessage) {
+      try {
+        await navigator.clipboard.writeText(value);
+        setStatus(successMessage || 'Kopiert.');
+      } catch (error) {
+        setStatus('Kopieren fehlgeschlagen.', 'error');
+      }
     }
 
-    function renderQr(text) {
-      const qrBox = createQrMarkup(qrContainer);
+    function setActiveBox(mode) {
+      addressBox.classList.toggle('active', mode === 'address');
+      fallbackAddressBox.classList.toggle('active', mode === 'fallback');
+      offerBox.classList.toggle('active', mode === 'offer');
+    }
+
+    function getActiveQrValue() {
+      if (activeQrMode === 'offer') return currentOffer;
+      if (activeQrMode === 'fallback') return fallbackAddress;
+      return currentAddress;
+    }
+
+    function renderQrForValue(value, mode) {
+      qrBox.innerHTML = '';
+
+      if (!value) {
+        throw new Error('Kein QR-Inhalt vorhanden');
+      }
+
+      activeQrMode = mode;
+      setActiveBox(mode);
+
+      if (mode === 'offer') {
+        qrModeBadge.textContent = 'QR: Offer';
+      } else if (mode === 'fallback') {
+        qrModeBadge.textContent = 'QR: LNURL Fallback';
+      } else {
+        qrModeBadge.textContent = 'QR: BOLT12 Adresse';
+      }
+
+      qrValueText.textContent = value;
+
       new QRCode(qrBox, {
-        text,
-        width: 220,
-        height: 220,
-        correctLevel: QRCode.CorrectLevel.M,
+        text: value,
+        width: 256,
+        height: 256,
+        correctLevel: QRCode.CorrectLevel.L,
         colorDark: '#000000',
         colorLight: '#ffffff'
       });
-      qrTargetText.textContent = text;
     }
 
-    function renderOfferQr(offer) {
-      offerQr.innerHTML = '';
+    async function loadPublicInfo() {
+      try {
+        const response = await fetch('/api/info');
+        const data = await response.json();
 
-      if (!offer || !offer.startsWith('lno')) {
-        setStatus('Bitte zuerst ein gültiges lno... Offer eintragen.', 'error');
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Public info konnte nicht geladen werden');
+        }
+
+        currentAddress = 'bolt12@alex71btc.com';
+        fallbackAddress = 'sats@alex71btc.com';
+        currentOffer = data.offer || '';
+
+        addressBox.textContent = currentAddress || 'Keine Adresse';
+        fallbackAddressBox.textContent = fallbackAddress || 'Kein Fallback';
+        offerBox.textContent = currentOffer || 'Kein Offer';
+
+        renderQrForValue(currentAddress, 'address');
+        setStatus('Public Daten geladen.');
+      } catch (error) {
+        console.error('Public load error:', error);
+        setStatus(`Load failed: ${error?.message || error}`, 'error', true);
+      }
+    }
+
+    document.getElementById('copyActiveBtn').addEventListener('click', async () => {
+      const value = getActiveQrValue();
+      if (!value) {
+        setStatus('Noch kein aktiver Inhalt vorhanden.', 'error');
         return;
       }
 
-      const wrapper = document.createElement('div');
-      wrapper.className = 'qrWrap';
-
-      const code = document.createElement('div');
-      code.className = 'qrBox';
-
-      const text = document.createElement('div');
-      text.className = 'tiny mono';
-      text.textContent = offer;
-
-      wrapper.appendChild(code);
-      wrapper.appendChild(text);
-      offerQr.appendChild(wrapper);
-
-      new QRCode(code, {
-        text: offer,
-        width: 220,
-        height: 220,
-        correctLevel: QRCode.CorrectLevel.M,
-        colorDark: '#000000',
-        colorLight: '#ffffff'
-      });
-    }
-
-    document.getElementById('copyAddressBtn').addEventListener('click', async () => {
-      await navigator.clipboard.writeText(address);
-      setStatus('Adresse kopiert.');
+      await copyText(
+        value,
+        activeQrMode === 'offer'
+          ? 'Offer kopiert.'
+          : activeQrMode === 'fallback'
+            ? 'LNURL Fallback-Adresse kopiert.'
+            : 'BOLT12 Adresse kopiert.'
+      );
     });
 
-    document.getElementById('copyOfferBtn').addEventListener('click', async () => {
-      const value = offerInput.value.trim();
-      if (!value) {
+    addressBox.addEventListener('click', async () => {
+      if (!currentAddress) return;
+      renderQrForValue(currentAddress, 'address');
+      await copyText(currentAddress, 'BOLT12 Adresse kopiert.');
+    });
+
+    fallbackAddressBox.addEventListener('click', async () => {
+      if (!fallbackAddress) return;
+      renderQrForValue(fallbackAddress, 'fallback');
+      await copyText(fallbackAddress, 'LNURL Fallback-Adresse kopiert.');
+    });
+
+    offerBox.addEventListener('click', async () => {
+      if (!currentOffer) {
         setStatus('Noch kein Offer vorhanden.', 'error');
         return;
       }
-      await navigator.clipboard.writeText(value);
-      setStatus('Offer kopiert.');
+      renderQrForValue(currentOffer, 'offer');
+      await copyText(currentOffer, 'Offer kopiert.');
     });
 
-    quickButtons.forEach((btn) => {
+    qrBox.addEventListener('click', async () => {
+      const value = getActiveQrValue();
+      if (!value) return;
+
+      await copyText(
+        value,
+        activeQrMode === 'offer'
+          ? 'Offer kopiert.'
+          : activeQrMode === 'fallback'
+            ? 'LNURL Fallback-Adresse kopiert.'
+            : 'BOLT12 Adresse kopiert.'
+      );
+    });
+
+    document.querySelectorAll('.quickAmountBtn').forEach((btn) => {
       btn.addEventListener('click', () => {
         amountInput.value = btn.dataset.amount;
         setStatus(`Mindestbetrag gesetzt: ${btn.dataset.amount} sats.`);
       });
     });
 
-    document.getElementById('makeOfferQrBtn').addEventListener('click', () => {
-      renderOfferQr(offerInput.value.trim());
-    });
-
-    document.getElementById('downloadQrBtn').addEventListener('click', () => {
-      const canvas = qrContainer.querySelector('canvas');
-      if (!canvas) {
-        setStatus('QR noch nicht bereit.', 'error');
-        return;
-      }
-      const link = document.createElement('a');
-      link.download = 'bolt12-address-qr.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    });
-
     createOfferBtn.addEventListener('click', async () => {
       const amountValue = amountInput.value.trim();
-      const descriptionValue = messageInput.value.trim() || address;
-      const payload = { description: descriptionValue };
+      const descriptionValue = messageInput.value.trim() || currentAddress || 'bolt12';
 
+      const payload = { description: descriptionValue };
       if (amountValue) {
         payload.amount = Number(amountValue);
       }
 
       createOfferBtn.disabled = true;
       createOfferBtn.textContent = 'Erzeuge...';
-      setStatus('Erzeuge Offer...');
+      setStatus('Erzeuge neues Offer...', 'warn');
 
       try {
         const response = await fetch('/api/create-offer', {
@@ -377,28 +555,55 @@
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.detail || 'Offer konnte nicht erzeugt werden.');
+          throw new Error(data?.detail || 'Offer konnte nicht erzeugt werden');
         }
 
-        offerInput.value = data.offer;
-        renderOfferQr(data.offer);
-        payLink.href = `lightning:${data.offer}`;
-        setStatus('Offer erfolgreich erzeugt.');
+        currentOffer = data.offer;
+        offerBox.textContent = currentOffer;
+        renderQrForValue(currentOffer, 'offer');
+
+        setStatus('Neues Offer erfolgreich erzeugt.');
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setStatus(`Fehler: ${message}`, 'error');
+        console.error('Create offer error:', error);
+        setStatus(`Fehler: ${error?.message || error}`, 'error', true);
       } finally {
         createOfferBtn.disabled = false;
         createOfferBtn.textContent = 'Offer erzeugen';
       }
     });
 
-    console.assert(typeof renderOfferQr === 'function', 'renderOfferQr sollte definiert sein');
-    console.assert(typeof fetch === 'function', 'fetch sollte im Browser verfügbar sein');
+    walletOpenBtn.addEventListener('click', () => {
+      const value = getActiveQrValue();
+      if (!value) {
+        setStatus('Noch kein aktiver Inhalt vorhanden.', 'error');
+        return;
+      }
+      window.location.href = `lightning:${value}`;
+    });
 
-    const initialUri = address;
-    payLink.href = `lightning:${address}`;
-    renderQr(initialUri);
+    const installBtn = document.getElementById('installBtn');
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      });
+    }
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredPrompt = event;
+      installBtn.hidden = false;
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.hidden = true;
+    });
+
+    loadPublicInfo();
   </script>
 </body>
 </html>
