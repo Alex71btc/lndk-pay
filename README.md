@@ -1,155 +1,37 @@
 # BOLT12 Pay
 
-Self-hosted Lightning payment server combining:
+Self-hosted Lightning payment server with:
 
-- BOLT12 Offers (primary payment flow)
-- LNURL-Pay fallback (BOLT11 invoices)
+- BOLT12 offers
+- LNURL fallback using BOLT11 invoices
 - BIP353 Lightning addresses
-- FastAPI backend + static frontend
-- Designed for Umbrel / self-hosted nodes
+- public pay page
+- admin UI
 
----
+## Project status
 
-# Deployment modes
+Current repository status:
 
-## Local development
+- local development works
+- Umbrel / Portainer deployment works
+- BOLT12 is the primary payment flow
+- LNURL is the fallback flow
+- BIP353 can be manual or automated later
 
-Use a local bind mount for secrets.
+## Important directories
 
-Environment variables:
+- `app/` application source
+- `deploy/` deployment compose files
+- `umbrel/bolt12-pay/` future Umbrel Community App files
+- `docs/` project docs
 
-```
-LNDK_CERT_PATH=/secrets/tls.cert
-LNDK_MACAROON_PATH=/secrets/admin.macaroon
-LND_TLS_CERT_PATH=/secrets/tls.cert
-LND_MACAROON_PATH=/secrets/admin.macaroon
-```
+## Deployment files
 
-Mount secrets directory:
+- `deploy/docker-compose.local.yml`
+- `deploy/docker-compose.umbrel.yml`
 
-```yaml
-volumes:
-  - ./secrets:/secrets:ro
-```
+## Architecture
 
----
+See:
 
-## Umbrel deployment
-
-Use the external Umbrel/LNDK secrets volume.
-
-Important: the BOLT12/LNDK path and LNURL/LND REST path may use different certificate files.
-
-```
-LNDK_CERT_PATH=/secrets/lndk-tls-cert.pem
-LNDK_MACAROON_PATH=/secrets/admin.macaroon
-
-LND_TLS_CERT_PATH=/secrets/tls.cert
-LND_MACAROON_PATH=/secrets/admin.macaroon
-```
-
-This is expected:
-
-- BOLT12 offers are created via lndk-cli
-- LNURL fallback creates BOLT11 invoices via LND REST
-
----
-
-# Current working deployment
-
-This repository contains a working self-hosted BOLT12 payment setup built around:
-
-- lndk running on Umbrel / Portainer
-- bolt12-pay FastAPI backend
-- static frontend UI
-- Cloudflare Tunnel for public access
-- Cloudflare Access protecting admin endpoints
-- LNURL fallback server
-- BIP353 Lightning addresses
-
----
-
-# Public endpoints
-
-```
-/
-.well-known/lnurlp/<username>
-```
-
----
-
-# Protected endpoints
-
-```
-/admin
-/api/create-offer
-/api/pay-offer
-/api/decode-offer
-```
-
-These should be protected by Cloudflare Access or another reverse proxy.
-
----
-
-# Persistent Docker volumes
-
-## lndk_lndk_data
-
-Persistent data volume for the lndk container.
-
-## lndk_secrets
-
-Shared secrets volume used by:
-
-- lndk
-- bolt12-pay
-
-Required files:
-
-```
-tls.cert
-admin.macaroon
-lndk-tls-cert.pem
-```
-
----
-
-# Portainer stack files
-
-Saved stack definitions:
-
-```
-deploy/portainer-lndk.yml
-deploy/portainer-bolt12-pay.yml
-```
-
----
-
-# Umbrel reboot note
-
-After Umbrel reboots, lndk may start before Lightning is ready.
-
-Use:
-
-```
-scripts/wait-for-lnd.sh
-```
-
-This script waits for:
-
-- /secrets/tls.cert
-- /secrets/admin.macaroon
-- LND gRPC 192.168.188.39:10009
-
-before starting lndk.
-
----
-
-# Security note
-
-Never commit:
-
-- TLS certificates
-- macaroons
-- .env files
-- secrets directories
+- `docs/architecture.md`

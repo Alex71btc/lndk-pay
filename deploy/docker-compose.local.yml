@@ -1,0 +1,49 @@
+services:
+  bolt12-pay:
+    build:
+      context: ../app
+    container_name: bolt12-pay
+    restart: unless-stopped
+    ports:
+      - "8091:8081"
+    environment:
+      LNDK_CLI: /usr/local/bin/lndk-cli
+      LNDK_NETWORK: bitcoin
+      LNDK_GRPC_HOST: https://192.168.188.39
+      LNDK_GRPC_PORT: "7000"
+      LNDK_CERT_PATH: /secrets/tls.cert
+      LNDK_MACAROON_PATH: /secrets/admin.macaroon
+      LNDK_TIMEOUT_SECONDS: "30"
+      ALLOW_PAY_OFFER: "true"
+
+      LND_REST_URL: https://umbrel.local:8080
+      LND_TLS_CERT_PATH: /secrets/tls.cert
+      LND_MACAROON_PATH: /secrets/admin.macaroon
+      LND_REST_INSECURE: "false"
+
+      PUBLIC_LNURL_ADDRESS: lnurl@pay.alex71btc.com
+      LNURL_BASE_DOMAIN: pay.alex71btc.com
+      LNURL_BASE_URL: https://pay.alex71btc.com
+      LNURL_MIN_SENDABLE_MSAT: "1000"
+      LNURL_MAX_SENDABLE_MSAT: "1000000000"
+      LNURL_COMMENT_ALLOWED: "120"
+      LNURL_ALIAS_MODE: "shared"
+      LNURL_SHARED_DESCRIPTION: "LNURL payment via pay.alex71btc.com"
+      LNURL_DEFAULT_DESCRIPTION: "Lightning payment"
+      LNURL_ALIAS_MAP: ""
+
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      CF_ZONE_ID: ${CF_ZONE_ID:-}
+      CF_ZONE_NAME: ${CF_ZONE_NAME:-}
+
+      APP_CONFIG_PATH: /data/config.json
+      CORS_ORIGINS: "*"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    volumes:
+      - ../app/secrets:/secrets:ro
+      - bolt12_pay_data:/data
+
+volumes:
+  bolt12_pay_data:
