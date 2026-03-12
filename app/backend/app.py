@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import json
+import math
 import os
 import re
 import shlex
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 import dns.exception
 import dns.resolver
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,10 +35,31 @@ LNDK_MACAROON_PATH = os.environ.get("LNDK_MACAROON_PATH", str(Path.home() / "adm
 REQUEST_TIMEOUT = float(os.environ.get("LNDK_TIMEOUT_SECONDS", "30"))
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 ALLOW_PAY_OFFER = os.environ.get("ALLOW_PAY_OFFER", "false").lower() in {"1", "true", "yes", "on"}
+
 PUBLIC_BIP353_ADDRESS = os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@alex71btc.com")
+PUBLIC_LNURL_ADDRESS = os.environ.get("PUBLIC_LNURL_ADDRESS", "lnurl@yourdomain.com")
 
 DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "10"))
 DNS_RESOLVER_TIMEOUT = float(os.environ.get("DNS_RESOLVER_TIMEOUT", "10"))
+
+LNURL_BASE_DOMAIN = os.environ.get("LNURL_BASE_DOMAIN", "yourdomain.com").strip().lower()
+LNURL_BASE_URL = os.environ.get("LNURL_BASE_URL", f"https://{LNURL_BASE_DOMAIN}").strip().rstrip("/")
+LNURL_MIN_SENDABLE_MSAT = int(os.environ.get("LNURL_MIN_SENDABLE_MSAT", "1000"))
+LNURL_MAX_SENDABLE_MSAT = int(os.environ.get("LNURL_MAX_SENDABLE_MSAT", "1000000000"))
+LNURL_COMMENT_ALLOWED = int(os.environ.get("LNURL_COMMENT_ALLOWED", "120"))
+LNURL_ALIAS_MODE = os.environ.get("LNURL_ALIAS_MODE", "shared").strip().lower()
+LNURL_SHARED_DESCRIPTION = os.environ.get(
+    "LNURL_SHARED_DESCRIPTION",
+    f"LNURL payment via {LNURL_BASE_DOMAIN}",
+).strip()
+LNURL_DEFAULT_DESCRIPTION = os.environ.get("LNURL_DEFAULT_DESCRIPTION", "Lightning payment").strip()
+LNURL_ALIAS_MAP_RAW = os.environ.get("LNURL_ALIAS_MAP", "").strip()
+LND_REST_INSECURE = os.environ.get("LND_REST_INSECURE", "false").lower() in {"1", "true", "yes", "on"}
+LND_REST_URL = os.environ.get("LND_REST_URL", "https://YOUR_NODE_IP:8080").strip().rstrip("/")
+LND_TLS_CERT_PATH = os.environ.get("LND_TLS_CERT_PATH", "/secrets/tls.cert").strip()
+LND_MACAROON_PATH = os.environ.get("LND_MACAROON_PATH", "/secrets/admin.macaroon").strip()
+LND_REST_TIMEOUT = float(os.environ.get("LND_REST_TIMEOUT_SECONDS", "30"))
+
 
 # Extract the lno... offer string from lndk-cli output like:
 # Offer: CreateOfferResponse { offer: "lno1..." }.
@@ -46,6 +69,7 @@ OFFER_RE = re.compile(
 )
 
 HRN_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+LNURL_USERNAME_RE = re.compile(r"^[a-z0-9._-]{1,64}$")
 
 
 # --- Models ----------------------------------------------------------------
@@ -97,9 +121,28 @@ class HealthResponse(BaseModel):
     macaroon_path: str
     allow_pay_offer: bool
 
+
 class PublicInfoResponse(BaseModel):
     address: str
+    fallback_address: str
     offer: str
+
+
+class LnurlInfoResponse(BaseModel):
+    lightning_address: str
+    lnurl: str
+    lnurlp_url: str
+
+
+class LnurlPayMetadataResponse(BaseModel):
+    callback: str
+    minSendable: int
+    maxSendable: int
+    metadata: str
+    tag: str = "payRequest"
+    commentAllowed: int = 0
+    allowsNostr: bool = False
+
 
 class CloudflareBIP353Request(BaseModel):
     record_name: str
@@ -107,7 +150,7 @@ class CloudflareBIP353Request(BaseModel):
 
 
 # --- App -------------------------------------------------------------------
-app = FastAPI(title="LNDK Backend", version="0.3.0")
+app = FastAPI(title="LNDK Backend", version="0.5.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -202,6 +245,78 @@ def _new_resolver() -> dns.resolver.Resolver:
     return resolver
 
 
+_BECH32_ALPHABET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+
+def _bech32_polymod(values: list[int]) -> int:
+    generator = [0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3]
+    chk = 1
+    for value in values:
+        top = chk >> 25
+        chk = ((chk & 0x1FFFFFF) << 5) ^ value
+        for i in range(5):
+            if (top >> i) & 1:
+                chk ^= generator[i]
+    return chk
+
+
+def _bech32_hrp_expand(hrp: str) -> list[int]:
+    return [ord(c) >> 5 for c in hrp] + [0] + [ord(c) & 31 for c in hrp]
+
+
+def _bech32_create_checksum(hrp: str, data: list[int]) -> list[int]:
+    values = _bech32_hrp_expand(hrp) + data
+    polymod = _bech32_polymod(values + [0, 0, 0, 0, 0, 0]) ^ 1
+    return [(polymod >> (5 * (5 - i))) & 31 for i in range(6)]
+
+
+def _convertbits(data: bytes, frombits: int, tobits: int, pad: bool = True) -> list[int]:
+    acc = 0
+    bits = 0
+    result: list[int] = []
+    maxv = (1 << tobits) - 1
+    max_acc = (1 << (frombits + tobits - 1)) - 1
+
+    for value in data:
+        if value < 0 or (value >> frombits):
+            raise HTTPException(status_code=400, detail="Invalid data for bit conversion")
+        acc = ((acc << frombits) | value) & max_acc
+        bits += frombits
+        while bits >= tobits:
+            bits -= tobits
+            result.append((acc >> bits) & maxv)
+
+    if pad:
+        if bits:
+            result.append((acc << (tobits - bits)) & maxv)
+    elif bits >= frombits or ((acc << (tobits - bits)) & maxv):
+        raise HTTPException(status_code=400, detail="Invalid LNURL padding")
+
+    return result
+
+def _lnd_rest_verify_setting():
+    if LND_REST_INSECURE:
+        return False
+    return LND_TLS_CERT_PATH
+
+def _encode_lnurl(url: str) -> str:
+    if not url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="LNURL target must be an https URL")
+
+    hrp = "lnurl"
+    data = _convertbits(url.encode("utf-8"), 8, 5)
+    checksum = _bech32_create_checksum(hrp, data)
+    return hrp + "1" + "".join(_BECH32_ALPHABET[d] for d in data + checksum)
+
+
+def _lightning_address_to_lnurlp_url(address: str) -> str:
+    clean = address.strip().lower()
+    if not HRN_RE.match(clean):
+        raise HTTPException(status_code=400, detail="Invalid lightning address format")
+    user, domain = clean.split("@", 1)
+    return f"https://{domain}/.well-known/lnurlp/{user}"
+
+
 def _resolve_bip353_address(address: str) -> str:
     if not HRN_RE.match(address):
         raise HTTPException(status_code=400, detail="Invalid human-readable address format")
@@ -229,7 +344,6 @@ def _resolve_bip353_address(address: str) -> str:
             raise HTTPException(status_code=502, detail=f"DNS lookup failed for {address}: {exc}") from exc
 
         for answer in answers:
-            # Cloudflare / DNS may split a long TXT record into multiple strings.
             if hasattr(answer, "strings"):
                 txt_value = "".join(
                     part.decode("utf-8") if isinstance(part, (bytes, bytearray)) else str(part)
@@ -278,27 +392,111 @@ def build_bip353_txt_value(offer: str) -> str:
     return f'"bitcoin:?lno={clean_offer}"'
 
 
-# --- API -------------------------------------------------------------------
-@app.get("/api/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    return HealthResponse(
-        ok=True,
-        cli=LNDK_CLI,
-        grpc_host=LNDK_GRPC_HOST,
-        grpc_port=LNDK_GRPC_PORT,
-        cert_path=LNDK_CERT_PATH,
-        macaroon_path=LNDK_MACAROON_PATH,
-        allow_pay_offer=ALLOW_PAY_OFFER,
+def _normalize_lnurl_username(username: str) -> str:
+    user = username.strip().lower()
+    if not LNURL_USERNAME_RE.fullmatch(user):
+        raise HTTPException(status_code=400, detail="Invalid LNURL username")
+    return user
+
+
+def _parse_lnurl_alias_map() -> dict[str, dict[str, Any]]:
+    if not LNURL_ALIAS_MAP_RAW:
+        return {}
+
+    try:
+        raw = json.loads(LNURL_ALIAS_MAP_RAW)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid LNURL_ALIAS_MAP JSON: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise RuntimeError("LNURL_ALIAS_MAP must be a JSON object")
+
+    parsed: dict[str, dict[str, Any]] = {}
+    for key, value in raw.items():
+        username = _normalize_lnurl_username(str(key))
+
+        if isinstance(value, str):
+            parsed[username] = {"description": value.strip() or LNURL_DEFAULT_DESCRIPTION}
+            continue
+
+        if not isinstance(value, dict):
+            raise RuntimeError(f"LNURL alias '{username}' must be a string or object")
+
+        description = str(value.get("description", LNURL_DEFAULT_DESCRIPTION)).strip() or LNURL_DEFAULT_DESCRIPTION
+        fixed_amount_sat = value.get("fixed_amount_sat")
+
+        if fixed_amount_sat is not None:
+            try:
+                fixed_amount_sat = int(fixed_amount_sat)
+            except Exception as exc:
+                raise RuntimeError(f"LNURL alias '{username}' fixed_amount_sat must be an integer") from exc
+            if fixed_amount_sat < 1:
+                raise RuntimeError(f"LNURL alias '{username}' fixed_amount_sat must be >= 1")
+
+        parsed[username] = {
+            "description": description,
+            "fixed_amount_sat": fixed_amount_sat,
+        }
+
+    return parsed
+
+
+try:
+    LNURL_ALIAS_MAP = _parse_lnurl_alias_map()
+except RuntimeError as exc:
+    raise RuntimeError(str(exc)) from exc
+
+
+def _lnurl_identifier(username: str) -> str:
+    return f"{username}@{LNURL_BASE_DOMAIN}"
+
+
+def _lnurl_metadata_json(identifier: str, description: str) -> str:
+    return json.dumps(
+        [
+            ["text/plain", description],
+            ["text/identifier", identifier],
+        ],
+        separators=(",", ":"),
+        ensure_ascii=False,
     )
 
-@app.get("/api/info", response_model=PublicInfoResponse)
-def public_info() -> PublicInfoResponse:
-    address = PUBLIC_BIP353_ADDRESS.strip()
-    offer = _resolve_bip353_address(address)
-    return PublicInfoResponse(address=address, offer=offer)
 
-@app.post("/api/create-offer", response_model=OfferResponse)
-def create_offer(payload: OfferRequest) -> OfferResponse:
+def _resolve_lnurl_alias(username: str) -> dict[str, Any]:
+    user = _normalize_lnurl_username(username)
+    identifier = _lnurl_identifier(user)
+
+    alias_entry = LNURL_ALIAS_MAP.get(user)
+    if alias_entry is not None:
+        description = alias_entry.get("description", LNURL_DEFAULT_DESCRIPTION)
+        fixed_amount_sat = alias_entry.get("fixed_amount_sat")
+        return {
+            "username": user,
+            "identifier": identifier,
+            "description": description,
+            "fixed_amount_sat": fixed_amount_sat,
+        }
+
+    if LNURL_ALIAS_MODE == "open":
+        return {
+            "username": user,
+            "identifier": identifier,
+            "description": f"{LNURL_DEFAULT_DESCRIPTION}: {identifier}",
+            "fixed_amount_sat": None,
+        }
+
+    if LNURL_ALIAS_MODE == "shared":
+        return {
+            "username": user,
+            "identifier": identifier,
+            "description": LNURL_SHARED_DESCRIPTION,
+            "fixed_amount_sat": None,
+        }
+
+    raise HTTPException(status_code=404, detail=f"LNURL alias not found: {user}")
+
+
+def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
     args = _base_command() + ["create-offer", "--description", payload.description]
 
     effective_amount_sat = payload.amount if payload.amount is not None else 1
@@ -314,6 +512,171 @@ def create_offer(payload: OfferRequest) -> OfferResponse:
     raw_output = _run_command(args)
     offer = _extract_offer(raw_output)
     return OfferResponse(offer=offer, raw_output=raw_output)
+
+
+def _lnurl_callback_url(username: str) -> str:
+    return f"{LNURL_BASE_URL}/api/lnurl/callback/{username}"
+
+
+def _read_macaroon_hex(path: str) -> str:
+    try:
+        return Path(path).read_bytes().hex()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=f"macaroon file not found: {path}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"failed to read macaroon file: {exc}") from exc
+
+
+async def _create_bolt11_invoice(
+    *,
+    amount_sat: int,
+    memo: str,
+    expiry: Optional[int] = None,
+) -> str:
+    if amount_sat < 1:
+        raise HTTPException(status_code=400, detail="amount_sat must be >= 1")
+
+    headers = {
+        "Grpc-Metadata-macaroon": _read_macaroon_hex(LND_MACAROON_PATH),
+        "Content-Type": "application/json",
+    }
+
+    payload: dict[str, Any] = {
+        "value": amount_sat,
+        "memo": memo[:640],
+    }
+    if expiry is not None and expiry > 0:
+        payload["expiry"] = int(expiry)
+
+    try:
+     async with httpx.AsyncClient(verify=_lnd_rest_verify_setting(), timeout=LND_REST_TIMEOUT) as client:
+            response = await client.post(
+                f"{LND_REST_URL}/v1/invoices",
+                headers=headers,
+                json=payload,
+            )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=f"LND TLS cert file not found: {LND_TLS_CERT_PATH}") from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="LND REST invoice creation timed out") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"LND REST request failed: {exc}") from exc
+
+    try:
+        data = response.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LND REST returned invalid JSON")
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LND REST error: {data}")
+
+    payment_request = data.get("payment_request") or data.get("paymentRequest")
+    if not payment_request:
+        raise HTTPException(status_code=502, detail=f"LND REST invoice response missing payment_request: {data}")
+
+    return payment_request
+
+
+# --- API -------------------------------------------------------------------
+@app.get("/api/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(
+        ok=True,
+        cli=LNDK_CLI,
+        grpc_host=LNDK_GRPC_HOST,
+        grpc_port=LNDK_GRPC_PORT,
+        cert_path=LNDK_CERT_PATH,
+        macaroon_path=LNDK_MACAROON_PATH,
+        allow_pay_offer=ALLOW_PAY_OFFER,
+    )
+
+
+@app.get("/api/info", response_model=PublicInfoResponse)
+def public_info() -> PublicInfoResponse:
+    address = PUBLIC_BIP353_ADDRESS.strip()
+    fallback_address = PUBLIC_LNURL_ADDRESS.strip()
+    offer = _resolve_bip353_address(address)
+    return PublicInfoResponse(address=address, fallback_address=fallback_address, offer=offer)
+
+
+@app.get("/api/lnurl/address/{address:path}", response_model=LnurlInfoResponse)
+def lnurl_for_address(address: str) -> LnurlInfoResponse:
+    clean_address = address.strip().lower()
+    lnurlp_url = _lightning_address_to_lnurlp_url(clean_address)
+    return LnurlInfoResponse(
+        lightning_address=clean_address,
+        lnurl=_encode_lnurl(lnurlp_url),
+        lnurlp_url=lnurlp_url,
+    )
+
+
+@app.get("/.well-known/lnurlp/{username}", response_model=LnurlPayMetadataResponse)
+def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
+    alias = _resolve_lnurl_alias(username)
+
+    min_sendable = LNURL_MIN_SENDABLE_MSAT
+    max_sendable = LNURL_MAX_SENDABLE_MSAT
+
+    if alias["fixed_amount_sat"] is not None:
+        fixed_msat = int(alias["fixed_amount_sat"]) * 1000
+        min_sendable = fixed_msat
+        max_sendable = fixed_msat
+
+    return LnurlPayMetadataResponse(
+        callback=_lnurl_callback_url(alias["username"]),
+        minSendable=min_sendable,
+        maxSendable=max_sendable,
+        metadata=_lnurl_metadata_json(alias["identifier"], alias["description"]),
+        commentAllowed=max(0, LNURL_COMMENT_ALLOWED),
+    )
+
+
+@app.get("/api/lnurl/callback/{username}")
+async def lnurl_callback(
+    username: str,
+    amount: int = Query(..., ge=1, description="Requested amount in millisatoshis"),
+    comment: Optional[str] = Query(default=None),
+) -> dict[str, Any]:
+    alias = _resolve_lnurl_alias(username)
+
+    min_sendable = LNURL_MIN_SENDABLE_MSAT
+    max_sendable = LNURL_MAX_SENDABLE_MSAT
+
+    if alias["fixed_amount_sat"] is not None:
+        fixed_msat = int(alias["fixed_amount_sat"]) * 1000
+        min_sendable = fixed_msat
+        max_sendable = fixed_msat
+
+    if amount < min_sendable or amount > max_sendable:
+        raise HTTPException(status_code=400, detail="amount outside configured LNURL min/max range")
+
+    if comment and len(comment) > max(0, LNURL_COMMENT_ALLOWED):
+        raise HTTPException(status_code=400, detail="comment too long")
+
+    amount_sat = max(1, math.ceil(amount / 1000))
+    memo = alias["identifier"]
+    if comment:
+        memo = f"{memo} | {comment[:120]}"
+
+    payment_request = await _create_bolt11_invoice(
+        amount_sat=amount_sat,
+        memo=memo,
+    )
+
+    return {
+        "pr": payment_request,
+        "routes": [],
+        "successAction": {
+            "tag": "message",
+            "message": f"Payment request for {alias['identifier']}",
+        },
+        "disposable": False,
+    }
+
+
+@app.post("/api/create-offer", response_model=OfferResponse)
+def create_offer(payload: OfferRequest) -> OfferResponse:
+    return _create_offer_internal(payload)
 
 
 @app.post("/api/decode-offer", response_model=DecodeResponse)
@@ -469,13 +832,30 @@ def _test_build_command() -> None:
     assert "--grpc-port" in cmd
 
 
+def _test_lnurl_encoding() -> None:
+    encoded = _encode_lnurl(f"https://{LNURL_BASE_DOMAIN}/.well-known/lnurlp/lnurl")
+    assert encoded.startswith("lnurl1")
+    assert len(encoded) > 20
+
+
+def _test_alias_resolution() -> None:
+    alias = _resolve_lnurl_alias("lnurl")
+    assert alias["username"] == "lnurl"
+    assert alias["identifier"].endswith(f"@{LNURL_BASE_DOMAIN}")
+
+
 if __name__ == "__main__":
     _test_extract_offer()
     _test_extract_offer_from_txt_record()
     _test_build_command()
+    _test_lnurl_encoding()
+    _test_alias_resolution()
     print("Self-tests passed.")
     print("Run with: uvicorn backend.app:app --host 0.0.0.0 --port 8081")
     print(f"ALLOW_PAY_OFFER={ALLOW_PAY_OFFER}")
+    print(f"LNURL_ALIAS_MODE={LNURL_ALIAS_MODE}")
+    print(f"LNURL_BASE_URL={LNURL_BASE_URL}")
+    print(f"LND_REST_URL={LND_REST_URL}")
     print("Base command:")
     print(" ".join(shlex.quote(part) for part in _base_command()))
     if PUBLIC_DIR.exists():
