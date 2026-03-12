@@ -1,3 +1,38 @@
+## Deployment modes
+
+### Local development
+Use a local bind mount for secrets:
+
+- `LNDK_CERT_PATH=/secrets/tls.cert`
+- `LNDK_MACAROON_PATH=/secrets/admin.macaroon`
+- `LND_TLS_CERT_PATH=/secrets/tls.cert`
+- `LND_MACAROON_PATH=/secrets/admin.macaroon`
+
+and mount:
+
+```yaml
+volumes:
+  - ./secrets:/secrets:ro
+
+### Umbrel deployment
+
+Use the external Umbrel/LNDK secrets volume.
+
+Important: the BOLT12/LNDK path and LNURL/LND REST path may use different certificate files:
+
+LNDK_CERT_PATH=/secrets/lndk-tls-cert.pem
+
+LNDK_MACAROON_PATH=/secrets/admin.macaroon
+
+LND_TLS_CERT_PATH=/secrets/tls.cert
+
+LND_MACAROON_PATH=/secrets/admin.macaroon
+
+This is expected:
+
+BOLT12 offers are created via lndk-cli
+
+LNURL fallback creates BOLT11 invoices via LND REST
 ## Current working deployment
 
 This repository currently contains a working self-hosted BOLT12 payment setup built around:
@@ -6,6 +41,8 @@ This repository currently contains a working self-hosted BOLT12 payment setup bu
 - `bolt12-pay` as separate FastAPI + frontend container
 - Cloudflare Tunnel for public access
 - Cloudflare Access for protecting `/admin`, `/api/pay-offer`, `/api/decode-offer`
+- LNURL Fallback Server
+- Custom Bolt11 Lightning addresses
 
 ### Public URLs
 
@@ -19,6 +56,7 @@ This repository currently contains a working self-hosted BOLT12 payment setup bu
 - `/api/decode-offer`
 
 ## Persistent Docker volumes
+
 
 ### `lndk_lndk_data`
 Persistent data volume for the `lndk` container.
