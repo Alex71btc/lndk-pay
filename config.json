@@ -1,0 +1,13 @@
+{
+  "public_bolt12_address": "bolt12@testdomain123.com",
+  "public_lnurl_address": "lnurl@yourdomain.com",
+  "lnurl_base_domain": "yourdomain.com",
+  "lnurl_base_url": "https://yourdomain.com",
+  "dns_mode": "manual",
+  "cloudflare": {
+    "enabled": false,
+    "zone_name": "",
+    "zone_id": "",
+    "api_token": ""
+  }
+}

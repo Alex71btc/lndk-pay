@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from backend.config import load_config, save_config
 
 # --- Configuration ---------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
@@ -36,8 +37,13 @@ REQUEST_TIMEOUT = float(os.environ.get("LNDK_TIMEOUT_SECONDS", "30"))
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 ALLOW_PAY_OFFER = os.environ.get("ALLOW_PAY_OFFER", "false").lower() in {"1", "true", "yes", "on"}
 
-PUBLIC_BIP353_ADDRESS = os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@alex71btc.com")
-PUBLIC_LNURL_ADDRESS = os.environ.get("PUBLIC_LNURL_ADDRESS", "lnurl@yourdomain.com")
+def get_public_bolt12_address():
+    cfg = load_config()
+    return cfg.get("public_bolt12_address") or os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@pay.local")
+
+def get_public_lnurl_address():
+    cfg = load_config()
+    return cfg.get("public_lnurl_address") or os.environ.get("PUBLIC_LNURL_ADDRESS", "lnurl@pay.local")
 
 DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "10"))
 DNS_RESOLVER_TIMEOUT = float(os.environ.get("DNS_RESOLVER_TIMEOUT", "10"))
@@ -236,6 +242,16 @@ def _extract_offer_from_txt_record(txt_value: str) -> Optional[str]:
 
     return None
 
+def get_cloudflare_config():
+    cfg = load_config()
+    cf = cfg.get("cloudflare", {}) or {}
+
+    return {
+        "enabled": bool(cf.get("enabled")),
+        "zone_name": str(cf.get("zone_name", "")).strip(),
+        "zone_id": str(cf.get("zone_id", "")).strip(),
+        "api_token": str(cf.get("api_token", "")).strip(),
+    }
 
 def _new_resolver() -> dns.resolver.Resolver:
     resolver = dns.resolver.Resolver()
@@ -448,8 +464,7 @@ except RuntimeError as exc:
 
 
 def _lnurl_identifier(username: str) -> str:
-    return f"{username}@{LNURL_BASE_DOMAIN}"
-
+    return f"{username}@{get_lnurl_base_domain()}"
 
 def _lnurl_metadata_json(identifier: str, description: str) -> str:
     return json.dumps(
@@ -515,8 +530,16 @@ def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
 
 
 def _lnurl_callback_url(username: str) -> str:
-    return f"{LNURL_BASE_URL}/api/lnurl/callback/{username}"
+    return f"{get_lnurl_base_url()}/api/lnurl/callback/{username}"
 
+def get_lnurl_base_domain():
+    cfg = load_config()
+    return cfg.get("lnurl_base_domain") or os.environ.get("LNURL_BASE_DOMAIN", "yourdomain.com")
+
+
+def get_lnurl_base_url():
+    cfg = load_config()
+    return cfg.get("lnurl_base_url") or os.environ.get("LNURL_BASE_URL", f"https://{get_lnurl_base_domain()}").rstrip("/")
 
 def _read_macaroon_hex(path: str) -> str:
     try:
@@ -593,11 +616,16 @@ def health() -> HealthResponse:
 
 @app.get("/api/info", response_model=PublicInfoResponse)
 def public_info() -> PublicInfoResponse:
-    address = PUBLIC_BIP353_ADDRESS.strip()
-    fallback_address = PUBLIC_LNURL_ADDRESS.strip()
-    offer = _resolve_bip353_address(address)
-    return PublicInfoResponse(address=address, fallback_address=fallback_address, offer=offer)
+    address = get_public_bolt12_address().strip()
+    fallback_address = get_public_lnurl_address().strip()
 
+    offer = _resolve_bip353_address(address)
+
+    return PublicInfoResponse(
+        address=address,
+        fallback_address=fallback_address,
+        offer=offer,
+    )
 
 @app.get("/api/lnurl/address/{address:path}", response_model=LnurlInfoResponse)
 def lnurl_for_address(address: str) -> LnurlInfoResponse:
@@ -673,6 +701,33 @@ async def lnurl_callback(
         "disposable": False,
     }
 
+@app.get("/api/setup/status")
+def setup_status():
+
+    cfg = load_config()
+
+    configured = bool(cfg.get("lnurl_base_domain"))
+
+    return {
+        "configured": configured
+    }
+
+@app.get("/api/setup/config")
+def get_setup_config():
+    return load_config()
+
+@app.post("/api/setup/config")
+def set_setup_config(payload: dict):
+
+    cfg = load_config()
+
+    cfg.update(payload)
+
+    save_config(cfg)
+
+    return {
+        "ok": True
+    }
 
 @app.post("/api/create-offer", response_model=OfferResponse)
 def create_offer(payload: OfferRequest) -> OfferResponse:
@@ -704,14 +759,23 @@ def pay_offer(payload: PayOfferRequest) -> PayOfferResponse:
 
 @app.post("/api/cloudflare/create-bip353")
 async def create_cloudflare_bip353(req: CloudflareBIP353Request):
-    token = os.getenv("CF_API_TOKEN", "").strip()
-    zone_id = os.getenv("CF_ZONE_ID", "").strip()
-    zone_name = os.getenv("CF_ZONE_NAME", "").strip()
+    cf = get_cloudflare_config()
+
+    token = cf["api_token"]
+    zone_id = cf["zone_id"]
+    zone_name = cf["zone_name"]
+    enabled = cf["enabled"]
+
+    if not enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Cloudflare integration is not enabled in app config",
+        )
 
     if not token or not zone_id or not zone_name:
         raise HTTPException(
             status_code=500,
-            detail="Cloudflare env vars missing: CF_API_TOKEN, CF_ZONE_ID, CF_ZONE_NAME",
+            detail="Cloudflare config missing: api_token, zone_id or zone_name",
         )
 
     record_name = req.record_name.strip().lower()
@@ -754,7 +818,6 @@ async def create_cloudflare_bip353(req: CloudflareBIP353Request):
         "content": txt_value,
         "result": data.get("result", {}),
     }
-
 
 # --- Web files --------------------------------------------------------------
 if PUBLIC_DIR.exists():
@@ -833,7 +896,7 @@ def _test_build_command() -> None:
 
 
 def _test_lnurl_encoding() -> None:
-    encoded = _encode_lnurl(f"https://{LNURL_BASE_DOMAIN}/.well-known/lnurlp/lnurl")
+    encoded = _encode_lnurl(f"https://{get_lnurl_base_domain()}/.well-known/lnurlp/lnurl")
     assert encoded.startswith("lnurl1")
     assert len(encoded) > 20
 
@@ -841,8 +904,7 @@ def _test_lnurl_encoding() -> None:
 def _test_alias_resolution() -> None:
     alias = _resolve_lnurl_alias("lnurl")
     assert alias["username"] == "lnurl"
-    assert alias["identifier"].endswith(f"@{LNURL_BASE_DOMAIN}")
-
+    assert alias["identifier"].endswith(f"@{get_lnurl_base_domain()}")
 
 if __name__ == "__main__":
     _test_extract_offer()
