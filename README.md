@@ -10,7 +10,6 @@ Use a local bind mount for secrets:
 
 and mount:
 
-```yaml
 volumes:
   - ./secrets:/secrets:ro
 
