@@ -1,0 +1,13 @@
+{
+  "public_bolt12_address": "bolt12@testdomain123.com",
+  "public_lnurl_address": "lnurl@pay.alex71btc.com",
+  "lnurl_base_domain": "pay.alex71btc.com",
+  "lnurl_base_url": "https://pay.alex71btc.com",
+  "dns_mode": "manual",
+  "cloudflare": {
+    "enabled": false,
+    "zone_name": "",
+    "zone_id": "",
+    "api_token": ""
+  }
+}

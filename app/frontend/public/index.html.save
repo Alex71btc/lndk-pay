@@ -1,4 +1,4 @@
-#<!doctype html>
+<!doctype html>
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
@@ -325,7 +325,7 @@
         <option value="manual">manual</option>
         <option value="cloudflare">cloudflare</option>
       </select>
-
+      
       <div id="manualDnsHint" class="hint" hidden>
         <strong>Manual DNS mode</strong><br />
         Für BIP353 musst du bei deinem DNS-Provider einen TXT-Record setzen.<br />
@@ -337,19 +337,8 @@
         <span class="mono">"bitcoin:?lno=&lt;offer&gt;"</span><br />
         Das konkrete Offer wird später von der App erzeugt. Cloudflare-Automation kann später optional aktiviert werden.
       </div>
-      <div id="cloudflareFields" class="section" hidden>
-
-  <label class="label">Cloudflare Zone Name</label>
-  <input id="cfZoneName" type="text" placeholder="z.B. alex71btc.com">
-
-  <label class="label" style="margin-top:10px;">Cloudflare Zone ID</label>
-  <input id="cfZoneId" type="text" placeholder="Zone ID aus Cloudflare Dashboard">
-
-  <label class="label" style="margin-top:10px;">Cloudflare API Token</label>
-  <input id="cfApiToken" type="password" placeholder="API Token">
-
-</div>
-      <div class="hint">
+      
+       <div class="hint">
         Cloudflare bleibt optional. Ohne Cloudflare funktioniert die App weiter, nur BIP353-DNS wird dann nicht automatisch gesetzt.
       </div>
 
@@ -357,9 +346,8 @@
         <button id="saveSetupBtn" type="button">Setup speichern</button>
       </div>
     </section>
-  </main>
-
-  <div class="toastWrap">
+  </main> 
+ <div class="toastWrap">
     <div class="statusBar" id="statusBar"></div>
   </div>
 
@@ -466,9 +454,9 @@
     const createOfferBtn = document.getElementById('createOfferBtn');
     const walletOpenBtn = document.getElementById('walletOpenBtn');
     const installBtn = document.getElementById('installBtn');
-
     const setupCard = document.getElementById('setupCard');
     const payCard = document.getElementById('payCard');
+
     const setupBolt12Address = document.getElementById('setupBolt12Address');
     const setupLnurlAddress = document.getElementById('setupLnurlAddress');
     const setupLnurlBaseDomain = document.getElementById('setupLnurlBaseDomain');
@@ -477,10 +465,6 @@
     const saveSetupBtn = document.getElementById('saveSetupBtn');
     const manualDnsHint = document.getElementById('manualDnsHint');
     const manualDnsExampleName = document.getElementById('manualDnsExampleName');
-    const cloudflareFields = document.getElementById('cloudflareFields');
-    const cfZoneName = document.getElementById('cfZoneName');
-    const cfZoneId = document.getElementById('cfZoneId');
-    const cfApiToken = document.getElementById('cfApiToken');
     
     let deferredPrompt = null;
     let statusTimer = null;
@@ -576,17 +560,7 @@
       if (!preset) return '';
       return `${preset}@${domain}`;
     }
-
-    function showSetupCard() {
-      setupCard.hidden = false;
-      payCard.hidden = true;
-    }
-
-    function showPayCard() {
-      setupCard.hidden = true;
-      payCard.hidden = false;
-    }
-
+   
     function updateDnsModeUi() {
       const domain = (setupLnurlBaseDomain.value || 'pay.example.com').trim().toLowerCase();
       const bolt12Address = (setupBolt12Address.value || 'bolt12@pay.example.com').trim().toLowerCase();
@@ -594,9 +568,8 @@
 
       manualDnsExampleName.textContent = `${user}.user._bitcoin-payment.${domain}`;
       manualDnsHint.hidden = setupDnsMode.value !== 'manual';
-      cloudflareFields.hidden = setupDnsMode.value !== 'cloudflare'; 
     }
-
+   
     async function loadLnurlFallback() {
       if (!fallbackAddress) {
         currentLnurl = '';
@@ -611,6 +584,15 @@
       }
 
       currentLnurl = data.lnurl || '';
+    }
+        function showSetupCard() {
+      setupCard.hidden = false;
+      payCard.hidden = true;
+    }
+
+    function showPayCard() {
+      setupCard.hidden = true;
+      payCard.hidden = false;
     }
 
     async function loadSetupState() {
@@ -643,21 +625,16 @@
       showPayCard();
       return true;
     }
+    
+        saveSetupBtn.addEventListener('click', async () => {
+      const payload = {
+        public_bolt12_address: setupBolt12Address.value.trim(),
+        public_lnurl_address: setupLnurlAddress.value.trim(),
+        lnurl_base_domain: setupLnurlBaseDomain.value.trim(),
+        lnurl_base_url: setupLnurlBaseUrl.value.trim(),
+        dns_mode: setupDnsMode.value,
+      };
 
-    saveSetupBtn.addEventListener('click', async () => {
-const payload = {
-  public_bolt12_address: setupBolt12Address.value.trim(),
-  public_lnurl_address: setupLnurlAddress.value.trim(),
-  lnurl_base_domain: setupLnurlBaseDomain.value.trim(),
-  lnurl_base_url: setupLnurlBaseUrl.value.trim(),
-  dns_mode: setupDnsMode.value,
-  cloudflare: {
-    enabled: setupDnsMode.value === "cloudflare",
-    zone_name: cfZoneName.value.trim(),
-    zone_id: cfZoneId.value.trim(),
-    api_token: cfApiToken.value.trim()
-  }
-};
       saveSetupBtn.disabled = true;
       saveSetupBtn.textContent = 'Speichere...';
 
@@ -683,11 +660,6 @@ const payload = {
         saveSetupBtn.textContent = 'Setup speichern';
       }
     });
-
-    setupDnsMode.addEventListener('change', updateDnsModeUi);
-    setupLnurlBaseDomain.addEventListener('input', updateDnsModeUi);
-    setupBolt12Address.addEventListener('input', updateDnsModeUi);
-
     async function loadPublicInfo() {
       try {
         const response = await fetch('/api/info');
@@ -929,7 +901,7 @@ const payload = {
           setupLnurlBaseDomain.value = configData.lnurl_base_domain || '';
           setupLnurlBaseUrl.value = configData.lnurl_base_url || '';
           setupDnsMode.value = configData.dns_mode || 'none';
-
+          
           updateDnsModeUi();
           showSetupCard();
           return;
@@ -947,3 +919,4 @@ const payload = {
   </script>
 </body>
 </html>
+
