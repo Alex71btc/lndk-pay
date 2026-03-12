@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
+import dns.exception
 import dns.resolver
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -31,7 +33,10 @@ LNDK_MACAROON_PATH = os.environ.get("LNDK_MACAROON_PATH", str(Path.home() / "adm
 REQUEST_TIMEOUT = float(os.environ.get("LNDK_TIMEOUT_SECONDS", "30"))
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 ALLOW_PAY_OFFER = os.environ.get("ALLOW_PAY_OFFER", "false").lower() in {"1", "true", "yes", "on"}
-DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "5"))
+PUBLIC_BIP353_ADDRESS = os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@alex71btc.com")
+
+DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "10"))
+DNS_RESOLVER_TIMEOUT = float(os.environ.get("DNS_RESOLVER_TIMEOUT", "10"))
 
 # Extract the lno... offer string from lndk-cli output like:
 # Offer: CreateOfferResponse { offer: "lno1..." }.
@@ -39,11 +44,17 @@ OFFER_RE = re.compile(
     r'offer:\s*CreateOfferResponse\s*\{\s*offer:\s*"(?P<offer>lno[^"\s]+)"',
     re.IGNORECASE,
 )
+
 HRN_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+# --- Models ----------------------------------------------------------------
 class OfferRequest(BaseModel):
-    amount: Optional[int] = Field(default=None, ge=1, description="Minimum amount in sats. If omitted, backend uses 1 sat.")
+    amount: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Minimum amount in sats. If omitted, backend uses 1 sat.",
+    )
     description: str = Field(default="bolt12@alex71btc.com", min_length=1, max_length=200)
     issuer: Optional[str] = Field(default=None, max_length=120)
     expiry: Optional[int] = Field(default=None, ge=1)
@@ -64,7 +75,10 @@ class DecodeResponse(BaseModel):
 
 
 class PayOfferRequest(BaseModel):
-    offer: str = Field(min_length=4, description="Either an lno... offer or a BIP353 human-readable address")
+    offer: str = Field(
+        min_length=4,
+        description="Either an lno... offer or a BIP353 human-readable address",
+    )
     amount_sat: int = Field(ge=1, description="Amount to pay in sats")
     payer_note: Optional[str] = Field(default=None, max_length=300)
 
@@ -83,8 +97,17 @@ class HealthResponse(BaseModel):
     macaroon_path: str
     allow_pay_offer: bool
 
+class PublicInfoResponse(BaseModel):
+    address: str
+    offer: str
 
-app = FastAPI(title="LNDK Backend", version="0.2.0")
+class CloudflareBIP353Request(BaseModel):
+    record_name: str
+    offer: str
+
+
+# --- App -------------------------------------------------------------------
+app = FastAPI(title="LNDK Backend", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -95,6 +118,7 @@ app.add_middleware(
 )
 
 
+# --- Helpers ----------------------------------------------------------------
 def _base_command() -> list[str]:
     return [
         LNDK_CLI,
@@ -170,19 +194,28 @@ def _extract_offer_from_txt_record(txt_value: str) -> Optional[str]:
     return None
 
 
+def _new_resolver() -> dns.resolver.Resolver:
+    resolver = dns.resolver.Resolver()
+    resolver.nameservers = ["1.1.1.1", "8.8.8.8"]
+    resolver.lifetime = DNS_RESOLVER_LIFETIME
+    resolver.timeout = DNS_RESOLVER_TIMEOUT
+    return resolver
+
+
 def _resolve_bip353_address(address: str) -> str:
     if not HRN_RE.match(address):
         raise HTTPException(status_code=400, detail="Invalid human-readable address format")
 
     user, domain = address.split("@", 1)
+
     candidate_fqdns = [
-        f"{user}._bitcoin-payment.{domain}",
         f"{user}.user._bitcoin-payment.{domain}",
+        f"{user}._bitcoin-payment.{domain}",
     ]
 
-    resolver = dns.resolver.Resolver()
-    resolver.lifetime = DNS_RESOLVER_LIFETIME
+    resolver = _new_resolver()
     last_lookup_error: Optional[Exception] = None
+    seen_txt_candidates: list[str] = []
 
     for fqdn in candidate_fqdns:
         try:
@@ -192,14 +225,26 @@ def _resolve_bip353_address(address: str) -> str:
             continue
         except dns.exception.Timeout as exc:
             raise HTTPException(status_code=504, detail=f"DNS lookup timed out for {address}") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"DNS lookup failed for {address}: {exc}") from exc
 
         for answer in answers:
-            txt_value = "".join(part.decode("utf-8") if isinstance(part, bytes) else str(part) for part in answer.strings)
+            # Cloudflare / DNS may split a long TXT record into multiple strings.
+            if hasattr(answer, "strings"):
+                txt_value = "".join(
+                    part.decode("utf-8") if isinstance(part, (bytes, bytearray)) else str(part)
+                    for part in answer.strings
+                )
+            else:
+                txt_value = str(answer).replace('"', "")
+
+            seen_txt_candidates.append(txt_value)
+
             offer = _extract_offer_from_txt_record(txt_value)
             if offer:
                 return offer
 
-    if last_lookup_error is not None:
+    if last_lookup_error is not None and not seen_txt_candidates:
         raise HTTPException(
             status_code=404,
             detail=f"No BIP353 TXT record found for {address}. Tried: {', '.join(candidate_fqdns)}",
@@ -207,7 +252,10 @@ def _resolve_bip353_address(address: str) -> str:
 
     raise HTTPException(
         status_code=422,
-        detail=f"TXT records for {address} did not contain a usable lno offer. Tried: {', '.join(candidate_fqdns)}",
+        detail=(
+            f"TXT records for {address} did not contain a usable lno offer. "
+            f"Tried: {', '.join(candidate_fqdns)} | Seen TXT: {seen_txt_candidates}"
+        ),
     )
 
 
@@ -217,9 +265,20 @@ def _normalize_offer_or_hrn(value: str) -> str:
         return candidate
     if HRN_RE.match(candidate):
         return _resolve_bip353_address(candidate)
-    raise HTTPException(status_code=400, detail="Value must be either an lno... offer or a user@domain BIP353 address")
+    raise HTTPException(
+        status_code=400,
+        detail="Value must be either an lno... offer or a user@domain BIP353 address",
+    )
 
 
+def build_bip353_txt_value(offer: str) -> str:
+    clean_offer = offer.strip()
+    if not clean_offer.startswith("lno"):
+        raise HTTPException(status_code=400, detail="Offer must start with lno")
+    return f'"bitcoin:?lno={clean_offer}"'
+
+
+# --- API -------------------------------------------------------------------
 @app.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(
@@ -232,6 +291,11 @@ def health() -> HealthResponse:
         allow_pay_offer=ALLOW_PAY_OFFER,
     )
 
+@app.get("/api/info", response_model=PublicInfoResponse)
+def public_info() -> PublicInfoResponse:
+    address = PUBLIC_BIP353_ADDRESS.strip()
+    offer = _resolve_bip353_address(address)
+    return PublicInfoResponse(address=address, offer=offer)
 
 @app.post("/api/create-offer", response_model=OfferResponse)
 def create_offer(payload: OfferRequest) -> OfferResponse:
@@ -239,6 +303,7 @@ def create_offer(payload: OfferRequest) -> OfferResponse:
 
     effective_amount_sat = payload.amount if payload.amount is not None else 1
     args += ["--amount", str(effective_amount_sat * 1000)]
+
     if payload.issuer:
         args += ["--issuer", payload.issuer]
     if payload.expiry is not None:
@@ -266,6 +331,7 @@ def pay_offer(payload: PayOfferRequest) -> PayOfferResponse:
 
     normalized_offer = _normalize_offer_or_hrn(payload.offer)
     args = _base_command() + ["pay-offer", normalized_offer, str(payload.amount_sat * 1000)]
+
     if payload.payer_note:
         args.append(payload.payer_note)
 
@@ -273,6 +339,61 @@ def pay_offer(payload: PayOfferRequest) -> PayOfferResponse:
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 
 
+@app.post("/api/cloudflare/create-bip353")
+async def create_cloudflare_bip353(req: CloudflareBIP353Request):
+    token = os.getenv("CF_API_TOKEN", "").strip()
+    zone_id = os.getenv("CF_ZONE_ID", "").strip()
+    zone_name = os.getenv("CF_ZONE_NAME", "").strip()
+
+    if not token or not zone_id or not zone_name:
+        raise HTTPException(
+            status_code=500,
+            detail="Cloudflare env vars missing: CF_API_TOKEN, CF_ZONE_ID, CF_ZONE_NAME",
+        )
+
+    record_name = req.record_name.strip().lower()
+    if not record_name:
+        raise HTTPException(status_code=400, detail="record_name required")
+
+    txt_name = f"{record_name}.user._bitcoin-payment.{zone_name}"
+    txt_value = build_bip353_txt_value(req.offer)
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "type": "TXT",
+        "name": txt_name,
+        "content": txt_value,
+        "ttl": 1,
+    }
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
+            headers=headers,
+            json=payload,
+        )
+
+    try:
+        data = response.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="Cloudflare returned invalid response")
+
+    if response.status_code >= 400 or not data.get("success", False):
+        raise HTTPException(status_code=502, detail=f"Cloudflare error: {data}")
+
+    return {
+        "ok": True,
+        "name": txt_name,
+        "content": txt_value,
+        "result": data.get("result", {}),
+    }
+
+
+# --- Web files --------------------------------------------------------------
 if PUBLIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=PUBLIC_DIR), name="static")
 
@@ -284,6 +405,7 @@ def index() -> FileResponse:
         raise HTTPException(status_code=404, detail="frontend/public/index.html not found")
     return FileResponse(index_file)
 
+
 @app.get("/admin")
 def admin_page() -> FileResponse:
     index_file = ADMIN_DIR / "index.html"
@@ -291,7 +413,40 @@ def admin_page() -> FileResponse:
         raise HTTPException(status_code=404, detail="frontend/admin/index.html not found")
     return FileResponse(index_file)
 
-# --- Minimal self-tests ----------------------------------------------------
+
+@app.get("/public.webmanifest")
+def public_manifest() -> FileResponse:
+    file = PUBLIC_DIR / "public.webmanifest"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="public.webmanifest not found")
+    return FileResponse(file, media_type="application/manifest+json")
+
+
+@app.get("/admin.webmanifest")
+def admin_manifest() -> FileResponse:
+    file = ADMIN_DIR / "admin.webmanifest"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="admin.webmanifest not found")
+    return FileResponse(file, media_type="application/manifest+json")
+
+
+@app.get("/service-worker.js")
+def service_worker() -> FileResponse:
+    file = PUBLIC_DIR / "service-worker.js"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="service-worker.js not found")
+    return FileResponse(file, media_type="application/javascript")
+
+
+@app.get("/icon.svg")
+def icon_svg() -> FileResponse:
+    file = PUBLIC_DIR / "icon.svg"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="icon.svg not found")
+    return FileResponse(file, media_type="image/svg+xml")
+
+
+# --- Minimal self-tests -----------------------------------------------------
 def _test_extract_offer() -> None:
     sample = 'Offer: CreateOfferResponse { offer: "lno1example123" }.'
     assert _extract_offer(sample) == "lno1example123"
@@ -299,10 +454,11 @@ def _test_extract_offer() -> None:
 
 
 def _test_extract_offer_from_txt_record() -> None:
-    assert _extract_offer_from_txt_record('bitcoin:?lno=lno1abc') == 'lno1abc'
-    assert _extract_offer_from_txt_record('bitcoin:lno1abc') == 'lno1abc'
-    assert _extract_offer_from_txt_record('lno1abc') == 'lno1abc'
-    assert _extract_offer_from_txt_record('bitcoin:?something=else') is None
+    assert _extract_offer_from_txt_record("bitcoin:?lno=lno1abc") == "lno1abc"
+    assert _extract_offer_from_txt_record("bitcoin:lno1abc") == "lno1abc"
+    assert _extract_offer_from_txt_record("lno1abc") == "lno1abc"
+    assert _extract_offer_from_txt_record("bitcoin:?something=else") is None
+    assert _extract_offer_from_txt_record("bitcoin:?lno=lno1abc123") == "lno1abc123"
 
 
 def _test_build_command() -> None:

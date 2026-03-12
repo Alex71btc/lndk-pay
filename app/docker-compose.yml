@@ -15,6 +15,12 @@ services:
       LNDK_MACAROON_PATH: /secrets/admin.macaroon
       LNDK_TIMEOUT_SECONDS: "30"
       ALLOW_PAY_OFFER: "true"
+      CF_API_TOKEN: ${CF_API_TOKEN}
+      CF_ZONE_ID: ${CF_ZONE_ID}
+      CF_ZONE_NAME: ${CF_ZONE_NAME}
       CORS_ORIGINS: "*"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     volumes:
       - ./secrets:/secrets:ro
