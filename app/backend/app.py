@@ -154,6 +154,21 @@ class CloudflareBIP353Request(BaseModel):
     record_name: str
     offer: str
 
+class AliasCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str = Field(default="Lightning payment", min_length=1, max_length=200)
+    amount_sat: Optional[int] = Field(default=None, ge=1)
+    publish_dns: bool = Field(default=False)
+
+
+class AliasResponse(BaseModel):
+    name: str
+    address: str
+    description: str
+    amount_sat: Optional[int] = None
+    dns_name: Optional[str] = None
+    dns_content: Optional[str] = None
+    published: bool = False
 
 # --- App -------------------------------------------------------------------
 app = FastAPI(title="LNDK Backend", version="0.5.0")
@@ -548,7 +563,156 @@ def _read_macaroon_hex(path: str) -> str:
         raise HTTPException(status_code=500, detail=f"macaroon file not found: {path}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"failed to read macaroon file: {exc}") from exc
+def get_lnurl_base_domain():
+    cfg = load_config()
+    return (cfg.get("lnurl_base_domain") or os.environ.get("LNURL_BASE_DOMAIN", "yourdomain.com")).strip().lower()
 
+
+def get_lnurl_base_url():
+    cfg = load_config()
+    return (cfg.get("lnurl_base_url") or os.environ.get(
+        "LNURL_BASE_URL",
+        f"https://{get_lnurl_base_domain()}",
+    )).strip().rstrip("/")
+
+
+def get_public_bolt12_address():
+    cfg = load_config()
+    return cfg.get("public_bolt12_address") or os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@pay.local")
+
+
+def get_public_lnurl_address():
+    cfg = load_config()
+    return cfg.get("public_lnurl_address") or os.environ.get("PUBLIC_LNURL_ADDRESS", "lnurl@pay.local")
+
+
+def get_cloudflare_config():
+    cfg = load_config()
+    cf = cfg.get("cloudflare", {}) or {}
+
+    return {
+        "enabled": bool(cf.get("enabled")),
+        "zone_name": str(cf.get("zone_name", "")).strip(),
+        "zone_id": str(cf.get("zone_id", "")).strip(),
+        "api_token": str(cf.get("api_token", "")).strip(),
+    }
+
+
+def _normalize_alias_name(name: str) -> str:
+    alias = name.strip().lower()
+    if not LNURL_USERNAME_RE.fullmatch(alias):
+        raise HTTPException(status_code=400, detail="Invalid alias name")
+    return alias
+
+
+def _alias_address(name: str) -> str:
+    return f"{name}@{get_lnurl_base_domain()}"
+
+
+def _alias_dns_name(name: str) -> str:
+    cf = get_cloudflare_config()
+    zone_name = cf["zone_name"] or get_lnurl_base_domain()
+    return f"{name}.user._bitcoin-payment.{zone_name}"
+
+
+def _build_alias_response(name: str, alias_data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": name,
+        "address": _alias_address(name),
+        "description": alias_data.get("description", "Lightning payment"),
+        "amount_sat": alias_data.get("amount_sat"),
+        "dns_name": alias_data.get("dns_name"),
+        "dns_content": alias_data.get("dns_content"),
+        "published": bool(alias_data.get("published", False)),
+    }
+def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
+    args = _base_command() + ["create-offer", "--description", payload.description]
+
+    effective_amount_sat = payload.amount if payload.amount is not None else 1
+    args += ["--amount", str(effective_amount_sat * 1000)]
+
+    if payload.issuer:
+        args += ["--issuer", payload.issuer]
+    if payload.expiry is not None:
+        args += ["--expiry", str(payload.expiry)]
+    if payload.quantity is not None:
+        args += ["--quantity", str(payload.quantity)]
+
+    raw_output = _run_command(args)
+    offer = _extract_offer(raw_output)
+    return OfferResponse(offer=offer, raw_output=raw_output)
+async def _cloudflare_upsert_txt_record(*, name: str, content: str) -> dict[str, Any]:
+    cf = get_cloudflare_config()
+
+    token = cf["api_token"]
+    zone_id = cf["zone_id"]
+    zone_name = cf["zone_name"]
+    enabled = cf["enabled"]
+
+    if not enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Cloudflare integration is not enabled in app config",
+        )
+
+    if not token or not zone_id or not zone_name:
+        raise HTTPException(
+            status_code=500,
+            detail="Cloudflare config missing: api_token, zone_id or zone_name",
+        )
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        lookup_response = await client.get(
+            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
+            headers=headers,
+            params={"type": "TXT", "name": name},
+        )
+
+        try:
+            lookup_data = lookup_response.json()
+        except Exception:
+            raise HTTPException(status_code=502, detail="Cloudflare returned invalid lookup response")
+
+        if lookup_response.status_code >= 400 or not lookup_data.get("success", False):
+            raise HTTPException(status_code=502, detail=f"Cloudflare lookup error: {lookup_data}")
+
+        existing = lookup_data.get("result", []) or []
+
+        payload = {
+            "type": "TXT",
+            "name": name,
+            "content": content,
+            "ttl": 1,
+        }
+
+        if existing:
+            record_id = existing[0]["id"]
+            response = await client.put(
+                f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}",
+                headers=headers,
+                json=payload,
+            )
+        else:
+            response = await client.post(
+                f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
+                headers=headers,
+                json=payload,
+            )
+
+    try:
+        data = response.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="Cloudflare returned invalid response")
+
+    if response.status_code >= 400 or not data.get("success", False):
+        raise HTTPException(status_code=502, detail=f"Cloudflare error: {data}")
+
+    return data.get("result", {})
 
 async def _create_bolt11_invoice(
     *,
@@ -759,66 +923,113 @@ def pay_offer(payload: PayOfferRequest) -> PayOfferResponse:
 
 @app.post("/api/cloudflare/create-bip353")
 async def create_cloudflare_bip353(req: CloudflareBIP353Request):
-    cf = get_cloudflare_config()
-
-    token = cf["api_token"]
-    zone_id = cf["zone_id"]
-    zone_name = cf["zone_name"]
-    enabled = cf["enabled"]
-
-    if not enabled:
-        raise HTTPException(
-            status_code=400,
-            detail="Cloudflare integration is not enabled in app config",
-        )
-
-    if not token or not zone_id or not zone_name:
-        raise HTTPException(
-            status_code=500,
-            detail="Cloudflare config missing: api_token, zone_id or zone_name",
-        )
-
     record_name = req.record_name.strip().lower()
     if not record_name:
         raise HTTPException(status_code=400, detail="record_name required")
 
-    txt_name = f"{record_name}.user._bitcoin-payment.{zone_name}"
+    txt_name = _alias_dns_name(record_name)
     txt_value = build_bip353_txt_value(req.offer)
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "type": "TXT",
-        "name": txt_name,
-        "content": txt_value,
-        "ttl": 1,
-    }
-
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.post(
-            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
-            headers=headers,
-            json=payload,
-        )
-
-    try:
-        data = response.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail="Cloudflare returned invalid response")
-
-    if response.status_code >= 400 or not data.get("success", False):
-        raise HTTPException(status_code=502, detail=f"Cloudflare error: {data}")
+    result = await _cloudflare_upsert_txt_record(name=txt_name, content=txt_value)
 
     return {
         "ok": True,
         "name": txt_name,
         "content": txt_value,
-        "result": data.get("result", {}),
+        "result": result,
+    }
+@app.get("/api/alias")
+def list_aliases():
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    return {
+        "items": [
+            _build_alias_response(name, alias_data)
+            for name, alias_data in sorted(aliases.items())
+        ]
     }
 
+
+@app.post("/api/alias", response_model=AliasResponse)
+def create_alias(payload: AliasCreateRequest):
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    name = _normalize_alias_name(payload.name)
+
+    aliases[name] = {
+        "description": payload.description.strip(),
+        "amount_sat": payload.amount_sat,
+        "published": False,
+        "dns_name": None,
+        "dns_content": None,
+        "last_offer": None,
+    }
+
+    cfg["aliases"] = aliases
+    save_config(cfg)
+
+    return _build_alias_response(name, aliases[name])
+
+
+@app.delete("/api/alias/{name}")
+def delete_alias(name: str):
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    alias_name = _normalize_alias_name(name)
+
+    if alias_name not in aliases:
+        raise HTTPException(status_code=404, detail="Alias not found")
+
+    deleted = aliases.pop(alias_name)
+    cfg["aliases"] = aliases
+    save_config(cfg)
+
+    return {
+        "ok": True,
+        "deleted": _build_alias_response(alias_name, deleted),
+    }
+
+
+@app.post("/api/alias/{name}/publish", response_model=AliasResponse)
+async def publish_alias(name: str):
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    alias_name = _normalize_alias_name(name)
+
+    if alias_name not in aliases:
+        raise HTTPException(status_code=404, detail="Alias not found")
+
+    alias_data = aliases[alias_name]
+    description = alias_data.get("description") or f"{alias_name}@{get_lnurl_base_domain()}"
+    amount_sat = alias_data.get("amount_sat")
+
+    offer_response = _create_offer_internal(
+        OfferRequest(
+            amount=amount_sat,
+            description=description,
+        )
+    )
+
+    dns_name = _alias_dns_name(alias_name)
+    dns_content = build_bip353_txt_value(offer_response.offer)
+
+    if cfg.get("dns_mode") == "cloudflare":
+        await _cloudflare_upsert_txt_record(name=dns_name, content=dns_content)
+
+    alias_data["published"] = True
+    alias_data["dns_name"] = dns_name
+    alias_data["dns_content"] = dns_content
+    alias_data["last_offer"] = offer_response.offer
+
+    aliases[alias_name] = alias_data
+    cfg["aliases"] = aliases
+    save_config(cfg)
+
+    return _build_alias_response(alias_name, alias_data)
 # --- Web files --------------------------------------------------------------
 if PUBLIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=PUBLIC_DIR), name="static")
