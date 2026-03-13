@@ -13,6 +13,9 @@ from urllib.parse import parse_qs, urlparse
 import dns.exception
 import dns.resolver
 import httpx
+import qrcode
+from io import BytesIO
+from fastapi.responses import FileResponse, Response, HTMLResponse
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -1025,6 +1028,15 @@ def list_aliases():
     }
 
 
+@app.get("/api/qr/{value}")
+async def qr_code(value: str):
+    img = qrcode.make(value)
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+
+    return Response(buf.getvalue(), media_type="image/png")
+
 @app.post("/api/alias", response_model=AliasResponse)
 def create_alias(payload: AliasCreateRequest):
     cfg = load_config()
@@ -1124,6 +1136,273 @@ async def publish_alias(name: str):
     save_config(cfg)
 
     return _build_alias_response(alias_name, alias_data)
+    from fastapi.responses import HTMLResponse
+@app.get("/{alias_name}", response_class=HTMLResponse)
+async def public_alias_page(alias_name: str):
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    try:
+        alias_name = _normalize_alias_name(alias_name)
+    except HTTPException:
+        return HTMLResponse("<h1>Alias not found</h1>", status_code=404)
+
+    if alias_name not in aliases:
+        return HTMLResponse("<h1>Alias not found</h1>", status_code=404)
+
+    alias = aliases[alias_name]
+    address = f"{alias_name}@{get_lnurl_base_domain()}"
+    description = alias.get("description") or "Lightning payment"
+    amount_sat = alias.get("amount_sat")
+    amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
+
+    html = f"""
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{address}</title>
+  <style>
+    body {{
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1220, #0f172a);
+      color: #eef2ff;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }}
+    .card {{
+      width: 100%;
+      max-width: 560px;
+      background: rgba(18, 26, 43, 0.96);
+      border: 1px solid #26324a;
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+      padding: 24px;
+      text-align: center;
+    }}
+    .pill {{
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(247, 147, 26, 0.12);
+      border: 1px solid rgba(247, 147, 26, 0.3);
+      color: #ffd9a3;
+      font-size: .95rem;
+      margin-bottom: 16px;
+    }}
+    h1 {{
+      margin: 0 0 8px;
+      font-size: 1.8rem;
+    }}
+    .sub {{
+      color: #a7b0c3;
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }}
+    .qr {{
+      background: white;
+      padding: 18px;
+      border-radius: 18px;
+      display: inline-block;
+      margin: 18px 0;
+    }}
+    .mono {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      word-break: break-all;
+    }}
+    .row {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 16px;
+    }}
+    button {{
+      appearance: none;
+      border: 1px solid #f7931a;
+      background: #f7931a;
+      color: #091120;
+      font-weight: 700;
+      padding: 12px 16px;
+      border-radius: 14px;
+      cursor: pointer;
+    }}
+    button.secondary {{
+      background: transparent;
+      color: #eef2ff;
+      border-color: #26324a;
+    }}
+    .hint {{
+      margin-top: 14px;
+      color: #a7b0c3;
+      font-size: .92rem;
+      line-height: 1.5;
+    }}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="pill">Lightning Alias</div>
+    <h1>{address}</h1>
+    <div class="sub">{description}<br />Betrag: {amount_label}</div>
+
+    <div class="qr">
+      <img src="/api/qr/{address}" width="260" height="260" alt="QR Code">
+    </div>
+
+    <div class="mono">{address}</div>
+
+    <div class="row">
+      <button onclick="window.location.href='lightning:{address}'">Mit Wallet öffnen</button>
+      <button class="secondary" onclick="navigator.clipboard.writeText('{address}')">Adresse kopieren</button>
+    </div>
+
+    <div class="row">
+      <button class="secondary" onclick="createBolt11()">BOLT11 Rechnung erzeugen</button>
+    </div>
+
+    <div id="invoiceWrap" style="display:none; margin-top:18px;">
+      <div class="qr">
+        <img id="invoiceQr" src="" width="260" height="260" alt="Invoice QR">
+      </div>
+      <div id="invoiceText" class="mono"></div>
+      <div class="row">
+        <button onclick="payInvoice()">Mit Alby / WebLN bezahlen</button>
+        <button class="secondary" onclick="copyInvoice()">Rechnung kopieren</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      Diese Seite nutzt standardmäßig die Lightning Address. Optional kann eine normale BOLT11-Rechnung erzeugt werden.
+    </div>
+  </main>
+
+  <script>
+    let currentInvoice = "";
+
+    async function createBolt11() {{
+      try {{
+        const response = await fetch('/api/create-invoice', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            amount_sat: {amount_sat or 21000},
+            memo: {description!r},
+            expiry: 3600
+          }})
+        }});
+
+        const data = await response.json();
+        if (!response.ok) {{
+          throw new Error(data?.detail || 'Invoice creation failed');
+        }}
+
+        currentInvoice = data.payment_request;
+        document.getElementById('invoiceText').textContent = currentInvoice;
+        document.getElementById('invoiceQr').src = '/api/qr/' + encodeURIComponent(currentInvoice);
+        document.getElementById('invoiceWrap').style.display = 'block';
+      }} catch (err) {{
+        alert('Fehler: ' + (err?.message || err));
+      }}
+    }}
+
+    async function payInvoice() {{
+      if (!currentInvoice) return;
+
+      if (window.webln?.enable && window.webln?.sendPayment) {{
+        try {{
+          await window.webln.enable();
+          await window.webln.sendPayment(currentInvoice);
+          return;
+        }} catch (err) {{
+          console.warn(err);
+        }}
+      }}
+
+      window.location.href = 'lightning:' + currentInvoice;
+    }}
+
+    async function copyInvoice() {{
+      if (!currentInvoice) return;
+      await navigator.clipboard.writeText(currentInvoice);
+    }}
+  </script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+@app.get("/{alias_name}", response_class=HTMLResponse)
+async def public_alias_page(alias_name: str):
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    alias_name = _normalize_alias_name(alias_name)
+
+    if alias_name not in aliases:
+        return HTMLResponse("<h1>Alias not found</h1>", status_code=404)
+
+    alias = aliases[alias_name]
+
+    address = f"{alias_name}@{get_lnurl_base_domain()}"
+    description = alias.get("description") or "Lightning payment"
+
+    html = f"""
+    <html>
+    <head>
+        <title>{address}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {{
+                font-family: sans-serif;
+                background:#0f1115;
+                color:#fff;
+                text-align:center;
+                padding:40px;
+            }}
+            .box {{
+                max-width:500px;
+                margin:auto;
+                background:#1a1f2b;
+                padding:30px;
+                border-radius:12px;
+            }}
+            button {{
+                padding:12px 18px;
+                margin-top:20px;
+                border:none;
+                border-radius:8px;
+                background:#ff7a18;
+                color:white;
+                font-size:16px;
+                cursor:pointer;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="box">
+            <h2>{address}</h2>
+            <p>{description}</p>
+
+            <p>Scan or pay with Lightning</p>
+
+            <img src="/api/qr/{address}" width="260"/>
+
+            <br>
+
+            <button onclick="window.location.href='lightning:{address}'">
+                Pay with Lightning
+            </button>
+        </div>
+    </body>
+    </html>
+    """
+
+    return HTMLResponse(html)
 # --- Web files --------------------------------------------------------------
 if PUBLIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=PUBLIC_DIR), name="static")
