@@ -169,6 +169,17 @@ class AliasResponse(BaseModel):
     dns_name: Optional[str] = None
     dns_content: Optional[str] = None
     published: bool = False
+    last_offer: Optional[str] = None
+class CreateInvoiceRequest(BaseModel):
+    amount_sat: int = Field(ge=1)
+    memo: str = Field(default="bolt12-pay", max_length=200)
+    expiry: Optional[int] = Field(default=3600, ge=1)
+
+
+class CreateInvoiceResponse(BaseModel):
+    payment_request: str
+    payment_hash: str
+    expires_at: Optional[str] = None
 
 # --- App -------------------------------------------------------------------
 app = FastAPI(title="LNDK Backend", version="0.5.0")
@@ -575,6 +586,50 @@ def get_lnurl_base_url():
         f"https://{get_lnurl_base_domain()}",
     )).strip().rstrip("/")
 
+async def _create_bolt11_invoice(*, amount_sat: int, memo: str, expiry: int = 3600) -> dict[str, Any]:
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+
+    headers = {
+        "Grpc-Metadata-macaroon": macaroon_hex,
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "value": str(amount_sat),
+        "memo": memo,
+        "expiry": str(expiry),
+    }
+
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+    try:
+        async with httpx.AsyncClient(timeout=LND_REST_TIMEOUT, verify=verify) as client:
+            response = await client.post(
+                f"{LND_REST_URL}/v1/invoices",
+                headers=headers,
+                json=payload,
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LND REST request failed: {exc}") from exc
+
+    try:
+        data = response.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LND REST returned invalid JSON")
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LND REST invoice error: {data}")
+
+    payment_request = data.get("payment_request") or data.get("paymentRequest")
+    payment_hash = data.get("r_hash") or data.get("rHash") or ""
+
+    if not payment_request:
+        raise HTTPException(status_code=502, detail=f"LND REST invoice missing payment_request: {data}")
+
+    return {
+        "payment_request": payment_request,
+        "payment_hash": payment_hash,
+    }
 
 def get_public_bolt12_address():
     cfg = load_config()
@@ -614,7 +669,6 @@ def _alias_dns_name(name: str) -> str:
     zone_name = cf["zone_name"] or get_lnurl_base_domain()
     return f"{name}.user._bitcoin-payment.{zone_name}"
 
-
 def _build_alias_response(name: str, alias_data: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": name,
@@ -624,7 +678,9 @@ def _build_alias_response(name: str, alias_data: dict[str, Any]) -> dict[str, An
         "dns_name": alias_data.get("dns_name"),
         "dns_content": alias_data.get("dns_content"),
         "published": bool(alias_data.get("published", False)),
+        "last_offer": alias_data.get("last_offer"),
     }
+
 def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
     args = _base_command() + ["create-offer", "--description", payload.description]
 
@@ -713,56 +769,74 @@ async def _cloudflare_upsert_txt_record(*, name: str, content: str) -> dict[str,
         raise HTTPException(status_code=502, detail=f"Cloudflare error: {data}")
 
     return data.get("result", {})
+async def _cloudflare_delete_txt_record(*, name: str) -> dict[str, Any]:
+    cf = get_cloudflare_config()
 
-async def _create_bolt11_invoice(
-    *,
-    amount_sat: int,
-    memo: str,
-    expiry: Optional[int] = None,
-) -> str:
-    if amount_sat < 1:
-        raise HTTPException(status_code=400, detail="amount_sat must be >= 1")
+    token = cf["api_token"]
+    zone_id = cf["zone_id"]
+    zone_name = cf["zone_name"]
+    enabled = cf["enabled"]
+
+    if not enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Cloudflare integration is not enabled in app config",
+        )
+
+    if not token or not zone_id or not zone_name:
+        raise HTTPException(
+            status_code=500,
+            detail="Cloudflare config missing: api_token, zone_id or zone_name",
+        )
 
     headers = {
-        "Grpc-Metadata-macaroon": _read_macaroon_hex(LND_MACAROON_PATH),
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
-    payload: dict[str, Any] = {
-        "value": amount_sat,
-        "memo": memo[:640],
-    }
-    if expiry is not None and expiry > 0:
-        payload["expiry"] = int(expiry)
+    async with httpx.AsyncClient(timeout=20) as client:
+        lookup_response = await client.get(
+            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
+            headers=headers,
+            params={"type": "TXT", "name": name},
+        )
 
-    try:
-     async with httpx.AsyncClient(verify=_lnd_rest_verify_setting(), timeout=LND_REST_TIMEOUT) as client:
-            response = await client.post(
-                f"{LND_REST_URL}/v1/invoices",
+        try:
+            lookup_data = lookup_response.json()
+        except Exception:
+            raise HTTPException(status_code=502, detail="Cloudflare returned invalid lookup response")
+
+        if lookup_response.status_code >= 400 or not lookup_data.get("success", False):
+            raise HTTPException(status_code=502, detail=f"Cloudflare lookup error: {lookup_data}")
+
+        existing = lookup_data.get("result", []) or []
+        deleted_ids = []
+
+        for record in existing:
+            record_id = record.get("id")
+            if not record_id:
+                continue
+
+            response = await client.delete(
+                f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}",
                 headers=headers,
-                json=payload,
             )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=f"LND TLS cert file not found: {LND_TLS_CERT_PATH}") from exc
-    except httpx.TimeoutException as exc:
-        raise HTTPException(status_code=504, detail="LND REST invoice creation timed out") from exc
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"LND REST request failed: {exc}") from exc
 
-    try:
-        data = response.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail="LND REST returned invalid JSON")
+            try:
+                data = response.json()
+            except Exception:
+                raise HTTPException(status_code=502, detail="Cloudflare returned invalid delete response")
 
-    if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"LND REST error: {data}")
+            if response.status_code >= 400 or not data.get("success", False):
+                raise HTTPException(status_code=502, detail=f"Cloudflare delete error: {data}")
 
-    payment_request = data.get("payment_request") or data.get("paymentRequest")
-    if not payment_request:
-        raise HTTPException(status_code=502, detail=f"LND REST invoice response missing payment_request: {data}")
+            deleted_ids.append(record_id)
 
-    return payment_request
-
+    return {
+        "ok": True,
+        "name": name,
+        "deleted_record_ids": deleted_ids,
+    }
 
 # --- API -------------------------------------------------------------------
 @app.get("/api/health", response_model=HealthResponse)
@@ -974,7 +1048,7 @@ def create_alias(payload: AliasCreateRequest):
 
 
 @app.delete("/api/alias/{name}")
-def delete_alias(name: str):
+async def delete_alias(name: str, delete_dns: bool = False):
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
@@ -987,11 +1061,31 @@ def delete_alias(name: str):
     cfg["aliases"] = aliases
     save_config(cfg)
 
+    dns_result = None
+    dns_name = deleted.get("dns_name")
+
+    if delete_dns and dns_name and cfg.get("dns_mode") == "cloudflare":
+        dns_result = await _cloudflare_delete_txt_record(name=dns_name)
+
     return {
         "ok": True,
         "deleted": _build_alias_response(alias_name, deleted),
+        "dns_deleted": dns_result,
     }
 
+@app.post("/api/create-invoice", response_model=CreateInvoiceResponse)
+async def create_invoice(payload: CreateInvoiceRequest) -> CreateInvoiceResponse:
+    result = await _create_bolt11_invoice(
+        amount_sat=payload.amount_sat,
+        memo=payload.memo,
+        expiry=payload.expiry or 3600,
+    )
+
+    return CreateInvoiceResponse(
+        payment_request=result["payment_request"],
+        payment_hash=result["payment_hash"],
+        expires_at=None,
+    )
 
 @app.post("/api/alias/{name}/publish", response_model=AliasResponse)
 async def publish_alias(name: str):

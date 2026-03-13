@@ -1,4 +1,4 @@
-#<!doctype html>
+<!doctype html>
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
@@ -86,6 +86,14 @@
       border-radius: 24px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
       padding: 24px;
+    }
+
+    .topBar {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
     .pill {
@@ -197,6 +205,12 @@
       border-color: var(--border);
     }
 
+    button.danger {
+      background: transparent;
+      color: var(--danger);
+      border-color: rgba(255, 123, 114, .35);
+    }
+
     input, button, select {
       font-size: 16px;
     }
@@ -257,6 +271,73 @@
       border: 1px solid rgba(247, 147, 26, 0.28);
       color: #ffd9a3;
       font-size: .82rem;
+    }
+
+    .aliasList {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .aliasItem {
+      border: 1px solid var(--border);
+      background: #0c1322;
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    .aliasTop {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      flex-wrap: wrap;
+    }
+
+    .aliasTitle {
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 6px;
+    }
+
+    .aliasMeta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.55;
+    }
+
+    .aliasActions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .aliasStatus {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: .78rem;
+      border: 1px solid var(--border);
+    }
+
+    .aliasStatus.published {
+      color: var(--ok);
+      border-color: rgba(143, 227, 136, .35);
+      background: rgba(143, 227, 136, .08);
+    }
+
+    .aliasStatus.draft {
+      color: var(--warn);
+      border-color: rgba(255, 209, 102, .35);
+      background: rgba(255, 209, 102, .08);
+    }
+
+    .offerPreview {
+      display: inline-block;
+      margin-top: 4px;
+      color: var(--text);
     }
 
     @media (max-width: 700px) {
@@ -337,18 +418,18 @@
         <span class="mono">"bitcoin:?lno=&lt;offer&gt;"</span><br />
         Das konkrete Offer wird später von der App erzeugt. Cloudflare-Automation kann später optional aktiviert werden.
       </div>
+
       <div id="cloudflareFields" class="section" hidden>
+        <label class="label">Cloudflare Zone Name</label>
+        <input id="cfZoneName" type="text" placeholder="z. B. alex71btc.com">
 
-  <label class="label">Cloudflare Zone Name</label>
-  <input id="cfZoneName" type="text" placeholder="z.B. alex71btc.com">
+        <label class="label" style="margin-top:10px;">Cloudflare Zone ID</label>
+        <input id="cfZoneId" type="text" placeholder="Zone ID aus Cloudflare Dashboard">
 
-  <label class="label" style="margin-top:10px;">Cloudflare Zone ID</label>
-  <input id="cfZoneId" type="text" placeholder="Zone ID aus Cloudflare Dashboard">
+        <label class="label" style="margin-top:10px;">Cloudflare API Token</label>
+        <input id="cfApiToken" type="password" placeholder="API Token">
+      </div>
 
-  <label class="label" style="margin-top:10px;">Cloudflare API Token</label>
-  <input id="cfApiToken" type="password" placeholder="API Token">
-
-</div>
       <div class="hint">
         Cloudflare bleibt optional. Ohne Cloudflare funktioniert die App weiter, nur BIP353-DNS wird dann nicht automatisch gesetzt.
       </div>
@@ -364,8 +445,14 @@
   </div>
 
   <main class="card" id="payCard" hidden>
-    <div class="pill">BOLT12 Public Pay</div>
-    <h1>⚡ Lightning Pay</h1>
+    <div class="topBar">
+      <div>
+        <div class="pill">BOLT12 Public Pay</div>
+        <h1>⚡ Lightning Pay</h1>
+      </div>
+      <button class="secondary" id="openSetupBtn" type="button">⚙ Setup</button>
+    </div>
+
     <div class="sub">BOLT12 bleibt Standard. LNURL ist ein separater Fallback-Pfad.</div>
 
     <section class="section">
@@ -448,6 +535,56 @@
         Erzeugt ein neues BOLT12-Offer über dein Backend und schaltet den QR automatisch auf das neue Offer.
       </div>
     </section>
+<section class="section">
+  <div class="pill">BOLT11 Kompatibilitätsmodus</div>
+  <div class="sub">Normale Lightning-Rechnung für maximale Wallet- und WebLN-Kompatibilität.</div>
+
+  <label class="label" for="invoiceAmountInput">Betrag in sats</label>
+  <input id="invoiceAmountInput" type="number" min="1" step="1" placeholder="z. B. 21000" />
+
+  <label class="label" for="invoiceMemoInput" style="margin-top:14px;">Memo</label>
+  <input id="invoiceMemoInput" type="text" placeholder="z. B. compat test" />
+
+  <div class="row">
+    <button id="createInvoiceBtn" type="button">BOLT11 Rechnung erzeugen</button>
+    <button class="secondary" id="showInvoiceQrBtn" type="button">Rechnung QR</button>
+    <button class="secondary" id="copyInvoiceBtn" type="button">Rechnung kopieren</button>
+    <button class="secondary" id="payInvoiceWeblnBtn" type="button">Mit Alby / WebLN bezahlen</button>
+  </div>
+
+  <label class="label" style="margin-top:14px;">Aktuelle BOLT11 Rechnung</label>
+  <div id="invoiceBox" class="valueBox mono copyable" title="Antippen = kopieren + QR auf BOLT11 Rechnung umschalten">
+    Noch keine Rechnung erzeugt.
+  </div>
+
+  <div class="hint">
+    Dieser Modus erzeugt eine normale <span class="mono">lnbc...</span>-Rechnung über LND REST.
+  </div>
+</section>
+    <section class="section">
+      <div class="pill">Alias Manager</div>
+      <div class="sub">Lightning-Adressen anlegen, veröffentlichen und verwalten.</div>
+
+      <label class="label" for="aliasNameInput">Alias Name</label>
+      <input id="aliasNameInput" type="text" placeholder="z. B. coffee" />
+
+      <label class="label" for="aliasDescriptionInput" style="margin-top:14px;">Beschreibung</label>
+      <input id="aliasDescriptionInput" type="text" placeholder="z. B. Coffee donations" />
+
+      <label class="label" for="aliasAmountInput" style="margin-top:14px;">Betrag in sats (optional)</label>
+      <input id="aliasAmountInput" type="number" min="1" step="1" placeholder="z. B. 21000" />
+
+      <div class="row">
+        <button id="createAliasBtn" type="button">Alias anlegen</button>
+        <button class="secondary" id="refreshAliasBtn" type="button">Liste aktualisieren</button>
+      </div>
+
+      <div class="hint">
+        Veröffentlichen erzeugt ein neues BOLT12-Offer und setzt bei Cloudflare automatisch den passenden BIP353 TXT-Record.
+      </div>
+
+      <div id="aliasList" class="aliasList"></div>
+    </section>
   </main>
 
   <script>
@@ -466,7 +603,14 @@
     const createOfferBtn = document.getElementById('createOfferBtn');
     const walletOpenBtn = document.getElementById('walletOpenBtn');
     const installBtn = document.getElementById('installBtn');
-
+    const openSetupBtn = document.getElementById('openSetupBtn');
+    const invoiceAmountInput = document.getElementById('invoiceAmountInput');
+    const invoiceMemoInput = document.getElementById('invoiceMemoInput');
+    const createInvoiceBtn = document.getElementById('createInvoiceBtn');
+    const showInvoiceQrBtn = document.getElementById('showInvoiceQrBtn');
+    const copyInvoiceBtn = document.getElementById('copyInvoiceBtn');
+    const payInvoiceWeblnBtn = document.getElementById('payInvoiceWeblnBtn');
+    const invoiceBox = document.getElementById('invoiceBox');
     const setupCard = document.getElementById('setupCard');
     const payCard = document.getElementById('payCard');
     const setupBolt12Address = document.getElementById('setupBolt12Address');
@@ -477,11 +621,19 @@
     const saveSetupBtn = document.getElementById('saveSetupBtn');
     const manualDnsHint = document.getElementById('manualDnsHint');
     const manualDnsExampleName = document.getElementById('manualDnsExampleName');
+
     const cloudflareFields = document.getElementById('cloudflareFields');
     const cfZoneName = document.getElementById('cfZoneName');
     const cfZoneId = document.getElementById('cfZoneId');
     const cfApiToken = document.getElementById('cfApiToken');
-    
+
+    const aliasNameInput = document.getElementById('aliasNameInput');
+    const aliasDescriptionInput = document.getElementById('aliasDescriptionInput');
+    const aliasAmountInput = document.getElementById('aliasAmountInput');
+    const createAliasBtn = document.getElementById('createAliasBtn');
+    const refreshAliasBtn = document.getElementById('refreshAliasBtn');
+    const aliasList = document.getElementById('aliasList');
+
     let deferredPrompt = null;
     let statusTimer = null;
     let currentAddress = 'bolt12@alex71btc.com';
@@ -489,7 +641,8 @@
     let currentOffer = '';
     let currentLnurl = '';
     let activeQrMode = 'address';
-
+    let currentInvoice = '';
+    
     addressBox.textContent = currentAddress;
     fallbackAddressBox.textContent = fallbackAddress;
     fallbackAddressInput.value = fallbackAddress;
@@ -520,16 +673,25 @@
       }
     }
 
-    function setActiveBox(mode) {
-      addressBox.classList.toggle('active', mode === 'address');
-      fallbackAddressBox.classList.toggle('active', mode === 'fallback');
-      offerBox.classList.toggle('active', mode === 'offer');
+    function shortenMiddle(value, left = 18, right = 14) {
+      if (!value) return '';
+      if (value.length <= left + right + 3) return value;
+      return `${value.slice(0, left)}...${value.slice(-right)}`;
     }
 
+    function setActiveBox(mode) {
+       addressBox.classList.toggle('active', mode === 'address');
+       fallbackAddressBox.classList.toggle('active', mode === 'fallback');
+       offerBox.classList.toggle('active', mode === 'offer');
+       if (invoiceBox) {
+       invoiceBox.classList.toggle('active', mode === 'invoice');
+      }
+    }
     function getActiveQrValue() {
+      if (activeQrMode === 'invoice') return currentInvoice;
       if (activeQrMode === 'offer') return currentOffer;
       if (activeQrMode === 'fallback') return currentLnurl || fallbackAddress;
-      return currentAddress;
+    return currentAddress;
     }
 
     function renderQrForValue(value, mode) {
@@ -542,15 +704,17 @@
       activeQrMode = mode;
       setActiveBox(mode);
 
-      if (mode === 'offer') {
-        qrModeBadge.textContent = 'QR: Offer';
-      } else if (mode === 'fallback') {
-        qrModeBadge.textContent = 'QR: LNURL';
-      } else {
-        qrModeBadge.textContent = 'QR: BOLT12 Adresse';
-      }
-
-      qrValueText.textContent = value;
+if (mode === 'invoice') {
+  qrModeBadge.textContent = 'QR: BOLT11 Rechnung';
+} else if (mode === 'offer') {
+  qrModeBadge.textContent = 'QR: Offer';
+} else if (mode === 'fallback') {
+  qrModeBadge.textContent = 'QR: LNURL';
+} else {
+  qrModeBadge.textContent = 'QR: BOLT12 Adresse';
+}
+ 
+     qrValueText.textContent = value;
 
       new QRCode(qrBox, {
         text: value,
@@ -594,7 +758,7 @@
 
       manualDnsExampleName.textContent = `${user}.user._bitcoin-payment.${domain}`;
       manualDnsHint.hidden = setupDnsMode.value !== 'manual';
-      cloudflareFields.hidden = setupDnsMode.value !== 'cloudflare'; 
+      cloudflareFields.hidden = setupDnsMode.value !== 'cloudflare';
     }
 
     async function loadLnurlFallback() {
@@ -621,21 +785,25 @@
         throw new Error(statusData?.detail || 'Setup-Status konnte nicht geladen werden');
       }
 
+      const configResponse = await fetch('/api/setup/config');
+      const configData = await configResponse.json();
+
+      if (!configResponse.ok) {
+        throw new Error(configData?.detail || 'Setup-Konfiguration konnte nicht geladen werden');
+      }
+
+      setupBolt12Address.value = configData.public_bolt12_address || '';
+      setupLnurlAddress.value = configData.public_lnurl_address || '';
+      setupLnurlBaseDomain.value = configData.lnurl_base_domain || '';
+      setupLnurlBaseUrl.value = configData.lnurl_base_url || '';
+      setupDnsMode.value = configData.dns_mode || 'none';
+      cfZoneName.value = configData.cloudflare?.zone_name || '';
+      cfZoneId.value = configData.cloudflare?.zone_id || '';
+      cfApiToken.value = configData.cloudflare?.api_token || '';
+
+      updateDnsModeUi();
+
       if (!statusData.configured) {
-        const configResponse = await fetch('/api/setup/config');
-        const configData = await configResponse.json();
-
-        if (!configResponse.ok) {
-          throw new Error(configData?.detail || 'Setup-Konfiguration konnte nicht geladen werden');
-        }
-
-        setupBolt12Address.value = configData.public_bolt12_address || '';
-        setupLnurlAddress.value = configData.public_lnurl_address || '';
-        setupLnurlBaseDomain.value = configData.lnurl_base_domain || '';
-        setupLnurlBaseUrl.value = configData.lnurl_base_url || '';
-        setupDnsMode.value = configData.dns_mode || 'none';
-
-        updateDnsModeUi();
         showSetupCard();
         return false;
       }
@@ -644,20 +812,21 @@
       return true;
     }
 
-    saveSetupBtn.addEventListener('click', async () => {
-const payload = {
-  public_bolt12_address: setupBolt12Address.value.trim(),
-  public_lnurl_address: setupLnurlAddress.value.trim(),
-  lnurl_base_domain: setupLnurlBaseDomain.value.trim(),
-  lnurl_base_url: setupLnurlBaseUrl.value.trim(),
-  dns_mode: setupDnsMode.value,
-  cloudflare: {
-    enabled: setupDnsMode.value === "cloudflare",
-    zone_name: cfZoneName.value.trim(),
-    zone_id: cfZoneId.value.trim(),
-    api_token: cfApiToken.value.trim()
-  }
-};
+    async function saveSetup() {
+      const payload = {
+        public_bolt12_address: setupBolt12Address.value.trim(),
+        public_lnurl_address: setupLnurlAddress.value.trim(),
+        lnurl_base_domain: setupLnurlBaseDomain.value.trim(),
+        lnurl_base_url: setupLnurlBaseUrl.value.trim(),
+        dns_mode: setupDnsMode.value,
+        cloudflare: {
+          enabled: setupDnsMode.value === 'cloudflare',
+          zone_name: cfZoneName.value.trim(),
+          zone_id: cfZoneId.value.trim(),
+          api_token: cfApiToken.value.trim()
+        }
+      };
+
       saveSetupBtn.disabled = true;
       saveSetupBtn.textContent = 'Speichere...';
 
@@ -682,11 +851,7 @@ const payload = {
         saveSetupBtn.disabled = false;
         saveSetupBtn.textContent = 'Setup speichern';
       }
-    });
-
-    setupDnsMode.addEventListener('change', updateDnsModeUi);
-    setupLnurlBaseDomain.addEventListener('input', updateDnsModeUi);
-    setupBolt12Address.addEventListener('input', updateDnsModeUi);
+    }
 
     async function loadPublicInfo() {
       try {
@@ -731,6 +896,285 @@ const payload = {
         setStatus(`Load failed: ${error?.message || error}`, 'error', true);
       }
     }
+
+    function renderAliasList(items) {
+      if (!items || items.length === 0) {
+        aliasList.innerHTML = '<div class="hint">Noch keine Aliase angelegt.</div>';
+        return;
+      }
+
+      aliasList.innerHTML = items.map((item) => `
+        <div class="aliasItem">
+          <div class="aliasTop">
+            <div>
+              <div class="aliasTitle mono">${item.address}</div>
+              <div class="aliasMeta">
+                Beschreibung: ${item.description || '-'}<br />
+                Betrag: ${item.amount_sat ? `${item.amount_sat} sats` : 'variabel'}<br />
+                DNS: ${item.dns_name ? `<span class="mono">${item.dns_name}</span>` : '-'}<br />
+                Offer: ${item.last_offer ? `<span class="mono offerPreview">${shortenMiddle(item.last_offer)}</span>` : '-'}
+              </div>
+            </div>
+            <div>
+              <span class="aliasStatus ${item.published ? 'published' : 'draft'}">
+                ${item.published ? 'veröffentlicht' : 'Entwurf'}
+              </span>
+            </div>
+          </div>
+          <div class="aliasActions">
+            <button class="secondary" type="button" onclick="publishAlias('${item.name}')">Veröffentlichen</button>
+            <button class="secondary" type="button" onclick="showAliasAddressQr('${item.name}', '${item.address}')">Adresse QR</button>
+            <button class="secondary" type="button" onclick="copyAliasAddress('${item.address}')">Adresse kopieren</button>
+            ${item.last_offer ? `<button class="secondary" type="button" onclick="showAliasOfferQr('${item.name}', '${item.last_offer}')">Offer QR</button>` : ''}
+            ${item.last_offer ? `<button class="secondary" type="button" onclick="copyAliasOffer('${item.last_offer}')">Offer kopieren</button>` : ''}
+            <button class="danger" type="button" onclick="deleteAlias('${item.name}')">Löschen</button>
+            ${item.dns_name ? `<button class="danger" type="button" onclick="deleteAliasWithDns('${item.name}')">Löschen + DNS</button>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadAliases() {
+      try {
+        const response = await fetch('/api/alias');
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Alias-Liste konnte nicht geladen werden');
+        }
+
+        renderAliasList(data.items || []);
+      } catch (error) {
+        aliasList.innerHTML = `<div class="hint">Alias-Liste konnte nicht geladen werden: ${error?.message || error}</div>`;
+      }
+    }
+
+    async function createAlias() {
+      const name = aliasNameInput.value.trim().toLowerCase();
+      const description = aliasDescriptionInput.value.trim() || 'Lightning payment';
+      const amountValue = aliasAmountInput.value.trim();
+
+      if (!name) {
+        setStatus('Bitte Alias-Namen eingeben.', 'error');
+        return;
+      }
+
+      const payload = {
+        name,
+        description,
+      };
+
+      if (amountValue) {
+        payload.amount_sat = Number(amountValue);
+      }
+
+      createAliasBtn.disabled = true;
+      createAliasBtn.textContent = 'Lege an...';
+
+      try {
+        const response = await fetch('/api/alias', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Alias konnte nicht angelegt werden');
+        }
+
+        aliasNameInput.value = '';
+        aliasDescriptionInput.value = '';
+        aliasAmountInput.value = '';
+
+        await loadAliases();
+        setStatus(`Alias ${data.address} angelegt.`);
+      } catch (error) {
+        setStatus(`Alias-Fehler: ${error?.message || error}`, 'error', true);
+      } finally {
+        createAliasBtn.disabled = false;
+        createAliasBtn.textContent = 'Alias anlegen';
+      }
+    }
+
+    async function publishAlias(name) {
+      try {
+        const response = await fetch(`/api/alias/${encodeURIComponent(name)}/publish`, {
+          method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Alias konnte nicht veröffentlicht werden');
+        }
+
+        await loadAliases();
+        setStatus(`Alias ${data.address} veröffentlicht.`);
+      } catch (error) {
+        setStatus(`Publish-Fehler: ${error?.message || error}`, 'error', true);
+      }
+    }
+
+    async function deleteAlias(name) {
+      if (!confirm(`Alias ${name} wirklich löschen?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/alias/${encodeURIComponent(name)}`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Alias konnte nicht gelöscht werden');
+        }
+
+        await loadAliases();
+        setStatus(`Alias ${name} gelöscht.`);
+      } catch (error) {
+        setStatus(`Delete-Fehler: ${error?.message || error}`, 'error', true);
+      }
+    }
+
+    async function deleteAliasWithDns(name) {
+      if (!confirm(`Alias ${name} wirklich löschen und DNS Record entfernen?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/alias/${encodeURIComponent(name)}?delete_dns=true`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Alias konnte nicht gelöscht werden');
+        }
+
+        await loadAliases();
+        setStatus(`Alias ${name} und DNS gelöscht.`);
+      } catch (error) {
+        setStatus(`Delete-DNS-Fehler: ${error?.message || error}`, 'error', true);
+      }
+    }
+
+    function showAliasAddressQr(name, address) {
+      renderQrForValue(address, 'fallback');
+      setStatus(`Adress-QR für Alias ${name} angezeigt.`);
+    }
+
+    function showAliasOfferQr(name, offer) {
+      if (!offer) {
+        setStatus(`Kein Offer für Alias ${name} vorhanden.`, 'error');
+        return;
+      }
+
+      currentOffer = offer;
+      renderQrForValue(offer, 'offer');
+      setStatus(`Offer-QR für Alias ${name} angezeigt.`);
+    }
+
+    async function copyAliasAddress(address) {
+      await copyText(address, `Adresse ${address} kopiert.`);
+    }
+
+    async function copyAliasOffer(offer) {
+      await copyText(offer, 'Offer kopiert.');
+    }
+    async function createInvoice() {
+  const amountValue = invoiceAmountInput.value.trim();
+  const memoValue = invoiceMemoInput.value.trim() || 'bolt12-pay compat';
+
+  if (!amountValue) {
+    setStatus('Bitte Betrag für BOLT11 Rechnung eingeben.', 'error');
+    return;
+  }
+
+  createInvoiceBtn.disabled = true;
+  createInvoiceBtn.textContent = 'Erzeuge...';
+
+  try {
+    const response = await fetch('/api/create-invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount_sat: Number(amountValue),
+        memo: memoValue,
+        expiry: 3600
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.detail || 'BOLT11 Rechnung konnte nicht erzeugt werden');
+    }
+
+    currentInvoice = data.payment_request || '';
+    invoiceBox.textContent = currentInvoice || 'Keine Rechnung';
+    renderQrForValue(currentInvoice, 'invoice');
+
+    setStatus('BOLT11 Rechnung erfolgreich erzeugt.');
+  } catch (error) {
+    setStatus(`Invoice-Fehler: ${error?.message || error}`, 'error', true);
+  } finally {
+    createInvoiceBtn.disabled = false;
+    createInvoiceBtn.textContent = 'BOLT11 Rechnung erzeugen';
+  }
+}
+
+async function copyInvoice() {
+  if (!currentInvoice) {
+    setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+    return;
+  }
+
+  await copyText(currentInvoice, 'BOLT11 Rechnung kopiert.');
+}
+
+function showInvoiceQr() {
+  if (!currentInvoice) {
+    setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+    return;
+  }
+
+  renderQrForValue(currentInvoice, 'invoice');
+  setStatus('BOLT11 QR angezeigt.');
+}
+
+async function payInvoiceWithWebln() {
+  if (!currentInvoice) {
+    setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+    return;
+  }
+
+  if (!window.webln?.enable || !window.webln?.sendPayment) {
+    setStatus('WebLN / Alby nicht verfügbar.', 'error');
+    return;
+  }
+
+  try {
+    await window.webln.enable();
+    await window.webln.sendPayment(currentInvoice);
+    setStatus('BOLT11 Rechnung an Alby / WebLN übergeben.');
+  } catch (error) {
+    console.warn('WebLN invoice payment failed:', error);
+    setStatus(`WebLN-Fehler: ${error?.message || error}`, 'error', true);
+  }
+}
+
+    window.publishAlias = publishAlias;
+    window.deleteAlias = deleteAlias;
+    window.deleteAliasWithDns = deleteAliasWithDns;
+    window.copyAliasAddress = copyAliasAddress;
+    window.copyAliasOffer = copyAliasOffer;
+    window.showAliasAddressQr = showAliasAddressQr;
+    window.showAliasOfferQr = showAliasOfferQr;
 
     document.getElementById('copyActiveBtn').addEventListener('click', async () => {
       const value = getActiveQrValue();
@@ -873,26 +1317,80 @@ const payload = {
         createOfferBtn.textContent = 'Offer erzeugen';
       }
     });
+invoiceBox.addEventListener('click', async () => {
+  if (!currentInvoice) {
+    setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+    return;
+  }
 
-    walletOpenBtn.addEventListener('click', async () => {
-      const value = getActiveQrValue();
-      if (!value) {
-        setStatus('Noch kein aktiver Inhalt vorhanden.', 'error');
-        return;
+  renderQrForValue(currentInvoice, 'invoice');
+  await copyText(currentInvoice, 'BOLT11 Rechnung kopiert.');
+});
+
+walletOpenBtn.addEventListener('click', async () => {
+  if (activeQrMode === 'fallback') {
+    const target = fallbackAddress;
+
+    if (!target) {
+      setStatus('Kein LNURL-Fallback vorhanden.', 'error');
+      return;
+    }
+
+    if (window.webln?.enable) {
+      try {
+        await window.webln.enable();
+        setStatus('WebLN verbunden, öffne Lightning Address über Wallet.');
+      } catch (error) {
+        console.warn('WebLN fallback failed:', error);
+        setStatus('WebLN nicht verfügbar, nutze Wallet-Link.', 'warn');
       }
+    }
 
-      if (activeQrMode === 'offer' && window.webln?.enable && window.webln?.sendPayment) {
-        try {
-          await window.webln.enable();
-          await window.webln.sendPayment(value);
-          setStatus('Offer über WebLN an Wallet übergeben.');
-          return;
-        } catch (error) {
-          setStatus('WebLN nicht verfügbar oder Offer nicht unterstützt, nutze Deep-Link.', 'warn');
-        }
-      }
+    window.location.href = `lightning:${target}`;
+    return;
+  }
 
-      window.location.href = `lightning:${value}`;
+  if (activeQrMode === 'offer') {
+    if (!currentOffer) {
+      setStatus('Noch kein Offer vorhanden.', 'error');
+      return;
+    }
+
+    window.location.href = `lightning:${currentOffer}`;
+    return;
+  }
+
+  if (activeQrMode === 'address') {
+    if (!currentAddress) {
+      setStatus('Noch keine BOLT12 Adresse vorhanden.', 'error');
+      return;
+    }
+
+    window.location.href = `lightning:${currentAddress}`;
+    return;
+  }
+
+  const value = getActiveQrValue();
+  if (!value) {
+    setStatus('Noch kein aktiver Inhalt vorhanden.', 'error');
+    return;
+  }
+
+  window.location.href = `lightning:${value}`;
+});
+
+    saveSetupBtn.addEventListener('click', saveSetup);
+    setupDnsMode.addEventListener('change', updateDnsModeUi);
+    setupLnurlBaseDomain.addEventListener('input', updateDnsModeUi);
+    setupBolt12Address.addEventListener('input', updateDnsModeUi);
+    createInvoiceBtn.addEventListener('click', createInvoice);
+    showInvoiceQrBtn.addEventListener('click', showInvoiceQr);
+    copyInvoiceBtn.addEventListener('click', copyInvoice);
+    payInvoiceWeblnBtn.addEventListener('click', payInvoiceWithWebln);
+    createAliasBtn.addEventListener('click', createAlias);
+    refreshAliasBtn.addEventListener('click', loadAliases);
+    openSetupBtn.addEventListener('click', () => {
+      window.location.href = `${window.location.pathname}?setup=1`;
     });
 
     if ('serviceWorker' in navigator) {
@@ -921,22 +1419,13 @@ const payload = {
         const configured = await loadSetupState();
 
         if (forceSetup) {
-          const configResponse = await fetch('/api/setup/config');
-          const configData = await configResponse.json();
-
-          setupBolt12Address.value = configData.public_bolt12_address || '';
-          setupLnurlAddress.value = configData.public_lnurl_address || '';
-          setupLnurlBaseDomain.value = configData.lnurl_base_domain || '';
-          setupLnurlBaseUrl.value = configData.lnurl_base_url || '';
-          setupDnsMode.value = configData.dns_mode || 'none';
-
-          updateDnsModeUi();
           showSetupCard();
           return;
         }
 
         if (configured) {
           await loadPublicInfo();
+          await loadAliases();
         }
       } catch (error) {
         console.error('Initial load error:', error);
