@@ -1156,6 +1156,28 @@ async def public_alias_page(alias_name: str):
     amount_sat = alias.get("amount_sat")
     amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
 
+    last_offer = alias.get("last_offer") or ""
+    offer_section = ""
+    offer_button = ""
+
+    if last_offer:
+        offer_section = f"""
+        <div class="section">
+          <div class="sectionTitle">BOLT12 Offer</div>
+          <div class="qr">
+            <img src="/api/qr/{last_offer}" width="260" height="260" alt="BOLT12 Offer QR">
+          </div>
+          <div class="mono">{last_offer}</div>
+          <div class="row">
+            <button onclick="window.location.href='lightning:{last_offer}'">Mit Wallet öffnen</button>
+            <button class="secondary" onclick="navigator.clipboard.writeText('{last_offer}')">Offer kopieren</button>
+          </div>
+        </div>
+        """
+        offer_button = f"""
+        <button class="secondary" onclick="window.location.href='lightning:{last_offer}'">BOLT12 Offer öffnen</button>
+        """
+
     html = f"""
 <!doctype html>
 <html lang="de">
@@ -1176,7 +1198,7 @@ async def public_alias_page(alias_name: str):
     }}
     .card {{
       width: 100%;
-      max-width: 560px;
+      max-width: 620px;
       background: rgba(18, 26, 43, 0.96);
       border: 1px solid #26324a;
       border-radius: 24px;
@@ -1203,16 +1225,31 @@ async def public_alias_page(alias_name: str):
       margin-bottom: 18px;
       line-height: 1.5;
     }}
+    .section {{
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid #26324a;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.02);
+    }}
+    .sectionTitle {{
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #ffd9a3;
+    }}
     .qr {{
       background: white;
       padding: 18px;
       border-radius: 18px;
       display: inline-block;
-      margin: 18px 0;
+      margin: 12px 0;
     }}
     .mono {{
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       word-break: break-all;
+      line-height: 1.5;
+      font-size: .92rem;
     }}
     .row {{
       display: flex;
@@ -1246,38 +1283,48 @@ async def public_alias_page(alias_name: str):
 </head>
 <body>
   <main class="card">
-    <div class="pill">Lightning Alias</div>
+    <div class="pill">Public Payment Page</div>
     <h1>{address}</h1>
-    <div class="sub">{description}<br />Betrag: {amount_label}</div>
-
-    <div class="qr">
-      <img src="/api/qr/{address}" width="260" height="260" alt="QR Code">
+    <div class="sub">
+      {description}<br />
+      Betrag: {amount_label}
     </div>
 
-    <div class="mono">{address}</div>
+    {offer_section}
 
-    <div class="row">
-      <button onclick="window.location.href='lightning:{address}'">Mit Wallet öffnen</button>
-      <button class="secondary" onclick="navigator.clipboard.writeText('{address}')">Adresse kopieren</button>
-    </div>
-
-    <div class="row">
-      <button class="secondary" onclick="createBolt11()">BOLT11 Rechnung erzeugen</button>
-    </div>
-
-    <div id="invoiceWrap" style="display:none; margin-top:18px;">
+    <div class="section">
+      <div class="sectionTitle">Lightning Address / LNURL Fallback</div>
       <div class="qr">
-        <img id="invoiceQr" src="" width="260" height="260" alt="Invoice QR">
+        <img src="/api/qr/{address}" width="260" height="260" alt="Lightning Address QR">
       </div>
-      <div id="invoiceText" class="mono"></div>
+      <div class="mono">{address}</div>
       <div class="row">
-        <button onclick="payInvoice()">Mit Alby / WebLN bezahlen</button>
-        <button class="secondary" onclick="copyInvoice()">Rechnung kopieren</button>
+        <button onclick="window.location.href='lightning:{address}'">Mit Wallet öffnen</button>
+        <button class="secondary" onclick="navigator.clipboard.writeText('{address}')">Adresse kopieren</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="sectionTitle">BOLT11 Kompatibilitätsmodus</div>
+      <div class="row">
+        <button class="secondary" onclick="createBolt11()">BOLT11 Rechnung erzeugen</button>
+        {offer_button}
+      </div>
+
+      <div id="invoiceWrap" style="display:none; margin-top:18px;">
+        <div class="qr">
+          <img id="invoiceQr" src="" width="260" height="260" alt="Invoice QR">
+        </div>
+        <div id="invoiceText" class="mono"></div>
+        <div class="row">
+          <button onclick="payInvoice()">Mit Alby / WebLN bezahlen</button>
+          <button class="secondary" onclick="copyInvoice()">Rechnung kopieren</button>
+        </div>
       </div>
     </div>
 
     <div class="hint">
-      Diese Seite nutzt standardmäßig die Lightning Address. Optional kann eine normale BOLT11-Rechnung erzeugt werden.
+      Diese Seite unterstützt BOLT12 Offer, Lightning Address / LNURL Fallback und optional normale BOLT11-Rechnungen.
     </div>
   </main>
 

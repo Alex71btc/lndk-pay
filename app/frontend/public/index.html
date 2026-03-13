@@ -897,42 +897,46 @@ if (mode === 'invoice') {
       }
     }
 
-    function renderAliasList(items) {
-      if (!items || items.length === 0) {
-        aliasList.innerHTML = '<div class="hint">Noch keine Aliase angelegt.</div>';
-        return;
-      }
+function renderAliasList(items) {
+  if (!items || items.length === 0) {
+    aliasList.innerHTML = '<div class="hint">Noch keine Aliase angelegt.</div>';
+    return;
+  }
 
-      aliasList.innerHTML = items.map((item) => `
-        <div class="aliasItem">
-          <div class="aliasTop">
-            <div>
-              <div class="aliasTitle mono">${item.address}</div>
-              <div class="aliasMeta">
-                Beschreibung: ${item.description || '-'}<br />
-                Betrag: ${item.amount_sat ? `${item.amount_sat} sats` : 'variabel'}<br />
-                DNS: ${item.dns_name ? `<span class="mono">${item.dns_name}</span>` : '-'}<br />
-                Offer: ${item.last_offer ? `<span class="mono offerPreview">${shortenMiddle(item.last_offer)}</span>` : '-'}
-              </div>
-            </div>
-            <div>
-              <span class="aliasStatus ${item.published ? 'published' : 'draft'}">
-                ${item.published ? 'veröffentlicht' : 'Entwurf'}
-              </span>
-            </div>
-          </div>
-          <div class="aliasActions">
-            <button class="secondary" type="button" onclick="publishAlias('${item.name}')">Veröffentlichen</button>
-            <button class="secondary" type="button" onclick="showAliasAddressQr('${item.name}', '${item.address}')">Adresse QR</button>
-            <button class="secondary" type="button" onclick="copyAliasAddress('${item.address}')">Adresse kopieren</button>
-            ${item.last_offer ? `<button class="secondary" type="button" onclick="showAliasOfferQr('${item.name}', '${item.last_offer}')">Offer QR</button>` : ''}
-            ${item.last_offer ? `<button class="secondary" type="button" onclick="copyAliasOffer('${item.last_offer}')">Offer kopieren</button>` : ''}
-            <button class="danger" type="button" onclick="deleteAlias('${item.name}')">Löschen</button>
-            ${item.dns_name ? `<button class="danger" type="button" onclick="deleteAliasWithDns('${item.name}')">Löschen + DNS</button>` : ''}
+  aliasList.innerHTML = items.map((item) => `
+    <div class="aliasItem">
+      <div class="aliasTop">
+        <div>
+          <div class="aliasTitle mono">${item.address}</div>
+          <div class="aliasMeta">
+            Beschreibung: ${item.description || '-'}<br />
+            Betrag: ${item.amount_sat ? `${item.amount_sat} sats` : 'variabel'}<br />
+            DNS: ${item.dns_name ? `<span class="mono">${item.dns_name}</span>` : '-'}<br />
+            Öffentliche Seite: <span class="mono">${aliasPublicUrl(item.name)}</span><br />
+            Offer: ${item.last_offer ? `<span class="mono offerPreview">${shortenMiddle(item.last_offer)}</span>` : '-'}
           </div>
         </div>
-      `).join('');
-    }
+        <div>
+          <span class="aliasStatus ${item.published ? 'published' : 'draft'}">
+            ${item.published ? 'veröffentlicht' : 'Entwurf'}
+          </span>
+        </div>
+      </div>
+
+      <div class="aliasActions">
+        <button class="secondary" type="button" onclick="publishAlias('${item.name}')">Veröffentlichen</button>
+        <button class="secondary" type="button" onclick="openAliasPage('${item.name}')">Öffnen</button>
+        <button class="secondary" type="button" onclick="copyAliasPageLink('${item.name}')">Link kopieren</button>
+        <button class="secondary" type="button" onclick="showAliasAddressQr('${item.name}', '${item.address}')">Adresse QR</button>
+        <button class="secondary" type="button" onclick="copyAliasAddress('${item.address}')">Adresse kopieren</button>
+        ${item.last_offer ? `<button class="secondary" type="button" onclick="showAliasOfferQr('${item.name}', '${item.last_offer}')">Offer QR</button>` : ''}
+        ${item.last_offer ? `<button class="secondary" type="button" onclick="copyAliasOffer('${item.last_offer}')">Offer kopieren</button>` : ''}
+        <button class="danger" type="button" onclick="deleteAlias('${item.name}')">Löschen</button>
+        ${item.dns_name ? `<button class="danger" type="button" onclick="deleteAliasWithDns('${item.name}')">Löschen + DNS</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
 
     async function loadAliases() {
       try {
@@ -1146,6 +1150,18 @@ function showInvoiceQr() {
   renderQrForValue(currentInvoice, 'invoice');
   setStatus('BOLT11 QR angezeigt.');
 }
+function aliasPublicUrl(name) {
+  return `${window.location.origin}/${encodeURIComponent(name)}`;
+}
+
+function openAliasPage(name) {
+  window.open(aliasPublicUrl(name), '_blank');
+}
+
+async function copyAliasPageLink(name) {
+  const url = aliasPublicUrl(name);
+  await copyText(url, `Alias-Link ${url} kopiert.`);
+}
 
 async function payInvoiceWithWebln() {
   if (!currentInvoice) {
@@ -1175,6 +1191,8 @@ async function payInvoiceWithWebln() {
     window.copyAliasOffer = copyAliasOffer;
     window.showAliasAddressQr = showAliasAddressQr;
     window.showAliasOfferQr = showAliasOfferQr;
+    window.openAliasPage = openAliasPage;
+    window.copyAliasPageLink = copyAliasPageLink;
 
     document.getElementById('copyActiveBtn').addEventListener('click', async () => {
       const value = getActiveQrValue();
