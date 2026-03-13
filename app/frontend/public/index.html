@@ -925,6 +925,16 @@ function renderAliasList(items) {
 
       <div class="aliasActions">
         <button class="secondary" type="button" onclick="publishAlias('${item.name}')">Veröffentlichen</button>
+        <button
+  class="secondary aliasEditBtn"
+  type="button"
+  data-name="${item.name}"
+  data-description="${encodeURIComponent(item.description || '')}"
+  data-amount="${item.amount_sat == null ? '' : item.amount_sat}"
+>
+  Bearbeiten
+</button>
+        <button class="secondary" type="button" onclick="refreshAliasOffer('${item.name}')">Offer erneuern</button>
         <button class="secondary" type="button" onclick="openAliasPage('${item.name}')">Öffnen</button>
         <button class="secondary" type="button" onclick="copyAliasPageLink('${item.name}')">Link kopieren</button>
         <button class="secondary" type="button" onclick="showAliasAddressQr('${item.name}', '${item.address}')">Adresse QR</button>
@@ -1020,6 +1030,24 @@ function renderAliasList(items) {
         setStatus(`Publish-Fehler: ${error?.message || error}`, 'error', true);
       }
     }
+async function refreshAliasOffer(name) {
+  try {
+    const response = await fetch(`/api/alias/${encodeURIComponent(name)}/refresh-offer`, {
+      method: 'POST'
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.detail || 'Offer konnte nicht erneuert werden');
+    }
+
+    await loadAliases();
+    setStatus(`Offer für ${data.address} erneuert.`);
+  } catch (error) {
+    setStatus(`Refresh-Fehler: ${error?.message || error}`, 'error', true);
+  }
+}
 
     async function deleteAlias(name) {
       if (!confirm(`Alias ${name} wirklich löschen?`)) {
@@ -1163,6 +1191,48 @@ async function copyAliasPageLink(name) {
   await copyText(url, `Alias-Link ${url} kopiert.`);
 }
 
+async function editAlias(name, currentDescription, currentAmount) {
+  const newDescription = prompt('Neue Beschreibung:', currentDescription || '');
+  if (newDescription === null) return;
+
+  const amountInput = prompt(
+    'Neuer Betrag in sats (leer = variabel):',
+    currentAmount == null || currentAmount === '' ? '' : String(currentAmount)
+  );
+  if (amountInput === null) return;
+
+  const trimmedAmount = amountInput.trim();
+
+  const payload = {
+    description: newDescription.trim() || 'Lightning payment',
+    amount_sat: trimmedAmount === '' ? null : Number(trimmedAmount)
+  };
+
+  if (trimmedAmount !== '' && (!Number.isFinite(payload.amount_sat) || payload.amount_sat < 1)) {
+    setStatus('Ungültiger Betrag.', 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/alias/${encodeURIComponent(name)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.detail || 'Alias konnte nicht bearbeitet werden');
+    }
+
+    await loadAliases();
+    setStatus(`Alias ${data.address} aktualisiert.`);
+  } catch (error) {
+    setStatus(`Edit-Fehler: ${error?.message || error}`, 'error', true);
+  }
+}
+
 async function payInvoiceWithWebln() {
   if (!currentInvoice) {
     setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
@@ -1185,6 +1255,7 @@ async function payInvoiceWithWebln() {
 }
 
     window.publishAlias = publishAlias;
+    window.refreshAliasOffer = refreshAliasOffer;
     window.deleteAlias = deleteAlias;
     window.deleteAliasWithDns = deleteAliasWithDns;
     window.copyAliasAddress = copyAliasAddress;
@@ -1193,8 +1264,9 @@ async function payInvoiceWithWebln() {
     window.showAliasOfferQr = showAliasOfferQr;
     window.openAliasPage = openAliasPage;
     window.copyAliasPageLink = copyAliasPageLink;
-
-    document.getElementById('copyActiveBtn').addEventListener('click', async () => {
+    window.editAlias = editAlias;
+    
+   document.getElementById('copyActiveBtn').addEventListener('click', async () => {
       const value = getActiveQrValue();
       if (!value) {
         setStatus('Noch kein aktiver Inhalt vorhanden.', 'error');
@@ -1288,6 +1360,18 @@ async function payInvoiceWithWebln() {
             : 'BOLT12 Adresse kopiert.'
       );
     });
+
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('.aliasEditBtn');
+  if (!btn) return;
+
+  const name = btn.dataset.name || '';
+  const description = decodeURIComponent(btn.dataset.description || '');
+  const amountRaw = btn.dataset.amount || '';
+  const amount = amountRaw === '' ? null : Number(amountRaw);
+
+  editAlias(name, description, amount);
+});
 
     document.querySelectorAll('.quickAmountBtn').forEach((btn) => {
       btn.addEventListener('click', () => {

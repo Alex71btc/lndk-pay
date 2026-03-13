@@ -36,4 +36,5 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     volumes:
+      - ./data:/data
       - ./secrets:/secrets:ro

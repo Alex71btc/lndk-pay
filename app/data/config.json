@@ -1,0 +1,31 @@
+{
+  "public_bolt12_address": "bolt12@alex71btc.com",
+  "public_lnurl_address": "lnurl@pay.alex71btc.com",
+  "lnurl_base_domain": "pay.alex71btc.com",
+  "lnurl_base_url": "https://pay.alex71btc.com",
+  "dns_mode": "cloudflare",
+  "cloudflare": {
+    "enabled": true,
+    "zone_name": "alex71btc.com",
+    "zone_id": "0a49594cd4bde949d9fa1b08513b8937",
+    "api_token": "USSL-s-s9xkehdAf5d7rVGwUEiUXZv03s5o5H89P"
+  },
+  "aliases": {
+    "coffee": {
+      "description": "2 Tassen Cappuccino",
+      "amount_sat": 15000,
+      "published": true,
+      "dns_name": "coffee.user._bitcoin-payment.alex71btc.com",
+      "dns_content": "\"bitcoin:?lno=lno1pqp7fcwqpgfnygz5v9ehxetwyppkzursw43kx6twdugwsqehd9zs2y36z2504hv42g7ucg6cnzknhq9qde9x8j3xlmtgm5x30sp3mf4hrl23t4l9pmstwcnqh6g97e57q6ngvv7g8h74pwq65knsdzqzqvjhhrteevakgx0et7kgpsrpv4yc09ya404d2t7gr9j3zlace4fvvqpn5rntt73r3w2v2e57ldechcyvzyx89tpnd6xmuq3v2pk0s4xhcexnf06mpvsdukwguuvhlljymj0zklqpeypmz68g683a3tgv69m2sta7770l2xnez80ucqsk20r8p6xptj4fmtcq9jf69w7v7tq90plfy79mfm6ednvwk8q8wpcur7l603wxgljlr343auq9ux0k7569u8lpg3lpzcssylfmt6m3lc3vuj9fxew64fn2yy7v4r2wrmu7vzjhee89aazmm0u8\"",
+      "last_offer": "lno1pqp7fcwqpgfnygz5v9ehxetwyppkzursw43kx6twdugwsqehd9zs2y36z2504hv42g7ucg6cnzknhq9qde9x8j3xlmtgm5x30sp3mf4hrl23t4l9pmstwcnqh6g97e57q6ngvv7g8h74pwq65knsdzqzqvjhhrteevakgx0et7kgpsrpv4yc09ya404d2t7gr9j3zlace4fvvqpn5rntt73r3w2v2e57ldechcyvzyx89tpnd6xmuq3v2pk0s4xhcexnf06mpvsdukwguuvhlljymj0zklqpeypmz68g683a3tgv69m2sta7770l2xnez80ucqsk20r8p6xptj4fmtcq9jf69w7v7tq90plfy79mfm6ednvwk8q8wpcur7l603wxgljlr343auq9ux0k7569u8lpg3lpzcssylfmt6m3lc3vuj9fxew64fn2yy7v4r2wrmu7vzjhee89aazmm0u8"
+    },
+    "pizza": {
+      "description": "Salami",
+      "amount_sat": 21000,
+      "published": true,
+      "dns_name": "pizza.user._bitcoin-payment.alex71btc.com",
+      "dns_content": "\"bitcoin:?lno=lno1pqzqzsr0gq9qv5mpd3sk66gsaqpnw629q5fr5y4gltwe253aes343x9d8wq2qmj2v09zdlkk3hgdzlqztcqfvn09d3363hfn870eqh9ztvg2xyy3qvaefgecajux7d7u6n6syq46vfcp6jkkday2mwf5m6pqw437d02853zerxge26lgeztasxpc3gqr8rt9n0hvxtq82nln08xfhfg3rw39xuzvxwcdng3d6d6jevdwytdutdzuamfrg2jzhr6dj6fxu6xwt0re5dqrfdygelklwvvkp5axuj00yg6wf7ynkf69auk5hxmf49jpvxp78jtqqtphl9vlgere7fn5c7z0tgw0rq9cs2vnyhcylgqudzf36x5gd4e92epjycrk0fxlw6ghg0jfx93pqd5mxcghalgqc2shmdmy6u5dav2ekz4nvcrk62efh2m26yglz6y9z\"",
+      "last_offer": "lno1pqzqzsr0gq9qv5mpd3sk66gsaqpnw629q5fr5y4gltwe253aes343x9d8wq2qmj2v09zdlkk3hgdzlqztcqfvn09d3363hfn870eqh9ztvg2xyy3qvaefgecajux7d7u6n6syq46vfcp6jkkday2mwf5m6pqw437d02853zerxge26lgeztasxpc3gqr8rt9n0hvxtq82nln08xfhfg3rw39xuzvxwcdng3d6d6jevdwytdutdzuamfrg2jzhr6dj6fxu6xwt0re5dqrfdygelklwvvkp5axuj00yg6wf7ynkf69auk5hxmf49jpvxp78jtqqtphl9vlgere7fn5c7z0tgw0rq9cs2vnyhcylgqudzf36x5gd4e92epjycrk0fxlw6ghg0jfx93pqd5mxcghalgqc2shmdmy6u5dav2ekz4nvcrk62efh2m26yglz6y9z"
+    }
+  }
+}
