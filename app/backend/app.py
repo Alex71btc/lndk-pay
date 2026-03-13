@@ -14,6 +14,7 @@ import dns.exception
 import dns.resolver
 import httpx
 import qrcode
+import base64
 from io import BytesIO
 from fastapi.responses import FileResponse, Response, HTMLResponse
 from fastapi import FastAPI, HTTPException, Query
@@ -183,6 +184,10 @@ class CreateInvoiceResponse(BaseModel):
     payment_request: str
     payment_hash: str
     expires_at: Optional[str] = None
+
+class AliasUpdateRequest(BaseModel):
+    description: str = Field(min_length=1, max_length=200)
+    amount_sat: Optional[int] = Field(default=None, ge=1)
 
 # --- App -------------------------------------------------------------------
 app = FastAPI(title="LNDK Backend", version="0.5.0")
@@ -700,6 +705,14 @@ def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
     raw_output = _run_command(args)
     offer = _extract_offer(raw_output)
     return OfferResponse(offer=offer, raw_output=raw_output)
+
+def qr_data(data: str) -> str:
+    qr = qrcode.make(data)
+    buffer = BytesIO()
+    qr.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode()
+    return f"data:image/png;base64,{encoded}"
+
 async def _cloudflare_upsert_txt_record(*, name: str, content: str) -> dict[str, Any]:
     cf = get_cloudflare_config()
 
@@ -1085,6 +1098,26 @@ async def delete_alias(name: str, delete_dns: bool = False):
         "dns_deleted": dns_result,
     }
 
+@app.patch("/api/alias/{name}", response_model=AliasResponse)
+def update_alias(name: str, payload: AliasUpdateRequest):
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    alias_name = _normalize_alias_name(name)
+
+    if alias_name not in aliases:
+      raise HTTPException(status_code=404, detail="Alias not found")
+
+    alias_data = aliases[alias_name]
+    alias_data["description"] = payload.description.strip()
+    alias_data["amount_sat"] = payload.amount_sat
+
+    aliases[alias_name] = alias_data
+    cfg["aliases"] = aliases
+    save_config(cfg)
+
+    return _build_alias_response(alias_name, alias_data)
+
 @app.post("/api/create-invoice", response_model=CreateInvoiceResponse)
 async def create_invoice(payload: CreateInvoiceRequest) -> CreateInvoiceResponse:
     result = await _create_bolt11_invoice(
@@ -1137,8 +1170,257 @@ async def publish_alias(name: str):
 
     return _build_alias_response(alias_name, alias_data)
     from fastapi.responses import HTMLResponse
+
+@app.post("/api/alias/{name}/refresh-offer", response_model=AliasResponse)
+async def refresh_alias_offer(name: str):
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    alias_name = _normalize_alias_name(name)
+
+    if alias_name not in aliases:
+        raise HTTPException(status_code=404, detail="Alias not found")
+
+    alias_data = aliases[alias_name]
+    description = alias_data.get("description") or f"{alias_name}@{get_lnurl_base_domain()}"
+    amount_sat = alias_data.get("amount_sat")
+
+    offer_response = _create_offer_internal(
+        OfferRequest(
+            amount=amount_sat,
+            description=description,
+        )
+    )
+
+    dns_name = _alias_dns_name(alias_name)
+    dns_content = build_bip353_txt_value(offer_response.offer)
+
+    if cfg.get("dns_mode") == "cloudflare":
+        await _cloudflare_upsert_txt_record(name=dns_name, content=dns_content)
+
+    alias_data["published"] = True
+    alias_data["dns_name"] = dns_name
+    alias_data["dns_content"] = dns_content
+    alias_data["last_offer"] = offer_response.offer
+
+    aliases[alias_name] = alias_data
+    cfg["aliases"] = aliases
+    save_config(cfg)
+
+    return _build_alias_response(alias_name, alias_data)
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/links", response_class=HTMLResponse)
+async def public_index_page():
+    cfg = load_config()
+    aliases = cfg.get("aliases", {}) or {}
+
+    items_html = ""
+
+    for alias_name, alias in aliases.items():
+        description = alias.get("description") or "Lightning payment"
+        amount_sat = alias.get("amount_sat")
+        amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
+
+        items_html += f"""
+        <div class="aliasCard">
+          <div class="aliasTitle mono">{alias_name}@{get_lnurl_base_domain()}</div>
+          <div class="aliasMeta">
+            {description}<br />
+            Betrag: {amount_label}
+          </div>
+          <div class="row">
+            <button onclick="window.location.href='/{alias_name}'">Öffnen</button>
+            <button class="secondary" onclick="navigator.clipboard.writeText('{alias_name}@{get_lnurl_base_domain()}')">Adresse kopieren</button>
+          </div>
+        </div>
+        """
+
+    if not items_html:
+        items_html = """
+        <div class="aliasCard">
+          <div class="aliasMeta">Noch keine öffentlichen Aliase vorhanden.</div>
+        </div>
+        """
+
+    html = f"""
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lightning Payments</title>
+  <style>
+    body {{
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1220, #0f172a);
+      color: #eef2ff;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }}
+    .card {{
+      width: 100%;
+      max-width: 760px;
+      background: rgba(18, 26, 43, 0.96);
+      border: 1px solid #26324a;
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+      padding: 24px;
+    }}
+    h1 {{
+      margin: 0 0 10px;
+      font-size: 2rem;
+      text-align: center;
+    }}
+    .sub {{
+      color: #a7b0c3;
+      margin-bottom: 20px;
+      text-align: center;
+      line-height: 1.5;
+    }}
+    .mono {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      word-break: break-all;
+    }}
+    .aliasList {{
+      display: grid;
+      gap: 14px;
+      margin-top: 18px;
+    }}
+    .aliasCard {{
+      border: 1px solid #26324a;
+      background: rgba(255,255,255,0.02);
+      border-radius: 18px;
+      padding: 16px;
+    }}
+    .aliasTitle {{
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }}
+    .aliasMeta {{
+      color: #a7b0c3;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }}
+    .row {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }}
+    button {{
+      appearance: none;
+      border: 1px solid #f7931a;
+      background: #f7931a;
+      color: #091120;
+      font-weight: 700;
+      padding: 12px 16px;
+      border-radius: 14px;
+      cursor: pointer;
+    }}
+    button.secondary {{
+      background: transparent;
+      color: #eef2ff;
+      border-color: #26324a;
+    }}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>⚡ Lightning Payments</h1>
+    <div class="sub">
+      Öffentliche Zahlungsseiten auf <span class="mono">{get_lnurl_base_domain()}</span><br />
+      <span style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 Fallback</span>
+    </div>
+    <div class="row" style="margin-bottom: 18px;">
+      <button class="secondary" onclick="window.location.href='/app'">Generator / Admin öffnen</button>
+      <button class="secondary" onclick="window.location.href='/app?setup=1'">Setup Wizard</button>
+    </div>
+    <div class="aliasList">
+      {items_html}
+    </div>
+  </main>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+
+# --- Web files --------------------------------------------------------------
+if PUBLIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=PUBLIC_DIR), name="static")
+
+
+@app.get("/app")
+async def app_shell():
+    index_file = PUBLIC_DIR / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="frontend/public/index.html not found")
+    return FileResponse(index_file)
+
+
+@app.get("/admin")
+def admin_page() -> FileResponse:
+    index_file = ADMIN_DIR / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="frontend/admin/index.html not found")
+    return FileResponse(index_file)
+
+
+@app.get("/public.webmanifest")
+def public_manifest() -> FileResponse:
+    file = PUBLIC_DIR / "public.webmanifest"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="public.webmanifest not found")
+    return FileResponse(file, media_type="application/manifest+json")
+
+
+@app.get("/admin.webmanifest")
+def admin_manifest() -> FileResponse:
+    file = ADMIN_DIR / "admin.webmanifest"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="admin.webmanifest not found")
+    return FileResponse(file, media_type="application/manifest+json")
+
+
+@app.get("/service-worker.js")
+def service_worker() -> FileResponse:
+    file = PUBLIC_DIR / "service-worker.js"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="service-worker.js not found")
+    return FileResponse(file, media_type="application/javascript")
+
+
+@app.get("/icon.svg")
+def icon_svg() -> FileResponse:
+    file = PUBLIC_DIR / "icon.svg"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="icon.svg not found")
+    return FileResponse(file, media_type="image/svg+xml")
+
+
 @app.get("/{alias_name}", response_class=HTMLResponse)
 async def public_alias_page(alias_name: str):
+    reserved_paths = {
+        "admin",
+        "app",
+        "links",
+        "api",
+        "static",
+        "favicon.ico",
+        "service-worker.js",
+        "public.webmanifest",
+        "admin.webmanifest",
+        "icon.svg",
+    }
+
+    if alias_name in reserved_paths:
+        raise HTTPException(status_code=404, detail="Not found")
+
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
@@ -1157,9 +1439,20 @@ async def public_alias_page(alias_name: str):
     amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
 
     last_offer = alias.get("last_offer") or ""
-    offer_section = ""
-    offer_button = ""
 
+    bolt11_invoice = None
+    try:
+        if amount_sat:
+            invoice = await _create_bolt11_invoice(
+                amount_sat=amount_sat,
+                memo=description,
+                expiry=3600,
+            )
+            bolt11_invoice = invoice["payment_request"] if isinstance(invoice, dict) else str(invoice)
+    except Exception:
+        bolt11_invoice = None
+
+    offer_section = ""
     if last_offer:
         offer_section = f"""
         <div class="section">
@@ -1174,8 +1467,21 @@ async def public_alias_page(alias_name: str):
           </div>
         </div>
         """
-        offer_button = f"""
-        <button class="secondary" onclick="window.location.href='lightning:{last_offer}'">BOLT12 Offer öffnen</button>
+
+    bolt11_section = ""
+    if bolt11_invoice:
+        bolt11_section = f"""
+        <div class="section">
+          <div class="sectionTitle">BOLT11 Invoice</div>
+          <div class="qr">
+            <img src="/api/qr/{bolt11_invoice}" width="220" height="220" alt="BOLT11 Invoice QR">
+          </div>
+          <div class="mono">{bolt11_invoice}</div>
+          <div class="row">
+            <button onclick="window.location.href='lightning:{bolt11_invoice}'">Mit Wallet öffnen</button>
+            <button class="secondary" onclick="navigator.clipboard.writeText('{bolt11_invoice}')">Invoice kopieren</button>
+          </div>
+        </div>
         """
 
     html = f"""
@@ -1205,16 +1511,6 @@ async def public_alias_page(alias_name: str):
       box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
       padding: 24px;
       text-align: center;
-    }}
-    .pill {{
-      display: inline-block;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(247, 147, 26, 0.12);
-      border: 1px solid rgba(247, 147, 26, 0.3);
-      color: #ffd9a3;
-      font-size: .95rem;
-      margin-bottom: 16px;
     }}
     h1 {{
       margin: 0 0 8px;
@@ -1283,225 +1579,36 @@ async def public_alias_page(alias_name: str):
 </head>
 <body>
   <main class="card">
-    <div class="pill">Public Payment Page</div>
-    <h1>{address}</h1>
+    <h1>⚡ Lightning Payment</h1>
+    <div class="mono">{address}</div>
     <div class="sub">
       {description}<br />
       Betrag: {amount_label}
     </div>
 
-    {offer_section}
-
     <div class="section">
-      <div class="sectionTitle">Lightning Address / LNURL Fallback</div>
-      <div class="qr">
-        <img src="/api/qr/{address}" width="260" height="260" alt="Lightning Address QR">
-      </div>
+      <div class="sectionTitle">Lightning Address (LNURL)</div>
       <div class="mono">{address}</div>
+      <div class="qr">
+        <img src="/api/qr/{address}" width="220" height="220" alt="Lightning Address QR">
+      </div>
       <div class="row">
-        <button onclick="window.location.href='lightning:{address}'">Mit Wallet öffnen</button>
-        <button class="secondary" onclick="navigator.clipboard.writeText('{address}')">Adresse kopieren</button>
+        <button onclick="navigator.clipboard.writeText('{address}')">Adresse kopieren</button>
+        <button class="secondary" onclick="window.location.href='lightning:{address}'">Mit Wallet öffnen</button>
       </div>
     </div>
 
-    <div class="section">
-      <div class="sectionTitle">BOLT11 Kompatibilitätsmodus</div>
-      <div class="row">
-        <button class="secondary" onclick="createBolt11()">BOLT11 Rechnung erzeugen</button>
-        {offer_button}
-      </div>
-
-      <div id="invoiceWrap" style="display:none; margin-top:18px;">
-        <div class="qr">
-          <img id="invoiceQr" src="" width="260" height="260" alt="Invoice QR">
-        </div>
-        <div id="invoiceText" class="mono"></div>
-        <div class="row">
-          <button onclick="payInvoice()">Mit Alby / WebLN bezahlen</button>
-          <button class="secondary" onclick="copyInvoice()">Rechnung kopieren</button>
-        </div>
-      </div>
-    </div>
+    {offer_section}
+    {bolt11_section}
 
     <div class="hint">
-      Diese Seite unterstützt BOLT12 Offer, Lightning Address / LNURL Fallback und optional normale BOLT11-Rechnungen.
+      Diese Seite unterstützt BOLT12 Offer, Lightning Address / LNURL Fallback und normale BOLT11-Rechnungen.
     </div>
   </main>
-
-  <script>
-    let currentInvoice = "";
-
-    async function createBolt11() {{
-      try {{
-        const response = await fetch('/api/create-invoice', {{
-          method: 'POST',
-          headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{
-            amount_sat: {amount_sat or 21000},
-            memo: {description!r},
-            expiry: 3600
-          }})
-        }});
-
-        const data = await response.json();
-        if (!response.ok) {{
-          throw new Error(data?.detail || 'Invoice creation failed');
-        }}
-
-        currentInvoice = data.payment_request;
-        document.getElementById('invoiceText').textContent = currentInvoice;
-        document.getElementById('invoiceQr').src = '/api/qr/' + encodeURIComponent(currentInvoice);
-        document.getElementById('invoiceWrap').style.display = 'block';
-      }} catch (err) {{
-        alert('Fehler: ' + (err?.message || err));
-      }}
-    }}
-
-    async function payInvoice() {{
-      if (!currentInvoice) return;
-
-      if (window.webln?.enable && window.webln?.sendPayment) {{
-        try {{
-          await window.webln.enable();
-          await window.webln.sendPayment(currentInvoice);
-          return;
-        }} catch (err) {{
-          console.warn(err);
-        }}
-      }}
-
-      window.location.href = 'lightning:' + currentInvoice;
-    }}
-
-    async function copyInvoice() {{
-      if (!currentInvoice) return;
-      await navigator.clipboard.writeText(currentInvoice);
-    }}
-  </script>
 </body>
 </html>
 """
     return HTMLResponse(html)
-
-@app.get("/{alias_name}", response_class=HTMLResponse)
-async def public_alias_page(alias_name: str):
-    cfg = load_config()
-    aliases = cfg.get("aliases", {}) or {}
-
-    alias_name = _normalize_alias_name(alias_name)
-
-    if alias_name not in aliases:
-        return HTMLResponse("<h1>Alias not found</h1>", status_code=404)
-
-    alias = aliases[alias_name]
-
-    address = f"{alias_name}@{get_lnurl_base_domain()}"
-    description = alias.get("description") or "Lightning payment"
-
-    html = f"""
-    <html>
-    <head>
-        <title>{address}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body {{
-                font-family: sans-serif;
-                background:#0f1115;
-                color:#fff;
-                text-align:center;
-                padding:40px;
-            }}
-            .box {{
-                max-width:500px;
-                margin:auto;
-                background:#1a1f2b;
-                padding:30px;
-                border-radius:12px;
-            }}
-            button {{
-                padding:12px 18px;
-                margin-top:20px;
-                border:none;
-                border-radius:8px;
-                background:#ff7a18;
-                color:white;
-                font-size:16px;
-                cursor:pointer;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="box">
-            <h2>{address}</h2>
-            <p>{description}</p>
-
-            <p>Scan or pay with Lightning</p>
-
-            <img src="/api/qr/{address}" width="260"/>
-
-            <br>
-
-            <button onclick="window.location.href='lightning:{address}'">
-                Pay with Lightning
-            </button>
-        </div>
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(html)
-# --- Web files --------------------------------------------------------------
-if PUBLIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=PUBLIC_DIR), name="static")
-
-
-@app.get("/")
-def index() -> FileResponse:
-    index_file = PUBLIC_DIR / "index.html"
-    if not index_file.exists():
-        raise HTTPException(status_code=404, detail="frontend/public/index.html not found")
-    return FileResponse(index_file)
-
-
-@app.get("/admin")
-def admin_page() -> FileResponse:
-    index_file = ADMIN_DIR / "index.html"
-    if not index_file.exists():
-        raise HTTPException(status_code=404, detail="frontend/admin/index.html not found")
-    return FileResponse(index_file)
-
-
-@app.get("/public.webmanifest")
-def public_manifest() -> FileResponse:
-    file = PUBLIC_DIR / "public.webmanifest"
-    if not file.exists():
-        raise HTTPException(status_code=404, detail="public.webmanifest not found")
-    return FileResponse(file, media_type="application/manifest+json")
-
-
-@app.get("/admin.webmanifest")
-def admin_manifest() -> FileResponse:
-    file = ADMIN_DIR / "admin.webmanifest"
-    if not file.exists():
-        raise HTTPException(status_code=404, detail="admin.webmanifest not found")
-    return FileResponse(file, media_type="application/manifest+json")
-
-
-@app.get("/service-worker.js")
-def service_worker() -> FileResponse:
-    file = PUBLIC_DIR / "service-worker.js"
-    if not file.exists():
-        raise HTTPException(status_code=404, detail="service-worker.js not found")
-    return FileResponse(file, media_type="application/javascript")
-
-
-@app.get("/icon.svg")
-def icon_svg() -> FileResponse:
-    file = PUBLIC_DIR / "icon.svg"
-    if not file.exists():
-        raise HTTPException(status_code=404, detail="icon.svg not found")
-    return FileResponse(file, media_type="image/svg+xml")
-
 
 # --- Minimal self-tests -----------------------------------------------------
 def _test_extract_offer() -> None:
