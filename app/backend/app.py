@@ -14,6 +14,7 @@ import dns.exception
 import dns.resolver
 import httpx
 import qrcode
+import hashlib
 import base64
 from io import BytesIO
 from fastapi.responses import FileResponse, Response, HTMLResponse
@@ -358,6 +359,9 @@ def _encode_lnurl(url: str) -> str:
     checksum = _bech32_create_checksum(hrp, data)
     return hrp + "1" + "".join(_BECH32_ALPHABET[d] for d in data + checksum)
 
+def _lnurl_metadata_for_alias(alias: dict[str, Any]) -> str:
+    return _lnurl_metadata_json(alias["identifier"], alias["description"])
+
 
 def _lightning_address_to_lnurlp_url(address: str) -> str:
     clean = address.strip().lower()
@@ -566,11 +570,6 @@ def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
 def _lnurl_callback_url(username: str) -> str:
     return f"{get_lnurl_base_url()}/api/lnurl/callback/{username}"
 
-def get_lnurl_base_domain():
-    cfg = load_config()
-    return cfg.get("lnurl_base_domain") or os.environ.get("LNURL_BASE_DOMAIN", "pay.alex71btc.com")
-
-
 def get_lnurl_base_url():
     cfg = load_config()
     return cfg.get("lnurl_base_url") or os.environ.get("LNURL_BASE_URL", f"https://{get_lnurl_base_domain()}").rstrip("/")
@@ -594,7 +593,13 @@ def get_lnurl_base_url():
         f"https://{get_lnurl_base_domain()}",
     )).strip().rstrip("/")
 
-async def _create_bolt11_invoice(*, amount_sat: int, memo: str, expiry: int = 3600) -> dict[str, Any]:
+async def _create_bolt11_invoice(
+    *,
+    amount_sat: int,
+    memo: str = "",
+    expiry: int = 3600,
+    description_hash: Optional[str] = None,
+) -> dict[str, Any]:
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
 
     headers = {
@@ -602,11 +607,15 @@ async def _create_bolt11_invoice(*, amount_sat: int, memo: str, expiry: int = 36
         "Content-Type": "application/json",
     }
 
-    payload = {
+    payload: dict[str, Any] = {
         "value": str(amount_sat),
-        "memo": memo,
         "expiry": str(expiry),
     }
+
+    if description_hash:
+        payload["description_hash"] = description_hash
+    else:
+        payload["memo"] = memo
 
     verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
 
@@ -618,7 +627,7 @@ async def _create_bolt11_invoice(*, amount_sat: int, memo: str, expiry: int = 36
                 json=payload,
             )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"LND REST request failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"LND REST invoice request failed: {exc}") from exc
 
     try:
         data = response.json()
@@ -637,6 +646,30 @@ async def _create_bolt11_invoice(*, amount_sat: int, memo: str, expiry: int = 36
     return {
         "payment_request": payment_request,
         "payment_hash": payment_hash,
+    }
+
+def get_bip353_base_domain():
+    cfg = load_config()
+    return (
+        cfg.get("bip353_base_domain")
+        or os.environ.get("BIP353_BASE_DOMAIN")
+        or os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@alex71btc.com").split("@", 1)[-1]
+    ).strip().lower()
+
+
+def _build_lnurl_info_for_address(address: str) -> dict[str, str]:
+    normalized = (address or "").strip().lower()
+    if not HRN_RE.match(normalized):
+        raise HTTPException(status_code=400, detail="Invalid lightning address")
+
+    username, domain = normalized.split("@", 1)
+    lnurlp_url = f"https://{domain}/.well-known/lnurlp/{username}"
+    lnurl = _encode_lnurl(lnurlp_url)
+
+    return {
+        "lightning_address": normalized,
+        "lnurlp_url": lnurlp_url,
+        "lnurl": lnurl,
     }
 
 def get_public_bolt12_address():
@@ -936,14 +969,17 @@ async def lnurl_callback(
         raise HTTPException(status_code=400, detail="comment too long")
 
     amount_sat = max(1, math.ceil(amount / 1000))
-    memo = alias["identifier"]
-    if comment:
-        memo = f"{memo} | {comment[:120]}"
 
-    payment_request = await _create_bolt11_invoice(
+    metadata = _lnurl_metadata_for_alias(alias)
+    description_hash = hashlib.sha256(metadata.encode("utf-8")).digest()
+    description_hash_b64 = base64.b64encode(description_hash).decode("ascii")
+
+    invoice = await _create_bolt11_invoice(
         amount_sat=amount_sat,
-        memo=memo,
+        description_hash=description_hash_b64,
     )
+
+    payment_request = invoice["payment_request"] if isinstance(invoice, dict) else str(invoice)
 
     return {
         "pr": payment_request,
@@ -1402,7 +1438,6 @@ def icon_svg() -> FileResponse:
         raise HTTPException(status_code=404, detail="icon.svg not found")
     return FileResponse(file, media_type="image/svg+xml")
 
-
 @app.get("/{alias_name}", response_class=HTMLResponse)
 async def public_alias_page(alias_name: str):
     reserved_paths = {
@@ -1432,12 +1467,25 @@ async def public_alias_page(alias_name: str):
         return HTMLResponse("<h1>Alias not found</h1>", status_code=404)
 
     alias = aliases[alias_name]
-    address = f"{alias_name}@{get_lnurl_base_domain()}"
+
+    bip353_domain = get_bip353_base_domain()
+    lnurl_domain = get_lnurl_base_domain()
+
+    bip353_address = f"{alias_name}@{bip353_domain}"
+    lnurl_address = f"{alias_name}@{lnurl_domain}"
+
     description = alias.get("description") or "Lightning payment"
     amount_sat = alias.get("amount_sat")
     amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
 
     last_offer = alias.get("last_offer") or ""
+
+    lnurl_fallback = ""
+    try:
+        lnurl_info = _build_lnurl_info_for_address(lnurl_address)
+        lnurl_fallback = lnurl_info["lnurl"]
+    except Exception:
+        lnurl_fallback = ""
 
     bolt11_invoice = None
     try:
@@ -1480,11 +1528,30 @@ async def public_alias_page(alias_name: str):
           </div>
           <div class="mono">{bolt11_invoice}</div>
           <div class="row">
-            <button onclick="window.location.href='lightning:{bolt11_invoice}'">Mit Wallet öffnen</button>
+            <button onclick="payBolt11Invoice()">Mit Wallet öffnen</button>
             <button class="secondary" onclick="navigator.clipboard.writeText('{bolt11_invoice}')">Invoice kopieren</button>
           </div>
           <div class="hint">
             Nur für Wallets ohne BOLT12- oder LNURL-Unterstützung.
+          </div>
+        </div>
+        """
+
+    lnurl_section = ""
+    if lnurl_fallback:
+        lnurl_section = f"""
+        <div class="section">
+          <div class="sectionTitle">LNURL Fallback</div>
+          <div class="mono">{lnurl_address}</div>
+          <div class="qr">
+            <img src="/api/qr/{lnurl_fallback}" width="220" height="220" alt="LNURL QR">
+          </div>
+          <div class="row">
+            <button onclick="navigator.clipboard.writeText('{lnurl_fallback}')">LNURL kopieren</button>
+            <button class="secondary" onclick="window.location.href='lightning:{lnurl_address}'">Fallback mit Wallet öffnen</button>
+          </div>
+          <div class="hint">
+            Für Wallets ohne BOLT12-Unterstützung. QR zeigt echten LNURL-String, Wallet-Button nutzt die Lightning Address.
           </div>
         </div>
         """
@@ -1495,7 +1562,7 @@ async def public_alias_page(alias_name: str):
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>{address}</title>
+<title>{bip353_address}</title>
 
 <style>
 body {{
@@ -1605,7 +1672,7 @@ button:hover {{
 
 <h1>⚡ BOLT12 Payment Page</h1>
 
-<div class="mono">{address}</div>
+<div class="mono">{bip353_address}</div>
 
 <div class="sub">
 {description}<br/>
@@ -1617,37 +1684,45 @@ Betrag: {amount_label}<br/>
 
 <div class="section">
   <div class="sectionTitle">BIP353 Address</div>
-  <div class="mono">{address}</div>
+  <div class="mono">{bip353_address}</div>
   <div class="qr">
-    <img src="/api/qr/{address}" width="220" height="220" alt="BIP353 QR">
+    <img src="/api/qr/{bip353_address}" width="220" height="220" alt="BIP353 QR">
   </div>
   <div class="row">
-    <button onclick="navigator.clipboard.writeText('{address}')">Adresse kopieren</button>
-    <button class="secondary" onclick="window.location.href='lightning:{address}'">Mit Wallet öffnen</button>
+    <button onclick="navigator.clipboard.writeText('{bip353_address}')">Adresse kopieren</button>
+    <button class="secondary" onclick="window.location.href='lightning:{bip353_address}'">Mit Wallet öffnen</button>
   </div>
   <div class="hint">
     Human-Readable Adresse für diese BOLT12 Payment Page.
   </div>
 </div>
 
-<div class="section">
-  <div class="sectionTitle">LNURL Fallback</div>
-  <div class="mono">{address}</div>
-  <div class="qr">
-    <img src="/api/qr/{address}" width="220" height="220" alt="LNURL QR">
-  </div>
-  <div class="row">
-    <button onclick="navigator.clipboard.writeText('{address}')">Fallback Adresse kopieren</button>
-    <button class="secondary" onclick="window.location.href='lightning:{address}'">Fallback mit Wallet öffnen</button>
-  </div>
-  <div class="hint">
-    Für Wallets ohne BOLT12 Unterstützung.
-  </div>
-</div>
+{lnurl_section}
 
 {bolt11_section}
 
 </main>
+
+<script>
+async function payBolt11Invoice() {{
+  const invoice = {repr(bolt11_invoice)};
+
+  if (!invoice) return;
+
+  if (window.webln?.enable && window.webln?.sendPayment) {{
+    try {{
+      await window.webln.enable();
+      await window.webln.sendPayment(invoice);
+      return;
+    }} catch (err) {{
+      console.warn('WebLN failed, falling back to wallet link', err);
+    }}
+  }}
+
+  window.location.href = 'lightning:' + invoice;
+}}
+</script>
+
 </body>
 </html>
 """
