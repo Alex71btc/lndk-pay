@@ -1,4 +1,4 @@
-<!doctype html>
+	<!doctype html>
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
@@ -453,7 +453,7 @@
       <button class="secondary" id="openSetupBtn" type="button">⚙ Setup</button>
     </div>
 
-    <div class="sub">BOLT12 bleibt Standard. LNURL ist ein separater Fallback-Pfad.</div>
+  <div class="sub">BOLT12 / BIP353 ist der primäre Zahlungsweg. LNURL und BOLT11 sind reine Fallbacks.</div>
 
     <section class="section">
       <div class="qrWrap">
@@ -470,7 +470,7 @@
     </div>
 
     <section class="section">
-      <label class="label">BOLT12 Adresse</label>
+  <label class="label" style="margin-top:14px;">LNURL Fallback (optional)</label>
       <div id="addressBox" class="valueBox mono copyable active" title="Antippen = kopieren + QR auf BOLT12-Adresse umschalten">
         Lade Adresse...
       </div>
@@ -492,7 +492,7 @@
       </div>
 
       <div class="hint">
-        Dieser Fallback ist logisch getrennt vom BOLT12-Weg. Das UI erzeugt aus der Lightning Address einen
+        Standardmäßig zeigt der QR die BIP353 Address als primären Einstieg. Das aktuelle BOLT12 Offer und LNURL Fallback können separat angezeigt werden. Das UI erzeugt aus der Lightning Address einen
         <span class="mono">lnurl1...</span>-QR. Ob eine Wallet ihn wirklich zahlen kann, hängt davon ab,
         ob auf der Domain ein echter LNURL-pay-Endpunkt mit passender Antwort läuft.
       </div>

@@ -1410,12 +1410,11 @@ async def public_alias_page(alias_name: str):
         "app",
         "links",
         "api",
-        "static",
         "favicon.ico",
         "service-worker.js",
         "public.webmanifest",
-        "admin.webmanifest",
         "icon.svg",
+        "static",
     }
 
     if alias_name in reserved_paths:
@@ -1456,7 +1455,7 @@ async def public_alias_page(alias_name: str):
     if last_offer:
         offer_section = f"""
         <div class="section">
-          <div class="sectionTitle">BOLT12 Offer</div>
+          <div class="sectionTitle">BOLT12 Offer (primär)</div>
           <div class="qr">
             <img src="/api/qr/{last_offer}" width="260" height="260" alt="BOLT12 Offer QR">
           </div>
@@ -1465,6 +1464,9 @@ async def public_alias_page(alias_name: str):
             <button onclick="window.location.href='lightning:{last_offer}'">Mit Wallet öffnen</button>
             <button class="secondary" onclick="navigator.clipboard.writeText('{last_offer}')">Offer kopieren</button>
           </div>
+          <div class="hint">
+            Primärer Zahlungsweg dieser Seite. Wallets mit BOLT12-Support sollten diesen Pfad verwenden.
+          </div>
         </div>
         """
 
@@ -1472,7 +1474,7 @@ async def public_alias_page(alias_name: str):
     if bolt11_invoice:
         bolt11_section = f"""
         <div class="section">
-          <div class="sectionTitle">BOLT11 Invoice</div>
+          <div class="sectionTitle">BOLT11 Compatibility Fallback</div>
           <div class="qr">
             <img src="/api/qr/{bolt11_invoice}" width="220" height="220" alt="BOLT11 Invoice QR">
           </div>
@@ -1481,6 +1483,9 @@ async def public_alias_page(alias_name: str):
             <button onclick="window.location.href='lightning:{bolt11_invoice}'">Mit Wallet öffnen</button>
             <button class="secondary" onclick="navigator.clipboard.writeText('{bolt11_invoice}')">Invoice kopieren</button>
           </div>
+          <div class="hint">
+            Nur für Wallets ohne BOLT12- oder LNURL-Unterstützung.
+          </div>
         </div>
         """
 
@@ -1488,123 +1493,161 @@ async def public_alias_page(alias_name: str):
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>{address}</title>
-  <style>
-    body {{
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(180deg, #0b1220, #0f172a);
-      color: #eef2ff;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 18px;
-    }}
-    .card {{
-      width: 100%;
-      max-width: 620px;
-      background: rgba(18, 26, 43, 0.96);
-      border: 1px solid #26324a;
-      border-radius: 24px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
-      padding: 24px;
-      text-align: center;
-    }}
-    h1 {{
-      margin: 0 0 8px;
-      font-size: 1.8rem;
-    }}
-    .sub {{
-      color: #a7b0c3;
-      margin-bottom: 18px;
-      line-height: 1.5;
-    }}
-    .section {{
-      margin-top: 18px;
-      padding: 18px;
-      border: 1px solid #26324a;
-      border-radius: 18px;
-      background: rgba(255,255,255,0.02);
-    }}
-    .sectionTitle {{
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 12px;
-      color: #ffd9a3;
-    }}
-    .qr {{
-      background: white;
-      padding: 18px;
-      border-radius: 18px;
-      display: inline-block;
-      margin: 12px 0;
-    }}
-    .mono {{
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      word-break: break-all;
-      line-height: 1.5;
-      font-size: .92rem;
-    }}
-    .row {{
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-top: 16px;
-    }}
-    button {{
-      appearance: none;
-      border: 1px solid #f7931a;
-      background: #f7931a;
-      color: #091120;
-      font-weight: 700;
-      padding: 12px 16px;
-      border-radius: 14px;
-      cursor: pointer;
-    }}
-    button.secondary {{
-      background: transparent;
-      color: #eef2ff;
-      border-color: #26324a;
-    }}
-    .hint {{
-      margin-top: 14px;
-      color: #a7b0c3;
-      font-size: .92rem;
-      line-height: 1.5;
-    }}
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>{address}</title>
+
+<style>
+body {{
+  margin:0;
+  font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background: linear-gradient(180deg,#0b1220,#0f172a);
+  color:#eef2ff;
+  min-height:100vh;
+  display:grid;
+  place-items:center;
+  padding:18px;
+}}
+
+.card {{
+  width:100%;
+  max-width:720px;
+  background: rgba(18,26,43,.96);
+  border:1px solid #26324a;
+  border-radius:24px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+  padding:24px;
+}}
+
+h1 {{
+  margin:0 0 10px;
+  font-size:2rem;
+  text-align:center;
+}}
+
+.sub {{
+  color:#a7b0c3;
+  margin-bottom:20px;
+  text-align:center;
+  line-height:1.5;
+}}
+
+.section {{
+  margin-top:24px;
+  padding-top:18px;
+  border-top:1px solid #26324a;
+}}
+
+.sectionTitle {{
+  font-weight:700;
+  margin-bottom:12px;
+}}
+
+.qr {{
+  display:flex;
+  justify-content:center;
+  margin:14px 0;
+}}
+
+.qr img {{
+  background:white;
+  padding:12px;
+  border-radius:14px;
+}}
+
+.row {{
+  display:flex;
+  gap:10px;
+  justify-content:center;
+  flex-wrap:wrap;
+  margin-top:10px;
+}}
+
+button {{
+  appearance:none;
+  border:1px solid #f7931a;
+  background:#f7931a;
+  color:#091120;
+  font-weight:700;
+  padding:12px 16px;
+  border-radius:12px;
+  cursor:pointer;
+}}
+
+button.secondary {{
+  background:transparent;
+  color:#eef2ff;
+  border-color:#26324a;
+}}
+
+button:hover {{
+  transform:translateY(-1px);
+}}
+
+.mono {{
+  font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  word-break:break-all;
+  text-align:center;
+  margin-top:6px;
+}}
+
+.hint {{
+  color:#9aa6bd;
+  font-size:.9rem;
+  text-align:center;
+  margin-top:8px;
+}}
+</style>
 </head>
+
 <body>
-  <main class="card">
-    <h1>⚡ Lightning Payment</h1>
-    <div class="mono">{address}</div>
-    <div class="sub">
-      {description}<br />
-      Betrag: {amount_label}
-    </div>
+<main class="card">
 
-    <div class="section">
-      <div class="sectionTitle">Lightning Address (LNURL)</div>
-      <div class="mono">{address}</div>
-      <div class="qr">
-        <img src="/api/qr/{address}" width="220" height="220" alt="Lightning Address QR">
-      </div>
-      <div class="row">
-        <button onclick="navigator.clipboard.writeText('{address}')">Adresse kopieren</button>
-        <button class="secondary" onclick="window.location.href='lightning:{address}'">Mit Wallet öffnen</button>
-      </div>
-    </div>
+<h1>⚡ BOLT12 Payment Page</h1>
 
-    {offer_section}
-    {bolt11_section}
+<div class="mono">{address}</div>
 
-    <div class="hint">
-      Diese Seite unterstützt BOLT12 Offer, Lightning Address / LNURL Fallback und normale BOLT11-Rechnungen.
-    </div>
-  </main>
+<div class="sub">
+{description}<br/>
+Betrag: {amount_label}<br/>
+<span style="font-size:.92rem;">BOLT12 zuerst · LNURL und BOLT11 nur als Fallback</span>
+</div>
+
+{offer_section}
+
+<div class="section">
+  <div class="sectionTitle">BIP353 Address</div>
+  <div class="mono">{address}</div>
+  <div class="qr">
+    <img src="/api/qr/{address}" width="220" height="220" alt="BIP353 QR">
+  </div>
+  <div class="row">
+    <button onclick="navigator.clipboard.writeText('{address}')">Adresse kopieren</button>
+    <button class="secondary" onclick="window.location.href='lightning:{address}'">Mit Wallet öffnen</button>
+  </div>
+  <div class="hint">
+    Human-Readable Adresse für diese BOLT12 Payment Page.
+  </div>
+</div>
+
+<div class="section">
+  <div class="sectionTitle">LNURL Fallback</div>
+  <div class="mono">{address}</div>
+  <div class="qr">
+    <img src="/api/qr/{address}" width="220" height="220" alt="LNURL QR">
+  </div>
+  <div class="row">
+    <button onclick="navigator.clipboard.writeText('{address}')">Fallback Adresse kopieren</button>
+    <button class="secondary" onclick="window.location.href='lightning:{address}'">Fallback mit Wallet öffnen</button>
+  </div>
+  <div class="hint">
+    Für Wallets ohne BOLT12 Unterstützung.
+  </div>
+</div>
+
+{bolt11_section}
+
+</main>
 </body>
 </html>
 """
