@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BOLT12 Admin</title>
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="/admin.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
@@ -24,6 +23,8 @@
       --danger: #ff7b72;
       --ok: #8fe388;
       --warn: #ffd166;
+      --panel: rgba(255,255,255,0.02);
+      --panel2: #0c1322;
     }
 
     * { box-sizing: border-box; }
@@ -44,7 +45,7 @@
       top: 14px;
       left: 50%;
       transform: translateX(-50%);
-      width: min(900px, calc(100vw - 20px));
+      width: min(980px, calc(100vw - 20px));
       z-index: 3000;
       pointer-events: none;
     }
@@ -63,38 +64,41 @@
     }
 
     .statusBar.show { display: block; }
+
     .statusBar.ok {
-      border-color: rgba(143, 227, 136, .35);
-      background: rgba(143, 227, 136, .10);
+      border-color: rgba(143,227,136,.35);
+      background: rgba(143,227,136,.10);
       color: var(--ok);
     }
+
     .statusBar.error {
-      border-color: rgba(255, 123, 114, .35);
-      background: rgba(255, 123, 114, .10);
+      border-color: rgba(255,123,114,.35);
+      background: rgba(255,123,114,.10);
       color: var(--danger);
     }
+
     .statusBar.warn {
-      border-color: rgba(255, 209, 102, .35);
-      background: rgba(255, 209, 102, .10);
+      border-color: rgba(255,209,102,.35);
+      background: rgba(255,209,102,.10);
       color: var(--warn);
     }
 
     .card {
       width: 100%;
-      max-width: 980px;
+      max-width: 1180px;
       background: rgba(18, 26, 43, 0.96);
       border: 1px solid var(--border);
       border-radius: 24px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
-      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+      padding: 28px;
     }
 
     .pill {
       display: inline-block;
       padding: 8px 12px;
       border-radius: 999px;
-      background: rgba(247, 147, 26, 0.12);
-      border: 1px solid rgba(247, 147, 26, 0.3);
+      background: rgba(247,147,26,0.12);
+      border: 1px solid rgba(247,147,26,0.28);
       color: #ffd9a3;
       font-size: .95rem;
       margin-bottom: 16px;
@@ -102,32 +106,59 @@
 
     h1 {
       margin: 0 0 8px;
-      font-size: 2rem;
+      font-size: 2.1rem;
       line-height: 1.1;
     }
 
     h2 {
       margin: 0 0 10px;
-      font-size: 1.05rem;
+      font-size: 1.15rem;
+      line-height: 1.2;
     }
 
     .sub {
       color: var(--muted);
-      margin-bottom: 16px;
+      margin-bottom: 18px;
+      line-height: 1.5;
     }
 
-    .grid {
+    .topActions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .heroGrid {
       display: grid;
+      grid-template-columns: 1.12fr 0.88fr;
       gap: 18px;
-      grid-template-columns: 1fr 1fr;
+      align-items: start;
+      margin-bottom: 18px;
+    }
+
+    .midGrid {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 18px;
     }
 
     .section {
-      margin-top: 18px;
       padding: 18px;
       border: 1px solid var(--border);
       border-radius: 18px;
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--panel);
+    }
+
+    .payHero {
+      border-color: rgba(247,147,26,0.38);
+      background: linear-gradient(180deg, rgba(247,147,26,0.08), rgba(255,255,255,0.02));
+    }
+
+    .payHero h2 {
+      color: #ffd9a3;
     }
 
     .label {
@@ -141,16 +172,7 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       word-break: break-all;
       font-size: .92rem;
-      line-height: 1.5;
-    }
-
-    .copyable {
-      cursor: pointer;
-      user-select: all;
-    }
-
-    .copyable:hover {
-      opacity: 0.92;
+      line-height: 1.45;
     }
 
     .row {
@@ -169,11 +191,20 @@
       padding: 12px 16px;
       border-radius: 14px;
       cursor: pointer;
-      transition: transform .12s ease, opacity .12s ease;
+      transition: transform .12s ease, opacity .12s ease, box-shadow .12s ease;
     }
 
-    button:hover { transform: translateY(-1px); }
-    button:disabled { opacity: .65; cursor: wait; transform: none; }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(0,0,0,.22);
+    }
+
+    button:disabled {
+      opacity: .65;
+      cursor: wait;
+      transform: none;
+      box-shadow: none;
+    }
 
     button.secondary {
       background: transparent;
@@ -187,22 +218,18 @@
       border-color: rgba(255,123,114,.35);
     }
 
-    input, textarea, button {
-      font-size: 16px;
-    }
-
     input, textarea {
       width: 100%;
       padding: 12px 14px;
       border-radius: 14px;
       border: 1px solid var(--border);
-      background: #0c1322;
+      background: var(--panel2);
       color: var(--text);
       font-size: 1rem;
     }
 
     textarea {
-      min-height: 170px;
+      min-height: 180px;
       resize: vertical;
     }
 
@@ -213,7 +240,17 @@
       line-height: 1.5;
     }
 
-    .qrWrap {
+    .modeBadge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(247,147,26,0.12);
+      border: 1px solid rgba(247,147,26,0.28);
+      color: #ffd9a3;
+      font-size: .82rem;
+    }
+
+    .qrPanel {
       display: grid;
       gap: 12px;
       justify-items: center;
@@ -222,13 +259,14 @@
 
     .qrBox {
       background: white;
-      padding: 18px;
+      padding: 16px;
       border-radius: 20px;
-      min-height: 250px;
-      min-width: 250px;
+      min-height: 260px;
+      min-width: 260px;
       display: grid;
       place-items: center;
       overflow: hidden;
+      cursor: pointer;
     }
 
     .qrBox img,
@@ -238,10 +276,50 @@
       display: block;
     }
 
+    .valueBox {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--text);
+      min-height: 52px;
+    }
+
+    .copyable {
+      cursor: pointer;
+      user-select: all;
+    }
+
+    .copyable:hover {
+      opacity: .94;
+    }
+
+    .offerPreview {
+      max-height: 82px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    details.section {
+      padding-top: 14px;
+    }
+
+    details.section summary {
+      cursor: pointer;
+      list-style: none;
+      font-weight: 700;
+      margin: -2px 0 0;
+    }
+
+    details.section summary::-webkit-details-marker {
+      display: none;
+    }
+
     .historyList {
       display: grid;
       gap: 12px;
-      margin-top: 12px;
+      margin-top: 14px;
     }
 
     .historyItem {
@@ -325,42 +403,34 @@
       font-size: .92rem;
     }
 
-    @media (max-width: 860px) {
-      .grid {
+    @media (max-width: 940px) {
+      .heroGrid,
+      .midGrid {
         grid-template-columns: 1fr;
       }
     }
 
-    @media (max-width: 700px) {
+    @media (max-width: 560px) {
       body {
         padding: 10px;
       }
 
       .card {
-        padding: 14px;
-        border-radius: 16px;
+        padding: 18px;
+        border-radius: 18px;
       }
 
       h1 {
-        font-size: 1.4rem;
-      }
-
-      .section {
-        padding: 14px;
-        margin-top: 12px;
-      }
-
-      .row {
-        gap: 8px;
-      }
-
-      button {
-        width: 100%;
+        font-size: 1.7rem;
       }
 
       .qrBox {
-        min-width: 220px;
         min-height: 220px;
+        min-width: 220px;
+      }
+
+      .row button {
+        width: 100%;
       }
     }
   </style>
@@ -371,17 +441,42 @@
   </div>
 
   <main class="card">
-    <div class="pill">BOLT12 Admin</div>
-    <h1>⚡ BOLT12 Admin</h1>
-    <div class="sub">Offer erzeugen, bezahlen, decoden, QR scannen und BIP353-Aliasse in Cloudflare anlegen.</div>
+    <div class="pill">BOLT12 Pay Server</div>
+     <h1>⚡ Lightning BOLT12 Pay</h1>
+    <div class="sub">
+      LNDK kann Offers nicht nur erzeugen, sondern auch direkt bezahlen.
+      Deshalb steht der Pay-Bereich bewusst ganz oben im Fokus.
+    </div>
 
-    <div class="row">
+    <div class="topActions">
       <button class="secondary" id="installBtn" type="button" hidden>Admin-App installieren</button>
       <button class="secondary" id="scanToDecodeBtn" type="button">QR → Decode</button>
       <button class="secondary" id="scanToPayBtn" type="button">QR → Pay</button>
     </div>
 
-    <div class="grid">
+    <div class="heroGrid">
+      <section class="section payHero">
+        <h2>Offer bezahlen</h2>
+
+        <label class="label" for="payOfferInput">Offer oder BIP353-Adresse</label>
+        <input id="payOfferInput" type="text" placeholder="lno... oder bolt12@alex71btc.com" />
+
+        <label class="label" for="payAmountInput" style="margin-top:14px;">Zahlbetrag in sats</label>
+        <input id="payAmountInput" type="number" min="1" step="1" placeholder="z. B. 1000" />
+
+        <label class="label" for="payerNoteInput" style="margin-top:14px;">Payer Note (optional)</label>
+        <input id="payerNoteInput" type="text" placeholder="z. B. test" />
+
+        <div class="row">
+          <button id="payOfferBtn" type="button">Offer bezahlen</button>
+          <button class="secondary" id="useCurrentOfferBtn" type="button">Aktuelles Offer übernehmen</button>
+        </div>
+
+        <div class="hint">
+          Kernfunktion: direkte LNDK-Offer-Zahlung zum Testen von Interop und echten Payments.
+        </div>
+      </section>
+
       <section class="section">
         <h2>Offer erzeugen</h2>
 
@@ -395,68 +490,65 @@
           <button id="createOfferBtn" type="button">Offer erzeugen</button>
         </div>
 
-        <label class="label" for="offerInput" style="margin-top:14px;">Aktuelles Offer</label>
-        <input id="offerInput" class="copyable" type="text" placeholder="Hier erscheint das lno... Offer" readonly title="Zum Kopieren antippen" />
-
-        <div class="row">
-          <button class="secondary" id="copyOfferBtn" type="button">Offer kopieren</button>
-          <button class="secondary" id="makeOfferQrBtn" type="button">Offer-QR erzeugen</button>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2>Offer-QR</h2>
-        <div id="offerQr" class="qrWrap copyable" title="Offer kopieren"></div>
         <div class="hint">
-          Antippen auf den QR kopiert das aktuelle Offer.
+          Der erzeugte Offer-String kann direkt als QR angezeigt oder in Pay / Decode übernommen werden.
         </div>
       </section>
     </div>
 
-    <section class="section">
-      <h2>Offer bezahlen</h2>
+    <div class="midGrid">
+      <section class="section">
+        <h2>Aktuelles Offer / QR</h2>
 
-      <label class="label" for="payOfferInput">Offer oder BIP353-Adresse</label>
-      <input id="payOfferInput" type="text" placeholder="lno... oder bolt12@alex71btc.com" />
+        <div class="qrPanel">
+          <div id="qrModeBadge" class="modeBadge">QR: Standardadresse</div>
+          <div id="offerQrBox" class="qrBox" title="Antippen = aktiven Inhalt kopieren"></div>
+          <div class="hint">
+            Solange noch kein Offer erzeugt wurde, zeigt der QR standardmäßig
+            <span class="mono">bolt12@alex71btc.com</span>.
+          </div>
+        </div>
 
-      <label class="label" for="payAmountInput" style="margin-top:14px;">Zahlbetrag in sats</label>
-      <input id="payAmountInput" type="number" min="1" step="1" placeholder="z. B. 21" />
+        <label class="label" for="offerPreviewBox" style="margin-top:14px;">Aktiver Inhalt</label>
+        <div id="offerPreviewBox" class="valueBox mono copyable offerPreview" title="Zum Kopieren antippen">
+          bolt12@alex71btc.com
+        </div>
 
-      <label class="label" for="payerNoteInput" style="margin-top:14px;">Payer Note (optional)</label>
-      <input id="payerNoteInput" type="text" placeholder="z. B. test" />
+        <input id="offerInput" type="hidden" />
 
-      <div class="row">
-        <button id="payOfferBtn" type="button">Offer bezahlen</button>
-        <button class="secondary" id="useCurrentOfferBtn" type="button">Aktuelles Offer übernehmen</button>
-      </div>
-    </section>
+        <div class="row">
+          <button class="secondary" id="copyOfferBtn" type="button">Aktiven Inhalt kopieren</button>
+          <button class="secondary" id="makeOfferQrBtn" type="button">QR aktualisieren</button>
+        </div>
+      </section>
 
-    <section class="section">
-      <h2>Offer decoden</h2>
+      <section class="section">
+        <h2>Offer decoden</h2>
 
-      <label class="label" for="decodeInput">Offer oder BIP353-Adresse</label>
-      <input id="decodeInput" type="text" placeholder="lno... oder user@domain" />
+        <label class="label" for="decodeInput">Offer oder BIP353-Adresse</label>
+        <input id="decodeInput" type="text" placeholder="lno... oder user@domain" />
 
-      <div class="row">
-        <button id="decodeBtn" type="button">Decode</button>
-      </div>
+        <div class="row">
+          <button id="decodeBtn" type="button">Decode</button>
+        </div>
 
-      <label class="label" for="decodeOutput" style="margin-top:14px;">Decode-Ausgabe</label>
-      <textarea id="decodeOutput" class="mono copyable" readonly placeholder="Hier erscheint die Decode-Ausgabe..." title="Zum Kopieren antippen"></textarea>
-    </section>
+        <label class="label" for="decodeOutput" style="margin-top:14px;">Decode-Ausgabe</label>
+        <textarea id="decodeOutput" class="mono copyable" readonly placeholder="Hier erscheint die Decode-Ausgabe..." title="Zum Kopieren antippen"></textarea>
+      </section>
+    </div>
 
-    <section class="section">
-      <h2>Offer History</h2>
+    <details class="section">
+      <summary>Offer History</summary>
       <div class="row">
         <button class="secondary" id="clearHistoryBtn" type="button">History löschen</button>
       </div>
       <div id="historyList" class="historyList"></div>
-    </section>
+    </details>
 
-    <section class="section">
-      <h2>Cloudflare BIP353 Alias</h2>
+    <details class="section">
+      <summary>Alias / Cloudflare BIP353</summary>
 
-      <label class="label" for="cfRecordNameInput">Record Name</label>
+      <label class="label" for="cfRecordNameInput" style="margin-top:14px;">Record Name</label>
       <input id="cfRecordNameInput" type="text" placeholder="z. B. phoenixd" />
 
       <label class="label" for="cfOfferInput" style="margin-top:14px;">Offer (lno...)</label>
@@ -468,7 +560,8 @@
       </div>
 
       <div class="hint">
-        Erstellt einen TXT-Record wie <span class="mono">name.user._bitcoin-payment.alex71btc.com</span>.
+        Erstellt einen TXT-Record wie
+        <span class="mono">name.user._bitcoin-payment.alex71btc.com</span>.
       </div>
 
       <label class="label" for="cfHumanAddressOutput" style="margin-top:14px;">Erzeugte Adresse</label>
@@ -480,7 +573,7 @@
 
       <label class="label" for="cfResultOutput" style="margin-top:14px;">Ergebnis</label>
       <textarea id="cfResultOutput" class="mono copyable" readonly placeholder="Hier erscheint die Cloudflare-Antwort..." title="Zum Kopieren antippen"></textarea>
-    </section>
+    </details>
   </main>
 
   <div class="scannerModal" id="scannerModal" aria-hidden="true">
@@ -506,13 +599,17 @@
 
   <script>
     const HISTORY_KEY = 'bolt12_admin_history_v1';
+    const DEFAULT_ADDRESS = 'bolt12@alex71btc.com';
 
     const statusBar = document.getElementById('statusBar');
 
     const amountInput = document.getElementById('amountInput');
     const messageInput = document.getElementById('messageInput');
+
     const offerInput = document.getElementById('offerInput');
-    const offerQr = document.getElementById('offerQr');
+    const offerPreviewBox = document.getElementById('offerPreviewBox');
+    const qrModeBadge = document.getElementById('qrModeBadge');
+    const offerQrBox = document.getElementById('offerQrBox');
 
     const payOfferInput = document.getElementById('payOfferInput');
     const payAmountInput = document.getElementById('payAmountInput');
@@ -535,8 +632,6 @@
 
     let statusTimer = null;
     let deferredPrompt = null;
-    let scannerStream = null;
-    let scannerInterval = null;
     let html5Qr = null;
     let scanTarget = 'decode';
 
@@ -558,8 +653,14 @@
     }
 
     async function copyText(value, successMessage) {
+      const text = String(value || '').trim();
+      if (!text) {
+        setStatus('Kein Inhalt zum Kopieren vorhanden.', 'error');
+        return;
+      }
+
       try {
-        await navigator.clipboard.writeText(value);
+        await navigator.clipboard.writeText(text);
         setStatus(successMessage || 'Kopiert.');
       } catch (error) {
         setStatus('Kopieren fehlgeschlagen.', 'error');
@@ -567,57 +668,57 @@
     }
 
     function normalizeScannedText(raw) {
-      let value = (raw || '').trim();
+      let value = String(raw || '').trim();
 
       value = value.replace(/^lightning:/i, '');
       value = value.replace(/^bitcoin:\??/i, '');
-      value = value.replace(/^lno=/i, '');
 
+      const lnoParamMatch = value.match(/(?:^|\?|&)lno=([^&]+)/i);
+      if (lnoParamMatch && lnoParamMatch[1]) {
+        try {
+          value = decodeURIComponent(lnoParamMatch[1]).trim();
+        } catch {
+          value = lnoParamMatch[1].trim();
+        }
+      }
+
+      if (value.includes('?')) {
+        value = value.split('?')[0];
+      }
       if (value.includes('&')) {
         value = value.split('&')[0];
       }
 
-      value = value.trim();
-
-      const lnoMatch = value.match(/(?:^|\?|&)lno=([^&]+)/i);
-      if (lnoMatch && lnoMatch[1]) {
-        value = decodeURIComponent(lnoMatch[1]).trim();
-      }
-
-      return value;
+      return value.trim();
     }
 
-    function createQrBox(targetElement) {
-      targetElement.innerHTML = '';
-      const wrapper = document.createElement('div');
-      wrapper.className = 'qrWrap';
-
-      const box = document.createElement('div');
-      box.className = 'qrBox';
-
-      const text = document.createElement('div');
-      text.className = 'mono';
-
-      wrapper.appendChild(box);
-      wrapper.appendChild(text);
-      targetElement.appendChild(wrapper);
-
-      return { box, text };
+    function getCurrentOffer() {
+      return offerInput.value.trim();
     }
 
-    function renderOfferQr(offer) {
-      offerQr.innerHTML = '';
+    function getActiveValue() {
+      return getCurrentOffer() || DEFAULT_ADDRESS;
+    }
 
-      if (!offer || !offer.startsWith('lno')) {
-        setStatus('Bitte zuerst ein gültiges lno... Offer eintragen.', 'error');
-        return;
+    function setCurrentOffer(value) {
+      const offer = String(value || '').trim();
+      offerInput.value = offer;
+
+      if (offer) {
+        offerPreviewBox.textContent = offer;
+        qrModeBadge.textContent = 'QR: BOLT12 Offer';
+      } else {
+        offerPreviewBox.textContent = DEFAULT_ADDRESS;
+        qrModeBadge.textContent = 'QR: Standardadresse';
       }
+    }
 
-      const { box, text } = createQrBox(offerQr);
-      text.textContent = offer;
+    function renderOfferQr(value) {
+      const qrValue = String(value || '').trim() || DEFAULT_ADDRESS;
 
-      new QRCode(box, {
-        text: offer,
+      offerQrBox.innerHTML = '';
+      new QRCode(offerQrBox, {
+        text: qrValue,
         width: 220,
         height: 220,
         correctLevel: QRCode.CorrectLevel.M,
@@ -651,15 +752,6 @@
       setStatus('Offer-History gelöscht.');
     }
 
-    function escapeHtml(value) {
-      return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-    }
-
     function renderHistory() {
       const items = loadHistory();
       historyList.innerHTML = '';
@@ -678,176 +770,194 @@
 
         const meta = document.createElement('div');
         meta.className = 'historyMeta';
-        meta.innerHTML = `<strong>${escapeHtml(item.label || 'Ohne Label')}</strong> • ${escapeHtml(item.amountText || '')} • ${escapeHtml(item.timeText || '')}`;
-        wrap.appendChild(meta);
+        meta.textContent = `${item.timeText || ''} · ${item.amountText || ''}${item.label ? ' · ' + item.label : ''}`;
 
         const offer = document.createElement('div');
         offer.className = 'mono copyable';
         offer.title = 'Zum Kopieren antippen';
         offer.textContent = item.offer || '';
+
         offer.addEventListener('click', async () => {
-          await copyText(item.offer, 'Offer aus History kopiert.');
+          await copyText(item.offer, 'Offer kopiert.');
         });
-        wrap.appendChild(offer);
 
         const actions = document.createElement('div');
         actions.className = 'historyActions';
+
+        const usePayBtn = document.createElement('button');
+        usePayBtn.className = 'secondary';
+        usePayBtn.type = 'button';
+        usePayBtn.textContent = 'In Pay';
+        usePayBtn.addEventListener('click', () => {
+          payOfferInput.value = item.offer || '';
+          setStatus('Offer in Pay übernommen.');
+        });
+
+        const useQrBtn = document.createElement('button');
+        useQrBtn.className = 'secondary';
+        useQrBtn.type = 'button';
+        useQrBtn.textContent = 'Als QR';
+        useQrBtn.addEventListener('click', () => {
+          setCurrentOffer(item.offer || '');
+          renderOfferQr(getActiveValue());
+          setStatus('Offer als aktueller QR übernommen.');
+        });
 
         const copyBtn = document.createElement('button');
         copyBtn.className = 'secondary';
         copyBtn.type = 'button';
         copyBtn.textContent = 'Kopieren';
         copyBtn.addEventListener('click', async () => {
-          await copyText(item.offer, 'Offer aus History kopiert.');
+          await copyText(item.offer, 'Offer kopiert.');
         });
 
-        const useBtn = document.createElement('button');
-        useBtn.className = 'secondary';
-        useBtn.type = 'button';
-        useBtn.textContent = 'In Pay übernehmen';
-        useBtn.addEventListener('click', () => {
-          payOfferInput.value = item.offer || '';
-          offerInput.value = item.offer || '';
-          renderOfferQr(item.offer || '');
-          setStatus('Offer aus History in Pay übernommen.');
-        });
-
-        const qrBtn = document.createElement('button');
-        qrBtn.className = 'secondary';
-        qrBtn.type = 'button';
-        qrBtn.textContent = 'QR zeigen';
-        qrBtn.addEventListener('click', () => {
-          offerInput.value = item.offer || '';
-          renderOfferQr(item.offer || '');
-          setStatus('Offer-QR aus History angezeigt.');
-        });
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'danger';
-        deleteBtn.type = 'button';
-        deleteBtn.textContent = 'Löschen';
-        deleteBtn.addEventListener('click', () => {
-          const filtered = loadHistory().filter((x) => x.id !== item.id);
-          saveHistory(filtered);
+        const delBtn = document.createElement('button');
+        delBtn.className = 'danger';
+        delBtn.type = 'button';
+        delBtn.textContent = 'Löschen';
+        delBtn.addEventListener('click', () => {
+          const next = loadHistory().filter(entry => entry.id !== item.id);
+          saveHistory(next);
           renderHistory();
           setStatus('History-Eintrag gelöscht.');
         });
 
-        actions.append(copyBtn, useBtn, qrBtn, deleteBtn);
-        wrap.appendChild(actions);
-
+        actions.append(usePayBtn, useQrBtn, copyBtn, delBtn);
+        wrap.append(meta, offer, actions);
         historyList.appendChild(wrap);
       }
     }
 
-    async function startScanner(target) {
-      scanTarget = target;
-      scannerTitle.textContent = target === 'pay'
-        ? 'Scanne ein Offer oder eine BIP353-Adresse für das Pay-Feld.'
-        : 'Scanne ein Offer oder eine BIP353-Adresse für das Decode-Feld.';
+    async function readJsonOrThrow(response) {
+      const rawText = await response.text();
+      let data = null;
 
-      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-        setStatus('QR-Scanner benötigt HTTPS. Öffne die Admin-App über deine Tunnel-Domain.', 'error', true);
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        throw new Error(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.detail || data?.raw_output || data?.message || 'Serverfehler');
+      }
+
+      return data;
+    }
+
+    function applyScanResult(rawValue) {
+      const value = normalizeScannedText(rawValue);
+      if (!value) {
+        setStatus('QR-Inhalt konnte nicht gelesen werden.', 'error', true);
+        return;
+      }
+
+      if (scanTarget === 'pay') {
+        payOfferInput.value = value;
+        setStatus('QR-Inhalt in Pay übernommen.');
+      } else {
+        decodeInput.value = value;
+        setStatus('QR-Inhalt in Decode übernommen.');
+      }
+
+      closeScanner();
+    }
+
+    async function openScanner(target) {
+      scanTarget = target;
+      scannerTitle.textContent =
+        target === 'pay'
+          ? 'Scanne ein Offer oder eine BIP353-Adresse für Pay.'
+          : 'Scanne ein Offer oder eine BIP353-Adresse für Decode.';
+
+      if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        setStatus('QR-Scan benötigt HTTPS oder localhost.', 'error', true);
         return;
       }
 
       scannerModal.classList.add('show');
+      scannerModal.setAttribute('aria-hidden', 'false');
 
-      const onScanSuccess = (decodedText) => {
-        const normalized = normalizeScannedText(decodedText);
-        stopScanner();
-
-        if (scanTarget === 'pay') {
-          payOfferInput.value = normalized;
-          setStatus('QR erfolgreich in das Pay-Feld übernommen.');
-        } else {
-          decodeInput.value = normalized;
-          setStatus('QR erfolgreich in das Decode-Feld übernommen.');
-        }
-      };
+      if (typeof Html5Qrcode === 'undefined') {
+        setStatus('html5-qrcode konnte nicht geladen werden.', 'error', true);
+        return;
+      }
 
       try {
-        if ('BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia) {
-          const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        scannerReader.style.display = 'block';
+        scannerVideo.style.display = 'none';
 
-          scannerStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' },
-            audio: false
-          });
-
-          scannerVideo.style.display = 'block';
-          scannerReader.style.display = 'none';
-          scannerVideo.srcObject = scannerStream;
-
-          scannerInterval = setInterval(async () => {
-            try {
-              const barcodes = await detector.detect(scannerVideo);
-              if (!barcodes.length) return;
-              const rawValue = barcodes[0].rawValue || '';
-              if (!rawValue) return;
-              onScanSuccess(rawValue);
-            } catch {}
-          }, 500);
-
-          return;
-        }
-
-        if (window.Html5Qrcode) {
-          scannerVideo.style.display = 'none';
-          scannerReader.style.display = 'block';
-          scannerReader.innerHTML = '';
-
+        if (!html5Qr) {
           html5Qr = new Html5Qrcode('scannerReader');
-          await html5Qr.start(
-            { facingMode: 'environment' },
-            { fps: 10, qrbox: { width: 220, height: 220 } },
-            (decodedText) => onScanSuccess(decodedText)
-          );
-          return;
         }
 
-        setStatus('Kein unterstützter QR-Scanner im Browser verfügbar.', 'error', true);
+        await html5Qr.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 260, height: 260 }
+          },
+          decodedText => {
+            applyScanResult(decodedText);
+          },
+          () => {}
+        );
       } catch (error) {
-        stopScanner();
         const message = error instanceof Error ? error.message : String(error);
-        setStatus(`Scanner konnte nicht gestartet werden: ${message}`, 'error', true);
+        closeScanner(false);
+        if (/permission|NotAllowedError/i.test(message)) {
+          setStatus('Kein Kamera-Zugriff erlaubt.', 'error', true);
+        } else if (/https|secure/i.test(message)) {
+          setStatus('QR-Scan benötigt HTTPS oder localhost.', 'error', true);
+        } else {
+          setStatus(`Scanner-Start fehlgeschlagen: ${message}`, 'error', true);
+        }
       }
     }
 
-    async function stopScanner() {
-      if (scannerInterval) {
-        clearInterval(scannerInterval);
-        scannerInterval = null;
-      }
-
-      if (scannerStream) {
-        scannerStream.getTracks().forEach((track) => track.stop());
-        scannerStream = null;
-      }
+    async function closeScanner(showMessage = false) {
+      scannerModal.classList.remove('show');
+      scannerModal.setAttribute('aria-hidden', 'true');
 
       if (html5Qr) {
-        try { await html5Qr.stop(); } catch {}
-        try { await html5Qr.clear(); } catch {}
-        html5Qr = null;
+        try {
+          if (html5Qr.isScanning) {
+            await html5Qr.stop();
+          }
+        } catch {}
+        try {
+          await html5Qr.clear();
+        } catch {}
       }
 
-      scannerVideo.srcObject = null;
-      scannerVideo.style.display = 'none';
-      scannerReader.innerHTML = '';
       scannerReader.style.display = 'none';
-      scannerModal.classList.remove('show');
+      scannerVideo.style.display = 'none';
+
+      if (showMessage) {
+        setStatus('Scanner geschlossen.', 'warn');
+      }
     }
 
-    document.getElementById('scanToDecodeBtn').addEventListener('click', () => startScanner('decode'));
-    document.getElementById('scanToPayBtn').addEventListener('click', () => startScanner('pay'));
-    document.getElementById('closeScannerBtn').addEventListener('click', async () => { await stopScanner(); });
-    scannerModal.addEventListener('click', async (event) => {
-      if (event.target === scannerModal) await stopScanner();
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      deferredPrompt = event;
+      const installBtn = document.getElementById('installBtn');
+      installBtn.hidden = false;
+    });
+
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      try {
+        await deferredPrompt.userChoice;
+      } catch {}
+      deferredPrompt = null;
+      document.getElementById('installBtn').hidden = true;
     });
 
     document.getElementById('createOfferBtn').addEventListener('click', async () => {
       const amountValue = amountInput.value.trim();
-      const descriptionValue = messageInput.value.trim() || 'bolt12 admin';
+      const descriptionValue = messageInput.value.trim() || DEFAULT_ADDRESS;
       const payload = { description: descriptionValue };
 
       if (amountValue) payload.amount = Number(amountValue);
@@ -864,10 +974,9 @@
           body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Offer konnte nicht erzeugt werden.');
+        const data = await readJsonOrThrow(response);
 
-        offerInput.value = data.offer;
+        setCurrentOffer(data.offer);
         renderOfferQr(data.offer);
 
         const amountText = amountValue ? `${amountValue} sats min` : '1 sat default';
@@ -890,40 +999,32 @@
     });
 
     document.getElementById('copyOfferBtn').addEventListener('click', async () => {
-      const value = offerInput.value.trim();
-      if (!value) {
-        setStatus('Noch kein Offer vorhanden.', 'error');
-        return;
-      }
-      await copyText(value, 'Offer kopiert.');
+      await copyText(getActiveValue(), 'Aktiver Inhalt kopiert.');
     });
 
     document.getElementById('makeOfferQrBtn').addEventListener('click', () => {
-      renderOfferQr(offerInput.value.trim());
+      renderOfferQr(getActiveValue());
+      setStatus('QR aktualisiert.');
     });
 
-    offerInput.addEventListener('click', async () => {
-      const value = offerInput.value.trim();
-      if (!value) return;
-      await copyText(value, 'Offer kopiert.');
+    offerPreviewBox.addEventListener('click', async () => {
+      await copyText(getActiveValue(), 'Aktiver Inhalt kopiert.');
     });
 
-    offerQr.addEventListener('click', async () => {
-      const value = offerInput.value.trim();
-      if (!value) {
-        setStatus('Noch kein Offer vorhanden.', 'error');
-        return;
-      }
-      await copyText(value, 'Offer kopiert.');
+    offerQrBox.addEventListener('click', async () => {
+      await copyText(getActiveValue(), 'Aktiver Inhalt kopiert.');
     });
 
     document.getElementById('useCurrentOfferBtn').addEventListener('click', () => {
-      const currentOffer = offerInput.value.trim();
-      payOfferInput.value = currentOffer;
-      if (currentOffer.startsWith('lno')) {
-        renderOfferQr(currentOffer);
+      const currentOffer = getCurrentOffer();
+      if (!currentOffer) {
+        payOfferInput.value = DEFAULT_ADDRESS;
+        setStatus('Noch kein Offer vorhanden — Standardadresse in Pay übernommen.');
+        return;
       }
-      setStatus('Aktuelles Offer übernommen.');
+
+      payOfferInput.value = currentOffer;
+      setStatus('Aktuelles Offer in Pay übernommen.');
     });
 
     document.getElementById('payOfferBtn').addEventListener('click', async () => {
@@ -935,6 +1036,7 @@
         setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error');
         return;
       }
+
       if (!amountSat) {
         setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error');
         return;
@@ -958,19 +1060,7 @@
           body: JSON.stringify(payload)
         });
 
-        const rawText = await response.text();
-        let data = null;
-
-        try {
-          data = rawText ? JSON.parse(rawText) : null;
-        } catch {
-          throw new Error(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
-        }
-
-        if (!response.ok) {
-          throw new Error(data?.detail || data?.raw_output || 'Offer konnte nicht bezahlt werden.');
-        }
-
+        const data = await readJsonOrThrow(response);
         setStatus(data?.raw_output || 'Offer erfolgreich bezahlt.');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -982,7 +1072,7 @@
     });
 
     document.getElementById('decodeBtn').addEventListener('click', async () => {
-      const offer = decodeInput.value.trim();
+      const offer = normalizeScannedText(decodeInput.value);
       if (!offer) {
         setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error');
         return;
@@ -999,9 +1089,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ offer })
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Decode fehlgeschlagen.');
-        decodeOutput.value = data.raw_output;
+
+        const data = await readJsonOrThrow(response);
+        decodeOutput.value = data.raw_output || '';
         setStatus('Decode erfolgreich.');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1014,14 +1104,17 @@
 
     decodeOutput.addEventListener('click', async () => {
       const value = decodeOutput.value.trim();
-      if (!value) return;
+      if (!value) {
+        setStatus('Noch keine Decode-Ausgabe vorhanden.', 'error');
+        return;
+      }
       await copyText(value, 'Decode-Ausgabe kopiert.');
     });
 
     document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
 
     document.getElementById('cfUseCurrentOfferBtn').addEventListener('click', () => {
-      const currentOffer = offerInput.value.trim();
+      const currentOffer = getCurrentOffer();
       if (!currentOffer || !currentOffer.startsWith('lno')) {
         setStatus('Kein gültiges aktuelles Offer zum Übernehmen vorhanden.', 'error');
         return;
@@ -1031,110 +1124,94 @@
       setStatus('Aktuelles Offer in Cloudflare-Formular übernommen.');
     });
 
-    document.getElementById('cfCreateAliasBtn').addEventListener('click', async () => {
-      const recordName = cfRecordNameInput.value.trim().toLowerCase();
-      const offer = normalizeScannedText(cfOfferInput.value);
 
-      if (!recordName) {
-        setStatus('Bitte einen Record Name eingeben.', 'error');
-        return;
-      }
+document.getElementById('cfCreateAliasBtn').addEventListener('click', async () => {
+  const recordName = cfRecordNameInput.value.trim().toLowerCase();
+  const offer = normalizeScannedText(cfOfferInput.value);
 
-      if (!offer || !offer.startsWith('lno')) {
-        setStatus('Bitte ein gültiges lno... Offer eingeben.', 'error');
-        return;
-      }
+  if (!recordName) {
+    setStatus('Bitte einen Record Name eingeben.', 'error');
+    return;
+  }
 
-      const btn = document.getElementById('cfCreateAliasBtn');
-      btn.disabled = true;
-      btn.textContent = 'Speichere...';
-      setStatus(`Speichere Cloudflare Alias: ${recordName}`, 'warn');
+  if (!offer || !offer.startsWith('lno')) {
+    setStatus('Bitte ein gültiges lno... Offer eingeben.', 'error');
+    return;
+  }
 
-      try {
-        const response = await fetch('/api/cloudflare/create-bip353', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            record_name: recordName,
-            offer: offer
-          })
-        });
+  const btn = document.getElementById('cfCreateAliasBtn');
+  btn.disabled = true;
+  btn.textContent = 'Speichere...';
+  setStatus(`Speichere Cloudflare Alias: ${recordName}`, 'warn');
 
-        const rawText = await response.text();
-        let data = null;
+  try {
+    const response = await fetch('/api/cloudflare/create-bip353', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        record_name: recordName,
+        offer: offer
+      })
+    });
 
-        try {
-          data = rawText ? JSON.parse(rawText) : null;
-        } catch {
-          throw new Error(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
-        }
+    const data = await readJsonOrThrow(response);
 
-        if (!response.ok) {
-          throw new Error(
-            typeof data?.detail === 'string'
-              ? data.detail
-              : JSON.stringify(data?.detail || data)
-          );
-        }
+  const humanAddress =
+    data?.human_readable_address ||
+    data?.address ||
+    data?.bip353_address ||
+    '';
 
-        const zoneName = 'alex71btc.com';
-        const humanAddress = `${recordName}@${zoneName}`;
-
-        cfHumanAddressOutput.value = humanAddress;
-        cfResultOutput.value = JSON.stringify(data, null, 2);
-        setStatus(`Cloudflare Alias gespeichert: ${humanAddress}`, 'ok', true);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setStatus(`Cloudflare-Fehler: ${message}`, 'error', true);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Alias bei Cloudflare speichern';
-      }
+    cfHumanAddressOutput.value = humanAddress;
+    cfResultOutput.value = JSON.stringify(data, null, 2);
+    setStatus(humanAddress ? `Alias gespeichert: ${humanAddress}` : 'Cloudflare Alias gespeichert.');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    cfResultOutput.value = String(message);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Alias bei Cloudflare speichern';
+  }
+});
+    cfHumanAddressOutput.addEventListener('click', async () => {
+      await copyText(cfHumanAddressOutput.value, 'Adresse kopiert.');
     });
 
     cfResultOutput.addEventListener('click', async () => {
-      const value = cfResultOutput.value.trim();
-      if (!value) return;
-      await copyText(value, 'Cloudflare-Ergebnis kopiert.');
-    });
-
-    cfHumanAddressOutput.addEventListener('click', async () => {
-      const value = cfHumanAddressOutput.value.trim();
-      if (!value) return;
-      await copyText(value, 'Adresse kopiert.');
+      await copyText(cfResultOutput.value, 'Cloudflare-Ergebnis kopiert.');
     });
 
     document.getElementById('cfCopyHumanAddressBtn').addEventListener('click', async () => {
-      const value = cfHumanAddressOutput.value.trim();
-      if (!value) {
-        setStatus('Noch keine erzeugte Adresse vorhanden.', 'error');
-        return;
+      await copyText(cfHumanAddressOutput.value, 'Adresse kopiert.');
+    });
+
+    document.getElementById('scanToDecodeBtn').addEventListener('click', async () => {
+      await openScanner('decode');
+    });
+
+    document.getElementById('scanToPayBtn').addEventListener('click', async () => {
+      await openScanner('pay');
+    });
+
+    document.getElementById('closeScannerBtn').addEventListener('click', async () => {
+      await closeScanner(true);
+    });
+
+    scannerModal.addEventListener('click', async event => {
+      if (event.target === scannerModal) {
+        await closeScanner(false);
       }
-      await copyText(value, 'Adresse kopiert.');
     });
 
-    const installBtn = document.getElementById('installBtn');
-
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
-      });
-    }
-
-    window.addEventListener('beforeinstallprompt', (event) => {
-      event.preventDefault();
-      deferredPrompt = event;
-      installBtn.hidden = false;
+    document.addEventListener('keydown', async event => {
+      if (event.key === 'Escape' && scannerModal.classList.contains('show')) {
+        await closeScanner(false);
+      }
     });
 
-    installBtn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      installBtn.hidden = true;
-    });
-
+    setCurrentOffer('');
+    renderOfferQr(DEFAULT_ADDRESS);
     renderHistory();
   </script>
 </body>

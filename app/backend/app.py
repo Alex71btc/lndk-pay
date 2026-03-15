@@ -1046,7 +1046,6 @@ def pay_offer(payload: PayOfferRequest) -> PayOfferResponse:
     raw_output = _run_command(args)
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 
-
 @app.post("/api/cloudflare/create-bip353")
 async def create_cloudflare_bip353(req: CloudflareBIP353Request):
     record_name = req.record_name.strip().lower()
@@ -1058,12 +1057,23 @@ async def create_cloudflare_bip353(req: CloudflareBIP353Request):
 
     result = await _cloudflare_upsert_txt_record(name=txt_name, content=txt_value)
 
+    cfg = load_config()
+    public_bolt12_address = str(cfg.get("public_bolt12_address", "")).strip()
+
+    human_readable_address = ""
+    if "@" in public_bolt12_address:
+        domain = public_bolt12_address.split("@", 1)[1].strip()
+        if domain:
+            human_readable_address = f"{record_name}@{domain}"
+
     return {
         "ok": True,
         "name": txt_name,
         "content": txt_value,
         "result": result,
+        "human_readable_address": human_readable_address,
     }
+
 @app.get("/api/alias")
 def list_aliases():
     cfg = load_config()
