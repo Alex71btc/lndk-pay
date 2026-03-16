@@ -32,43 +32,6 @@
       padding: 20px;
     }
 
-    .toastWrap {
-      position: fixed;
-      top: 14px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: min(760px, calc(100vw - 20px));
-      z-index: 3000;
-      pointer-events: none;
-    }
-
-    .statusBar {
-      display: none;
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: #0c1322;
-      font-size: .95rem;
-      line-height: 1.4;
-      box-shadow: 0 12px 30px rgba(0,0,0,.35);
-      pointer-events: auto;
-      text-align: center;
-    }
-
-    .statusBar.show { display: block; }
-
-    .statusBar.ok {
-      border-color: rgba(143, 227, 136, .35);
-      background: rgba(143, 227, 136, .10);
-      color: var(--ok);
-    }
-
-    .statusBar.error {
-      border-color: rgba(255, 123, 114, .35);
-      background: rgba(255, 123, 114, .10);
-      color: var(--danger);
-    }
-
     .card {
       width: 100%;
       max-width: 1180px;
@@ -219,6 +182,16 @@
       line-height: 1.5;
     }
 
+    .status {
+      margin-top: 18px;
+      font-size: .95rem;
+      min-height: 1.4em;
+      line-height: 1.5;
+    }
+
+    .status.ok { color: var(--ok); }
+    .status.error { color: var(--danger); }
+
     .qrPanel {
       display: grid;
       gap: 12px;
@@ -313,10 +286,6 @@
   </style>
 </head>
 <body>
-  <div class="toastWrap">
-    <div class="statusBar" id="status"></div>
-  </div>
-
   <main class="card">
     <div class="pill">BOLT12 Admin</div>
     <h1>⚡ Admin Console</h1>
@@ -410,6 +379,8 @@
         <textarea id="decodeOutput" class="mono copyable" readonly placeholder="Hier erscheint die Decode-Ausgabe..." title="Zum Kopieren antippen"></textarea>
       </section>
     </div>
+
+    <div class="status" id="status"></div>
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -439,26 +410,10 @@
     const useCurrentOfferBtn = document.getElementById('useCurrentOfferBtn');
     const payOfferBtn = document.getElementById('payOfferBtn');
     const decodeBtn = document.getElementById('decodeBtn');
-    const scanToDecodeBtn = document.getElementById('scanToDecodeBtn');
-    const scanToPayBtn = document.getElementById('scanToPayBtn');
 
-    let statusTimer = null;
-
-    function setStatus(msg, type = 'ok', persist = false) {
+    function setStatus(msg, type = 'ok') {
       statusEl.textContent = msg;
-      statusEl.className = `statusBar show ${type}`;
-
-      if (statusTimer) {
-        clearTimeout(statusTimer);
-        statusTimer = null;
-      }
-
-      if (!persist) {
-        statusTimer = setTimeout(() => {
-          statusEl.className = 'statusBar';
-          statusEl.textContent = '';
-        }, 4200);
-      }
+      statusEl.className = `status ${type}`;
     }
 
     function getCurrentOffer() {
@@ -484,7 +439,7 @@
 
     async function copyText(value, okMessage) {
       if (!value) {
-        setStatus('Kein Inhalt zum Kopieren vorhanden.', 'error', true);
+        setStatus('Kein Inhalt zum Kopieren vorhanden.', 'error');
         return;
       }
       await navigator.clipboard.writeText(value);
@@ -505,40 +460,6 @@
         colorLight: '#ffffff'
       });
     }
-
-    function ensureCameraEnvironment() {
-      const isLocalhost =
-        location.hostname === 'localhost' ||
-        location.hostname === '127.0.0.1';
-
-      const isSecure = window.isSecureContext || isLocalhost;
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Dieser Browser unterstützt keinen Kamera-Zugriff.');
-      }
-
-      if (!isSecure) {
-        throw new Error('QR-Scan braucht HTTPS oder localhost.');
-      }
-    }
-
-    scanToDecodeBtn.addEventListener('click', () => {
-      try {
-        ensureCameraEnvironment();
-        setStatus('QR-Scan ist in dieser Admin-Version noch nicht aktiviert.', 'error', true);
-      } catch (error) {
-        setStatus(error.message || String(error), 'error', true);
-      }
-    });
-
-    scanToPayBtn.addEventListener('click', () => {
-      try {
-        ensureCameraEnvironment();
-        setStatus('QR-Scan ist in dieser Admin-Version noch nicht aktiviert.', 'error', true);
-      } catch (error) {
-        setStatus(error.message || String(error), 'error', true);
-      }
-    });
 
     createOfferBtn.addEventListener('click', async () => {
       const amountValue = amountInput.value.trim();
@@ -566,7 +487,7 @@
         setStatus('Offer erfolgreich erzeugt.');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setStatus(`Offer-Fehler: ${message}`, 'error', true);
+        setStatus(`Fehler: ${message}`, 'error');
       } finally {
         createOfferBtn.disabled = false;
         createOfferBtn.textContent = 'Offer erzeugen';
@@ -600,11 +521,11 @@
       const payerNote = payerNoteInput.value.trim();
 
       if (!offer) {
-        setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error', true);
+        setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error');
         return;
       }
       if (!amountSat) {
-        setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error', true);
+        setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error');
         return;
       }
 
@@ -626,15 +547,11 @@
         });
 
         const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.detail || data.raw_output || 'Offer konnte nicht bezahlt werden.');
-        }
-
-        setStatus(data.raw_output || 'Offer erfolgreich bezahlt.', 'ok', true);
+        if (!response.ok) throw new Error(data.detail || 'Offer konnte nicht bezahlt werden.');
+        setStatus(data.raw_output || 'Offer erfolgreich bezahlt.');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setStatus(`Payment-Fehler: ${message}`, 'error', true);
+        setStatus(`Fehler: ${message}`, 'error');
       } finally {
         payOfferBtn.disabled = false;
         payOfferBtn.textContent = 'Offer bezahlen';
@@ -644,7 +561,7 @@
     decodeBtn.addEventListener('click', async () => {
       const offer = decodeInput.value.trim();
       if (!offer) {
-        setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error', true);
+        setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error');
         return;
       }
 
@@ -666,7 +583,7 @@
         setStatus('Decode erfolgreich.');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setStatus(`Decode-Fehler: ${message}`, 'error', true);
+        setStatus(`Fehler: ${message}`, 'error');
       } finally {
         decodeBtn.disabled = false;
         decodeBtn.textContent = 'Decode';
@@ -684,7 +601,7 @@
     decodeOutput.addEventListener('click', async () => {
       const value = decodeOutput.value.trim();
       if (!value) {
-        setStatus('Noch keine Decode-Ausgabe vorhanden.', 'error', true);
+        setStatus('Noch keine Decode-Ausgabe vorhanden.', 'error');
         return;
       }
       await copyText(value, 'Decode-Ausgabe kopiert.');

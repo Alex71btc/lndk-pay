@@ -378,14 +378,56 @@
         min-height: 250px;
         padding: 18px;
       }
-    }
+
+.titleBlock {
+  width: 100%;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.headerLogo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  display: block;
+}
+
+@media (max-width: 600px) {
+  .headerLogo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .headerRow h1 {
+    font-size: 20px;
+    line-height: 1.15;
+    margin: 0;
+  }
+}
   </style>
 </head>
 <body>
-  <main class="card" id="setupCard" hidden>
-    <div class="pill">Erstkonfiguration</div>
-    <h1>⚙️ BOLT12 Pay Setup</h1>
-    <div class="sub">Grundkonfiguration für Public URL, Lightning-Adressen und DNS-Modus.</div>
+<main class="card" id="setupCard" hidden>
+  <div class="headerRow">
+    <div>
+      <div class="pill">Erstkonfiguration</div>
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+  <img
+    src="/assets/icon.png"
+    alt="BOLT12 Pay Logo"
+    style="width:56px;height:56px;object-fit:contain;display:block;"
+  >
+  <h1 style="margin:0;">⚙️ BOLT12 Pay Setup</h1>
+</div> 
+   <div class="sub">Grundkonfiguration für Public URL, Lightning-Adressen und DNS-Modus.</div>
 
     <section class="section">
       <label class="label" for="setupBolt12Address">Public BOLT12 Address</label>
@@ -444,14 +486,22 @@
     <div class="statusBar" id="statusBar"></div>
   </div>
 
-  <main class="card" id="payCard" hidden>
-    <div class="topBar">
-      <div>
-        <div class="pill">BOLT12 Pay Server</div>
-         <h1>⚡ BOLT12 Offer & Alias Console</h1>
-      </div>
-      <button class="secondary" id="openSetupBtn" type="button">⚙ Setup</button>
+<main class="card" id="payCard" hidden>
+  <div class="topBar">
+    <div class="titleBlock">
+      <div class="pill">BOLT12 Pay Server</div>
+      <div class="headerRow">
+<div style="display:flex;align-items:center;gap:16px;margin-top:10px;margin-bottom:12px;">
+  <img
+    src="/assets/icon.png"
+    alt="BOLT12 Pay Server Logo"
+    style="display:block;width:90px;height:90px;min-width:90px;max-width:90px;object-fit:contain;flex:0 0 90px;margin:0;filter:drop-shadow(0 0 3px rgba(255,200,0,0.35));"
+  >
+  <h1 style="margin:0;">⚡ BOLT12 Offer & Alias Console</h1>
+</div>
     </div>
+    <button class="secondary" id="openSetupBtn" type="button">⚙ Setup</button>
+  </div>
 
   <div class="sub">BOLT12 / BIP353 ist der primäre Zahlungsweg. LNURL und BOLT11 sind reine Fallbacks.</div>
 

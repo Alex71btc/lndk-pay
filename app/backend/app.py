@@ -16,6 +16,7 @@ import httpx
 import qrcode
 import hashlib
 import base64
+from pathlib import Path
 from io import BytesIO
 from fastapi.responses import FileResponse, Response, HTMLResponse
 from fastapi import FastAPI, HTTPException, Query
@@ -49,6 +50,17 @@ def get_public_bolt12_address():
 def get_public_lnurl_address():
     cfg = load_config()
     return cfg.get("public_lnurl_address") or os.environ.get("PUBLIC_LNURL_ADDRESS", "lnurl@pay.local")
+
+def get_cloudflare_config():
+    cfg = load_config()
+    cf = cfg.get("cloudflare", {}) or {}
+
+    return {
+        "enabled": bool(cf.get("enabled")),
+        "zone_name": str(cf.get("zone_name", "")).strip(),
+        "zone_id": str(cf.get("zone_id", "")).strip(),
+        "api_token": str(cf.get("api_token", "")).strip(),
+    }
 
 DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "10"))
 DNS_RESOLVER_TIMEOUT = float(os.environ.get("DNS_RESOLVER_TIMEOUT", "10"))
@@ -277,16 +289,6 @@ def _extract_offer_from_txt_record(txt_value: str) -> Optional[str]:
 
     return None
 
-def get_cloudflare_config():
-    cfg = load_config()
-    cf = cfg.get("cloudflare", {}) or {}
-
-    return {
-        "enabled": bool(cf.get("enabled")),
-        "zone_name": str(cf.get("zone_name", "")).strip(),
-        "zone_id": str(cf.get("zone_id", "")).strip(),
-        "api_token": str(cf.get("api_token", "")).strip(),
-    }
 
 def _new_resolver() -> dns.resolver.Resolver:
     resolver = dns.resolver.Resolver()
@@ -504,16 +506,40 @@ except RuntimeError as exc:
 def _lnurl_identifier(username: str) -> str:
     return f"{username}@{get_lnurl_base_domain()}"
 
+ASSETS_DIR = Path("/app/assets")
+LNURL_LOGO_PATH = ASSETS_DIR / "lnurl-logo.png"
+APP_ICON_PATH = ASSETS_DIR / "icon.png"
+
+
+def _read_base64_file(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def get_lnurl_logo_base64() -> str:
+    return _read_base64_file(LNURL_LOGO_PATH)
+
+
+def get_app_icon_url() -> str:
+    return "/assets/icon.png" if APP_ICON_PATH.exists() else ""
+
 def _lnurl_metadata_json(identifier: str, description: str) -> str:
+    logo_b64 = get_lnurl_logo_base64()
+
+    metadata = [
+        ["text/plain", description],
+        ["text/identifier", identifier],
+    ]
+
+    if logo_b64:
+        metadata.append(["image/png;base64", logo_b64])
+
     return json.dumps(
-        [
-            ["text/plain", description],
-            ["text/identifier", identifier],
-        ],
+        metadata,
         separators=(",", ":"),
         ensure_ascii=False,
     )
-
 
 def _resolve_lnurl_alias(username: str) -> dict[str, Any]:
     user = _normalize_lnurl_username(username)
@@ -570,9 +596,6 @@ def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
 def _lnurl_callback_url(username: str) -> str:
     return f"{get_lnurl_base_url()}/api/lnurl/callback/{username}"
 
-def get_lnurl_base_url():
-    cfg = load_config()
-    return cfg.get("lnurl_base_url") or os.environ.get("LNURL_BASE_URL", f"https://{get_lnurl_base_domain()}").rstrip("/")
 
 def _read_macaroon_hex(path: str) -> str:
     try:
@@ -612,10 +635,11 @@ async def _create_bolt11_invoice(
         "expiry": str(expiry),
     }
 
+    if memo:
+        payload["memo"] = memo
+
     if description_hash:
         payload["description_hash"] = description_hash
-    else:
-        payload["memo"] = memo
 
     verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
 
@@ -671,28 +695,6 @@ def _build_lnurl_info_for_address(address: str) -> dict[str, str]:
         "lnurlp_url": lnurlp_url,
         "lnurl": lnurl,
     }
-
-def get_public_bolt12_address():
-    cfg = load_config()
-    return cfg.get("public_bolt12_address") or os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@pay.local")
-
-
-def get_public_lnurl_address():
-    cfg = load_config()
-    return cfg.get("public_lnurl_address") or os.environ.get("PUBLIC_LNURL_ADDRESS", "lnurl@pay.local")
-
-
-def get_cloudflare_config():
-    cfg = load_config()
-    cf = cfg.get("cloudflare", {}) or {}
-
-    return {
-        "enabled": bool(cf.get("enabled")),
-        "zone_name": str(cf.get("zone_name", "")).strip(),
-        "zone_id": str(cf.get("zone_id", "")).strip(),
-        "api_token": str(cf.get("api_token", "")).strip(),
-    }
-
 
 def _normalize_alias_name(name: str) -> str:
     alias = name.strip().lower()
@@ -968,25 +970,33 @@ async def lnurl_callback(
     if comment and len(comment) > max(0, LNURL_COMMENT_ALLOWED):
         raise HTTPException(status_code=400, detail="comment too long")
 
+    print(f"LNURL callback username={username} amount={amount} comment={comment!r}")
     amount_sat = max(1, math.ceil(amount / 1000))
 
     metadata = _lnurl_metadata_for_alias(alias)
     description_hash = hashlib.sha256(metadata.encode("utf-8")).digest()
     description_hash_b64 = base64.b64encode(description_hash).decode("ascii")
 
+    memo = comment.strip() if comment else ""
+
     invoice = await _create_bolt11_invoice(
         amount_sat=amount_sat,
+        memo=memo,
         description_hash=description_hash_b64,
     )
 
     payment_request = invoice["payment_request"] if isinstance(invoice, dict) else str(invoice)
+
+    success_message = f"Payment request for {alias['identifier']}"
+    if comment:
+        success_message = f"{success_message} • Comment: {comment}"
 
     return {
         "pr": payment_request,
         "routes": [],
         "successAction": {
             "tag": "message",
-            "message": f"Payment request for {alias['identifier']}",
+            "message": success_message,
         },
         "disposable": False,
     }
@@ -1005,6 +1015,18 @@ def setup_status():
 @app.get("/api/setup/config")
 def get_setup_config():
     return load_config()
+
+@app.get("/assets/{filename}")
+def serve_asset(filename: str):
+    allowed = {"icon.png", "lnurl-logo.png"}
+    if filename not in allowed:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    path = ASSETS_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    return FileResponse(path)
 
 @app.post("/api/setup/config")
 def set_setup_config(payload: dict):
@@ -1262,7 +1284,6 @@ async def public_index_page():
     aliases = cfg.get("aliases", {}) or {}
 
     items_html = ""
-
     for alias_name, alias in aliases.items():
         description = alias.get("description") or "Lightning payment"
         amount_sat = alias.get("amount_sat")
@@ -1377,7 +1398,15 @@ async def public_index_page():
 </head>
 <body>
   <main class="card">
-    <h1>⚡ Lightning Payments</h1>
+<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px;">
+  <img
+    src="/assets/icon.png"
+    alt="BOLT12 Pay Server Logo"
+    style="width:72px;height:72px;object-fit:contain;display:block;filter:drop-shadow(0 0 3px rgba(255,200,0,0.35));"
+  >
+  <h1 style="margin:0;">⚡ Lightning Payments</h1>
+</div>
+</div>
     <div class="sub">
       Öffentliche Zahlungsseiten auf <span class="mono">{get_lnurl_base_domain()}</span><br />
       <span style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 Fallback</span>
@@ -1538,7 +1567,7 @@ async def public_alias_page(alias_name: str):
           </div>
           <div class="mono">{bolt11_invoice}</div>
           <div class="row">
-            <button onclick="payBolt11Invoice()">Mit Wallet öffnen</button>
+            <button onclick="payBolt11Invoice()">WebLN / Wallet</button>
             <button class="secondary" onclick="navigator.clipboard.writeText('{bolt11_invoice}')">Invoice kopieren</button>
           </div>
           <div class="hint">
@@ -1679,8 +1708,14 @@ button:hover {{
 
 <body>
 <main class="card">
-
 <h1>⚡ BOLT12 Payment Page</h1>
+<div style="text-align:center;margin:0 0 16px 0;">
+  <img
+    src="/assets/icon.png"
+    alt="BOLT12 Pay Server Logo"
+    style="width:64px;height:64px;object-fit:contain;display:block;margin:0 auto;filter:drop-shadow(0 0 2px rgba(255,200,0,0.30));"
+  >
+</div>
 
 <div class="mono">{bip353_address}</div>
 
