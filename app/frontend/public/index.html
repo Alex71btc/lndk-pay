@@ -1510,8 +1510,7 @@ invoiceBox.addEventListener('click', async () => {
 });
 
 walletOpenBtn.addEventListener('click', async () => {
-  const activeValue = (getActiveValue() || '').trim();
-
+  const activeValue = (getActiveQrValue() || '').trim();
   if (!activeValue) {
     setStatus('Kein aktiver Inhalt vorhanden.', 'error');
     return;
