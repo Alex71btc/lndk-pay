@@ -6,6 +6,8 @@ services:
     ports:
       - "8091:8081"
     environment:
+      PAY_UI_PASSWORD: "arschgesicht"
+      PAY_UI_SESSION_TTL: "1800"
       LNDK_CLI: /usr/local/bin/lndk-cli
       LNDK_NETWORK: bitcoin
       LNDK_GRPC_HOST: https://YOUR_NODE_IP

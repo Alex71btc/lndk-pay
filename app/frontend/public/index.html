@@ -1394,18 +1394,7 @@ async function payInvoiceWithWebln() {
       }
     });
    
-logoutBtn?.addEventListener('click', async () => {
-  try {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-      cache: 'no-store'
-    });
-  } catch {}
-  window.location.href = '/pay-login';
-});
-
-    addressBox.addEventListener('click', async () => {
+addressBox.addEventListener('click', async () => {
       if (!currentAddress) return;
       renderQrForValue(currentAddress, 'address');
       await copyText(currentAddress, 'BOLT12 Adresse kopiert.');
@@ -1532,22 +1521,14 @@ walletOpenBtn.addEventListener('click', async () => {
   const lightningUrl = `lightning:${normalized}`;
 
   try {
-    if (window.webln) {
+    if (window.webln?.enable) {
       await window.webln.enable();
 
-      if (/^lnbc|^lntb|^lnbcrt/i.test(normalized)) {
+      if (/^(lnbc|lntb|lnbcrt)/i.test(normalized) && window.webln?.sendPayment) {
         await window.webln.sendPayment(normalized);
         setStatus('BOLT11 an WebLN übergeben.');
         return;
       }
-
-      if (/^lnurl/i.test(normalized) || /^lno/i.test(normalized) || normalized.includes('@')) {
-        window.location.href = lightningUrl;
-        return;
-      }
-
-      window.location.href = lightningUrl;
-      return;
     }
 
     window.location.href = lightningUrl;
