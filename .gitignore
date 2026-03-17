@@ -7,3 +7,5 @@ secrets/
 app/secrets/
 *.pem
 *.macaroon
+*.bak
+cookies.txt
