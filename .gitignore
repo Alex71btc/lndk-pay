@@ -9,3 +9,4 @@ app/secrets/
 *.macaroon
 *.bak
 cookies.txt
+deploy/docker-compose.local.yml
