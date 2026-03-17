@@ -6,6 +6,10 @@ import os
 import re
 import shlex
 import subprocess
+import secrets
+import time
+import hmac
+import struct
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
@@ -18,10 +22,10 @@ import hashlib
 import base64
 from pathlib import Path
 from io import BytesIO
-from fastapi.responses import FileResponse, Response, HTMLResponse
-from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, Response, HTMLResponse, RedirectResponse, JSONResponse
+from starlette.requests import Request as StarletteRequest
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -42,6 +46,13 @@ LNDK_MACAROON_PATH = os.environ.get("LNDK_MACAROON_PATH", str(Path.home() / "adm
 REQUEST_TIMEOUT = float(os.environ.get("LNDK_TIMEOUT_SECONDS", "30"))
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 ALLOW_PAY_OFFER = os.environ.get("ALLOW_PAY_OFFER", "false").lower() in {"1", "true", "yes", "on"}
+
+PAY_UI_PASSWORD = os.getenv("PAY_UI_PASSWORD", "").strip()
+PAY_UI_SESSION_TTL = int(os.getenv("PAY_UI_SESSION_TTL", "1800"))
+PAY_UI_COOKIE_NAME = "pay_session"
+PAY_UI_ENABLED = bool(PAY_UI_PASSWORD)
+PAY_SESSIONS: dict[str, dict] = {}
+
 
 def get_public_bolt12_address():
     cfg = load_config()
@@ -201,6 +212,12 @@ class CreateInvoiceResponse(BaseModel):
 class AliasUpdateRequest(BaseModel):
     description: str = Field(min_length=1, max_length=200)
     amount_sat: Optional[int] = Field(default=None, ge=1)
+
+class PayLoginRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=300)
+    totp_code: Optional[str] = Field(default="")
+
+
 
 # --- App -------------------------------------------------------------------
 app = FastAPI(title="LNDK Backend", version="0.5.0")
@@ -1002,7 +1019,9 @@ async def lnurl_callback(
     }
 
 @app.get("/api/setup/status")
-def setup_status():
+def setup_status(request: StarletteRequest):
+    if PAY_UI_ENABLED and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
 
     cfg = load_config()
 
@@ -1016,17 +1035,9 @@ def setup_status():
 def get_setup_config():
     return load_config()
 
-@app.get("/assets/{filename}")
-def serve_asset(filename: str):
-    allowed = {"icon.png", "lnurl-logo.png"}
-    if filename not in allowed:
-        raise HTTPException(status_code=404, detail="Asset not found")
+from fastapi.staticfiles import StaticFiles
 
-    path = ASSETS_DIR / filename
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Asset not found")
-
-    return FileResponse(path)
+app.mount("/assets", StaticFiles(directory="/app/assets"), name="assets")
 
 @app.post("/api/setup/config")
 def set_setup_config(payload: dict):
@@ -1187,7 +1198,9 @@ def update_alias(name: str, payload: AliasUpdateRequest):
     return _build_alias_response(alias_name, alias_data)
 
 @app.post("/api/create-invoice", response_model=CreateInvoiceResponse)
-async def create_invoice(payload: CreateInvoiceRequest) -> CreateInvoiceResponse:
+async def create_invoice(payload: CreateInvoiceRequest, request: StarletteRequest) -> CreateInvoiceResponse:
+    if PAY_UI_ENABLED and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
     result = await _create_bolt11_invoice(
         amount_sat=payload.amount_sat,
         memo=payload.memo,
@@ -1406,13 +1419,13 @@ async def public_index_page():
   >
   <h1 style="margin:0;">⚡ Lightning Payments</h1>
 </div>
-</div>
     <div class="sub">
       Öffentliche Zahlungsseiten auf <span class="mono">{get_lnurl_base_domain()}</span><br />
       <span style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 Fallback</span>
     </div>
     <div class="row" style="margin-bottom: 18px;">
-      <button class="secondary" onclick="window.location.href='/app'">Generator / Admin öffnen</button>
+      <button class="secondary" onclick="window.location.href='/app'">Open App</button>
+      <button class="secondary" onclick="window.location.href='/pay'">Open Pay</button>
       <button class="secondary" onclick="window.location.href='/app?setup=1'">Setup Wizard</button>
     </div>
     <div class="aliasList">
@@ -1425,25 +1438,298 @@ async def public_index_page():
     return HTMLResponse(html)
 
 
+
+def _no_store_headers(extra: Optional[dict] = None) -> dict:
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _base32_normalize(secret: str) -> str:
+    return secret.strip().replace(" ", "").upper()
+
+
+def _totp_now(secret: str, timestep: int = 30, digits: int = 6) -> str:
+    secret = _base32_normalize(secret)
+    padded = secret + "=" * ((8 - len(secret) % 8) % 8)
+    key = base64.b32decode(padded, casefold=True)
+    counter = int(time.time() // timestep)
+    msg = struct.pack(">Q", counter)
+    digest = hmac.new(key, msg, hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    code_int = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+    code = code_int % (10 ** digits)
+    return str(code).zfill(digits)
+
+
+def _verify_totp(secret: str, code: str, window: int = 1, timestep: int = 30, digits: int = 6) -> bool:
+    secret = _base32_normalize(secret)
+    code = (code or "").strip().replace(" ", "")
+    if not secret:
+        return True
+    if not code or not code.isdigit():
+        return False
+
+    padded = secret + "=" * ((8 - len(secret) % 8) % 8)
+    key = base64.b32decode(padded, casefold=True)
+    now_counter = int(time.time() // timestep)
+
+    for delta in range(-window, window + 1):
+        counter = now_counter + delta
+        msg = struct.pack(">Q", counter)
+        digest = hmac.new(key, msg, hashlib.sha1).digest()
+        offset = digest[-1] & 0x0F
+        code_int = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+        candidate = str(code_int % (10 ** digits)).zfill(digits)
+        if hmac.compare_digest(candidate, code):
+            return True
+    return False
+
+
+def _create_pay_session() -> str:
+    token = secrets.token_urlsafe(32)
+    PAY_SESSIONS[token] = {
+        "created_at": int(time.time()),
+        "expires_at": int(time.time()) + PAY_UI_SESSION_TTL,
+    }
+    return token
+
+
+def _cleanup_pay_sessions() -> None:
+    now = int(time.time())
+    expired = [token for token, meta in PAY_SESSIONS.items() if int(meta.get("expires_at", 0)) <= now]
+    for token in expired:
+        PAY_SESSIONS.pop(token, None)
+
+
+def _get_pay_session_token(request: StarletteRequest) -> Optional[str]:
+    return request.cookies.get(PAY_UI_COOKIE_NAME)
+
+
+def _is_pay_session_valid(request: StarletteRequest) -> bool:
+    _cleanup_pay_sessions()
+    token = _get_pay_session_token(request)
+    if not token:
+        return False
+    meta = PAY_SESSIONS.get(token)
+    if not meta:
+        return False
+    if int(meta.get("expires_at", 0)) <= int(time.time()):
+        PAY_SESSIONS.pop(token, None)
+        return False
+    return True
+
+
+def require_pay_auth(request: Request) -> None:
+    if not PAY_UI_ENABLED:
+        return
+    if not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+
+def _pay_login_html() -> str:
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BOLT12 Pay Login</title>
+  <link rel="icon" type="image/png" href="/assets/icon.png" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <style>
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0b1220;
+      color: #eef2ff;
+      font-family: Inter, system-ui, sans-serif;
+    }}
+    .card {{
+      width: min(420px, calc(100vw - 32px));
+      background: #111827;
+      border: 1px solid #26324a;
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }}
+    input {{
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #eef2ff;
+      margin-top: 8px;
+      margin-bottom: 14px;
+    }}
+    button {{
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: none;
+      background: #f59e0b;
+      color: #111827;
+      font-weight: 700;
+      cursor: pointer;
+    }}
+    .muted {{ opacity: .8; font-size: .95rem; margin-bottom: 16px; }}
+    .error {{ color: #fca5a5; min-height: 24px; margin-top: 12px; white-space: pre-wrap; }}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+      <img src="/assets/icon.png" alt="Logo" style="width:48px;height:48px;border-radius:12px;">
+      <div>
+        <div style="font-size:1.25rem;font-weight:800;">⚡ BOLT12 Pay</div>
+        <div class="muted">Protected Pay Area</div>
+      </div>
+    </div>
+
+    <label>Password</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="Enter password" />
+
+    <button id="loginBtn" type="button">Login</button>
+    <div id="msg" class="error"></div>
+  </main>
+
+  <script>
+    const loginBtn = document.getElementById("loginBtn");
+    const passwordEl = document.getElementById("password");
+    const msgEl = document.getElementById("msg");
+
+    loginBtn.addEventListener("click", async () => {{
+      msgEl.textContent = "";
+      const payload = {{
+        password: passwordEl.value || "",
+        totp_code: totpEl ? (totpEl.value || "") : ""
+      }};
+
+      try {{
+        const res = await fetch("/api/auth/login", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          credentials: "same-origin",
+          cache: "no-store",
+          body: JSON.stringify(payload)
+        }});
+
+        const data = await res.json();
+
+        if (!res.ok) {{
+          msgEl.textContent = data.detail || data.error || "Login failed";
+          return;
+        }}
+
+        window.location.href = "/pay";
+      }} catch (err) {{
+        msgEl.textContent = "Login request failed";
+      }}
+    }});
+  </script>
+</body>
+</html>"""
+
 # --- Web files --------------------------------------------------------------
 if PUBLIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=PUBLIC_DIR), name="static")
 
 
 @app.get("/app")
-async def app_shell():
+async def app_shell(request: StarletteRequest):
+    if PAY_UI_ENABLED and not _is_pay_session_valid(request):
+        return RedirectResponse(url="/pay-login?next=/app", status_code=307)
+
     index_file = PUBLIC_DIR / "index.html"
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="frontend/public/index.html not found")
-    return FileResponse(index_file)
+
+    resp = FileResponse(index_file)
+    for k, v in _no_store_headers().items():
+        resp.headers[k] = v
+    return resp
 
 
-@app.get("/admin")
-def admin_page() -> FileResponse:
+@app.get("/pay")
+def pay_page(request: StarletteRequest):
+    if PAY_UI_ENABLED and not _is_pay_session_valid(request):
+        return RedirectResponse(url="/pay-login?next=/pay", status_code=307)
+
     index_file = ADMIN_DIR / "index.html"
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="frontend/admin/index.html not found")
-    return FileResponse(index_file)
+
+    resp = FileResponse(index_file)
+    for k, v in _no_store_headers().items():
+        resp.headers[k] = v
+    return resp
+
+
+@app.get("/admin")
+def admin_legacy_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/pay", status_code=307)
+
+
+@app.get("/pay-login")
+def pay_login_page():
+    if not PAY_UI_ENABLED:
+        return RedirectResponse(url="/pay", status_code=307)
+    file = ADMIN_DIR / "pay-login.html"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="frontend/admin/pay-login.html not found")
+    resp = FileResponse(file, media_type="text/html")
+    for k, v in _no_store_headers().items():
+        resp.headers[k] = v
+    return resp
+
+
+@app.post("/api/auth/login")
+def api_auth_login(payload: PayLoginRequest):
+    if not PAY_UI_ENABLED:
+        return JSONResponse({"ok": True, "disabled": True}, headers=_no_store_headers())
+
+    if not hmac.compare_digest(payload.password or "", PAY_UI_PASSWORD):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    token = _create_pay_session()
+
+    resp = JSONResponse({"ok": True}, headers=_no_store_headers())
+    resp.set_cookie(
+        key=PAY_UI_COOKIE_NAME,
+        value=token,
+        max_age=PAY_UI_SESSION_TTL,
+        httponly=True,
+        secure=False,
+        samesite="strict",
+        path="/",
+    )
+    return resp
+
+
+@app.get("/api/auth/session")
+def api_auth_session(request: StarletteRequest):
+    ok = _is_pay_session_valid(request) if PAY_UI_ENABLED else True
+    return JSONResponse({"ok": ok, "enabled": PAY_UI_ENABLED}, headers=_no_store_headers())
+
+
+@app.post("/api/auth/logout")
+def api_auth_logout(request: StarletteRequest):
+    token = _get_pay_session_token(request)
+    if token:
+        PAY_SESSIONS.pop(token, None)
+
+    resp = JSONResponse({"ok": True}, headers=_no_store_headers({"Clear-Site-Data": '"cache"'}))
+    resp.delete_cookie(key=PAY_UI_COOKIE_NAME, path="/")
+    return resp
+
 
 
 @app.get("/public.webmanifest")
@@ -1454,12 +1740,17 @@ def public_manifest() -> FileResponse:
     return FileResponse(file, media_type="application/manifest+json")
 
 
-@app.get("/admin.webmanifest")
-def admin_manifest() -> FileResponse:
-    file = ADMIN_DIR / "admin.webmanifest"
+@app.get("/pay.webmanifest")
+def pay_manifest() -> FileResponse:
+    file = ADMIN_DIR / "pay.webmanifest"
     if not file.exists():
-        raise HTTPException(status_code=404, detail="admin.webmanifest not found")
+        raise HTTPException(status_code=404, detail="pay.webmanifest not found")
     return FileResponse(file, media_type="application/manifest+json")
+
+
+@app.get("/admin.webmanifest")
+def admin_manifest_legacy() -> RedirectResponse:
+    return RedirectResponse(url="/pay.webmanifest", status_code=307)
 
 
 @app.get("/service-worker.js")
@@ -1467,7 +1758,9 @@ def service_worker() -> FileResponse:
     file = PUBLIC_DIR / "service-worker.js"
     if not file.exists():
         raise HTTPException(status_code=404, detail="service-worker.js not found")
-    return FileResponse(file, media_type="application/javascript")
+    resp = FileResponse(file, media_type="application/javascript")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
 
 
 @app.get("/icon.svg")
@@ -1481,12 +1774,15 @@ def icon_svg() -> FileResponse:
 async def public_alias_page(alias_name: str):
     reserved_paths = {
         "admin",
+        "pay",
         "app",
         "links",
         "api",
         "favicon.ico",
         "service-worker.js",
         "public.webmanifest",
+        "pay.webmanifest",
+        "admin.webmanifest",
         "icon.svg",
         "static",
     }

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BOLT12 Pay Login</title>
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <link rel="icon" type="image/png" href="/assets/icon.png" />
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0b1220;
+      color: #eef2ff;
+      font-family: system-ui, sans-serif;
+      padding: 16px;
+    }
+    .card {
+      width: min(420px, calc(100vw - 32px));
+      background: #111827;
+      border: 1px solid #26324a;
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #eef2ff;
+      margin-top: 8px;
+      margin-bottom: 14px;
+      font-size: 16px;
+    }
+    button {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: none;
+      background: #f59e0b;
+      color: #111827;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:disabled {
+      opacity: .7;
+      cursor: wait;
+    }
+    .muted { opacity: .82; font-size: .95rem; margin-bottom: 16px; }
+    .error { color: #fca5a5; min-height: 24px; margin-top: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+      <img src="/assets/icon.png" alt="Logo" style="width:48px;height:48px;border-radius:12px;">
+      <div>
+        <div style="font-size:1.25rem;font-weight:800;">⚡ BOLT12 Pay</div>
+        <div class="muted">Protected Pay Area</div>
+      </div>
+    </div>
+
+    <label for="password">Passwort</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="Passwort eingeben" />
+
+    <button id="loginBtn" type="button">Login</button>
+    <div id="msg" class="error"></div>
+  </main>
+
+  <script>
+    const loginBtn = document.getElementById("loginBtn");
+    const passwordEl = document.getElementById("password");
+    const msgEl = document.getElementById("msg");
+
+    async function doLogin() {
+      msgEl.textContent = "";
+      loginBtn.disabled = true;
+      loginBtn.textContent = "Login...";
+
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          cache: "no-store",
+          body: JSON.stringify({ password: passwordEl.value || "" })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          msgEl.textContent = data.detail || data.error || "Login fehlgeschlagen";
+          loginBtn.disabled = false;
+          loginBtn.textContent = "Login";
+          return;
+        }
+
+        const next = new URLSearchParams(window.location.search).get("next") || "/pay";
+        window.location.href = next;
+      } catch (err) {
+        msgEl.textContent = "Login request failed";
+        loginBtn.disabled = false;
+        loginBtn.textContent = "Login";
+      }
+    }
+
+    loginBtn.addEventListener("click", doLogin);
+    passwordEl.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") doLogin();
+    });
+  </script>
+</body>
+</html>

@@ -4,10 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0f172a" />
-  <link rel="manifest" href="/admin.webmanifest" />
-  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/pay.webmanifest" />
+
+  <link rel="icon" href="/assets/icon.png" sizes="32x32" />
+  <link rel="icon" href="/assets/icon.png" sizes="192x192" />
+  <link rel="icon" href="/assets/icon.png" sizes="512x512" />
+
+  <link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
+
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="BOLT12 Pay" />
+  <meta name="application-name" content="BOLT12 Pay" />
+  <title>BOLT12 Pay</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
@@ -481,11 +490,13 @@ main.card .headerRow {
     LNDK kann Offers nicht nur erzeugen, sondern auch direkt bezahlen.
     Deshalb steht der Pay-Bereich bewusst ganz oben im Fokus.
   </div>
-  <div class="topActions">
-    <button class="secondary" id="installBtn" type="button" hidden>Admin-App installieren</button>
-    <button class="secondary" id="scanToDecodeBtn" type="button">QR → Decode</button>
-    <button class="secondary" id="scanToPayBtn" type="button">QR → Pay</button>
-  </div>
+<div class="topActions">
+  <button class="secondary" id="installBtn" type="button">Pay-App installieren</button>
+  <button class="secondary" type="button" onclick="window.location.href='/app'">Zur Console</button>
+  <button class="secondary" id="scanToDecodeBtn" type="button">QR → Decode</button>
+  <button class="secondary" id="scanToPayBtn" type="button">QR → Pay</button>
+  <button class="danger" id="logoutBtn" type="button">Logout</button>
+</div>
     <div class="heroGrid">
       <section class="section payHero">
         <h2>Offer bezahlen</h2>
@@ -776,11 +787,35 @@ main.card .headerRow {
       items.unshift(item);
       saveHistory(items);
       renderHistory();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/service-worker.js');
+      console.log('Service Worker registered');
+    } catch (err) {
+      console.error('Service Worker registration failed', err);
+    }
+  });
+}
+
     }
 
     function clearHistory() {
       localStorage.removeItem(HISTORY_KEY);
       renderHistory();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/service-worker.js');
+      console.log('Service Worker registered');
+    } catch (err) {
+      console.error('Service Worker registration failed', err);
+    }
+  });
+}
+
       setStatus('Offer-History gelöscht.');
     }
 
@@ -851,6 +886,18 @@ main.card .headerRow {
           const next = loadHistory().filter(entry => entry.id !== item.id);
           saveHistory(next);
           renderHistory();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/service-worker.js');
+      console.log('Service Worker registered');
+    } catch (err) {
+      console.error('Service Worker registration failed', err);
+    }
+  });
+}
+
           setStatus('History-Eintrag gelöscht.');
         });
 
@@ -978,13 +1025,18 @@ main.card .headerRow {
     });
 
     document.getElementById('installBtn').addEventListener('click', async () => {
-      if (!deferredPrompt) return;
+      if (!deferredPrompt) {
+        alert('Install-Prompt nicht verfügbar (Service Worker / Browser prüfen)');
+        return;
+      }
+
       deferredPrompt.prompt();
+
       try {
         await deferredPrompt.userChoice;
       } catch {}
+
       deferredPrompt = null;
-      document.getElementById('installBtn').hidden = true;
     });
 
     document.getElementById('createOfferBtn').addEventListener('click', async () => {
@@ -1241,10 +1293,48 @@ document.getElementById('cfCreateAliasBtn').addEventListener('click', async () =
         await closeScanner(false);
       }
     });
-
+    
+    checkPaySession();
     setCurrentOffer('');
     renderOfferQr(DEFAULT_ADDRESS);
     renderHistory();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/service-worker.js');
+      console.log('Service Worker registered');
+    } catch (err) {
+      console.error('Service Worker registration failed', err);
+    }
+  });
+}
+
+async function checkPaySession() {
+  try {
+    const res = await fetch('/api/auth/session', {
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+    const data = await res.json();
+    if (data.enabled && !data.ok) {
+      window.location.href = '/pay-login';
+    }
+  } catch {
+    window.location.href = '/pay-login';
+  }
+}
+
+document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+  } catch {}
+  window.location.href = '/pay-login';
+});
   </script>
 </body>
 </html>

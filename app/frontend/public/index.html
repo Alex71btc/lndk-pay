@@ -118,6 +118,28 @@
       margin-bottom: 16px;
     }
 
+.topActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 18px;
+}
+
+.topActionsRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topActionsRow button {
+  padding: 10px 14px;
+  font-size: .95rem;
+}
+
+.topActionsRowSmall button {
+  padding: 9px 12px;
+}
     .section {
       margin-top: 18px;
       padding: 18px;
@@ -513,11 +535,17 @@
       </div>
     </section>
 
-    <div class="row">
-      <button class="secondary" id="installBtn" type="button" hidden>App installieren</button>
-      <button class="secondary" id="copyActiveBtn" type="button">Aktiven Inhalt kopieren</button>
-      <button class="secondary" id="walletOpenBtn" type="button">Mit Wallet / WebLN öffnen</button>
-    </div>
+<div class="topActions">
+  <div class="topActionsRow">
+    <button class="secondary" id="installBtn" type="button" hidden>App installieren</button>
+    <button class="secondary" id="copyActiveBtn" type="button">Inhalt kopieren</button>
+    <button class="secondary" id="walletOpenBtn" type="button">Wallet / WebLN</button>
+  </div>
+  <div class="topActionsRow topActionsRowSmall">
+    <button class="secondary" id="goPayBtn" type="button">Zu Pay</button>
+    <button class="danger" id="logoutBtn" type="button">Logout</button>
+  </div>
+</div>
 
     <section class="section">
   <label class="label" style="margin-top:14px;">LNURL Fallback (optional)</label>
@@ -652,7 +680,9 @@
     const messageInput = document.getElementById('messageInput');
     const createOfferBtn = document.getElementById('createOfferBtn');
     const walletOpenBtn = document.getElementById('walletOpenBtn');
+    const goPayBtn = document.getElementById('goPayBtn');
     const installBtn = document.getElementById('installBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
     const openSetupBtn = document.getElementById('openSetupBtn');
     const invoiceAmountInput = document.getElementById('invoiceAmountInput');
     const invoiceMemoInput = document.getElementById('invoiceMemoInput');
@@ -1363,6 +1393,17 @@ async function payInvoiceWithWebln() {
         setStatus(`LNURL konnte nicht geladen werden: ${error?.message || error}`, 'error', true);
       }
     });
+   
+logoutBtn?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+  } catch {}
+  window.location.href = '/pay-login';
+});
 
     addressBox.addEventListener('click', async () => {
       if (!currentAddress) return;
@@ -1480,55 +1521,59 @@ invoiceBox.addEventListener('click', async () => {
 });
 
 walletOpenBtn.addEventListener('click', async () => {
-  if (activeQrMode === 'fallback') {
-    const target = fallbackAddress;
+  const activeValue = (getActiveValue() || '').trim();
 
-    if (!target) {
-      setStatus('Kein LNURL-Fallback vorhanden.', 'error');
-      return;
-    }
+  if (!activeValue) {
+    setStatus('Kein aktiver Inhalt vorhanden.', 'error');
+    return;
+  }
 
-    if (window.webln?.enable) {
-      try {
-        await window.webln.enable();
-        setStatus('WebLN verbunden, öffne Lightning Address über Wallet.');
-      } catch (error) {
-        console.warn('WebLN fallback failed:', error);
-        setStatus('WebLN nicht verfügbar, nutze Wallet-Link.', 'warn');
+  const normalized = activeValue.replace(/^lightning:/i, '').trim();
+  const lightningUrl = `lightning:${normalized}`;
+
+  try {
+    if (window.webln) {
+      await window.webln.enable();
+
+      if (/^lnbc|^lntb|^lnbcrt/i.test(normalized)) {
+        await window.webln.sendPayment(normalized);
+        setStatus('BOLT11 an WebLN übergeben.');
+        return;
       }
-    }
 
-    window.location.href = `lightning:${target}`;
-    return;
-  }
+      if (/^lnurl/i.test(normalized) || /^lno/i.test(normalized) || normalized.includes('@')) {
+        window.location.href = lightningUrl;
+        return;
+      }
 
-  if (activeQrMode === 'offer') {
-    if (!currentOffer) {
-      setStatus('Noch kein Offer vorhanden.', 'error');
+      window.location.href = lightningUrl;
       return;
     }
 
-    window.location.href = `lightning:${currentOffer}`;
-    return;
-  }
-
-  if (activeQrMode === 'address') {
-    if (!currentAddress) {
-      setStatus('Noch keine BOLT12 Adresse vorhanden.', 'error');
-      return;
+    window.location.href = lightningUrl;
+  } catch (error) {
+    try {
+      window.location.href = lightningUrl;
+    } catch {
+      setStatus('Konnte Wallet / WebLN nicht öffnen.', 'error');
     }
-
-    window.location.href = `lightning:${currentAddress}`;
-    return;
   }
+});
 
-  const value = getActiveQrValue();
-  if (!value) {
-    setStatus('Noch kein aktiver Inhalt vorhanden.', 'error');
-    return;
-  }
+goPayBtn?.addEventListener('click', () => {
+  window.location.href = '/pay';
+});
 
-  window.location.href = `lightning:${value}`;
+logoutBtn?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+  } catch {}
+
+  window.location.href = '/pay-login';
 });
 
     saveSetupBtn.addEventListener('click', saveSetup);
@@ -1545,26 +1590,39 @@ walletOpenBtn.addEventListener('click', async () => {
       window.location.href = `${window.location.pathname}?setup=1`;
     });
 
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
-      });
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/service-worker.js');
+      console.log('Service Worker registered for /app');
+    } catch (err) {
+      console.error('Service Worker registration failed', err);
     }
+  });
+}
 
-    window.addEventListener('beforeinstallprompt', (event) => {
-      event.preventDefault();
-      deferredPrompt = event;
-      installBtn.hidden = false;
-    });
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredPrompt = event;
+  installBtn.hidden = false;
+  console.log('beforeinstallprompt fired for /app');
+});
 
-    installBtn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      installBtn.hidden = true;
-    });
+installBtn.addEventListener('click', async () => {
+  if (!deferredPrompt) {
+    alert('Install-Prompt nicht verfügbar. Bitte /app einmal neu laden oder Browser-Menü nutzen.');
+    return;
+  }
 
+  deferredPrompt.prompt();
+
+  try {
+    await deferredPrompt.userChoice;
+  } catch {}
+
+  deferredPrompt = null;
+  installBtn.hidden = true;
+});
     (async () => {
       try {
         const forceSetup = new URLSearchParams(window.location.search).get('setup') === '1';

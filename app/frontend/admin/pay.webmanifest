@@ -1,12 +1,11 @@
 {
-  "name": "BOLT12 Console",
-  "short_name": "BOLT12 App",
-  "start_url": "/app",
+  "name": "BOLT12 Pay",
+  "short_name": "BOLT12 Pay",
+  "start_url": "/pay",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0f172a",
-  "description": "BOLT12 Offer and Alias Console",
   "icons": [
     {
       "src": "/assets/icon.png",
@@ -18,7 +17,7 @@
       "src": "/assets/icon-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "maskable"
     }
   ]
 }
