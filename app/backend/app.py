@@ -95,14 +95,14 @@ def get_public_lnurl_address():
 def get_cloudflare_config():
     cfg = load_config()
     cf = cfg.get("cloudflare", {}) or {}
+    dns_mode = str(cfg.get("dns_mode", "")).strip().lower()
 
     return {
-        "enabled": bool(cf.get("enabled")),
+        "enabled": bool(cf.get("enabled")) or dns_mode == "cloudflare",
         "zone_name": str(cf.get("zone_name", "")).strip(),
         "zone_id": str(cf.get("zone_id", "")).strip(),
         "api_token": str(cf.get("api_token", "")).strip(),
     }
-
 DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "10"))
 DNS_RESOLVER_TIMEOUT = float(os.environ.get("DNS_RESOLVER_TIMEOUT", "10"))
 
@@ -711,12 +711,28 @@ async def _create_bolt11_invoice(
 
 def get_bip353_base_domain():
     cfg = load_config()
-    return (
-        (cfg.get("bip353_base_domain") or "").strip()
-        or os.environ.get("BIP353_BASE_DOMAIN", "").strip()
-        or (PUBLIC_BIP353_ADDRESS.split("@", 1)[-1] if "@" in PUBLIC_BIP353_ADDRESS else "")
-    ).strip().lower()
 
+    # 1. explizit gesetzt
+    cfg_domain = str(cfg.get("bip353_base_domain", "")).strip().lower()
+    if cfg_domain:
+        return cfg_domain
+
+    # 2. aus public address ableiten (WICHTIG!)
+    public_addr = str(cfg.get("public_bolt12_address", "")).strip().lower()
+    if "@" in public_addr:
+        return public_addr.split("@", 1)[1]
+
+    # 3. ENV fallback
+    env_domain = os.environ.get("BIP353_BASE_DOMAIN", "").strip().lower()
+    if env_domain:
+        return env_domain
+
+    # 4. legacy fallback
+    env_addr = os.environ.get("PUBLIC_BIP353_ADDRESS", "").strip().lower()
+    if "@" in env_addr:
+        return env_addr.split("@", 1)[1]
+
+    return ""
 
 def _build_lnurl_info_for_address(address: str) -> dict[str, str]:
     normalized = (address or "").strip().lower()
@@ -1066,17 +1082,28 @@ def set_setup_config(payload: dict):
     safe_payload = dict(payload or {})
     password = str(safe_payload.pop("password", "")).strip()
 
-    cfg.update(safe_payload)
+    cfg["public_bolt12_address"] = str(safe_payload.get("public_bolt12_address", "")).strip()
+    cfg["public_lnurl_address"] = str(safe_payload.get("public_lnurl_address", "")).strip()
+    cfg["lnurl_base_domain"] = str(safe_payload.get("lnurl_base_domain", "")).strip().lower()
+    cfg["lnurl_base_url"] = str(safe_payload.get("lnurl_base_url", "")).strip().rstrip("/")
+
+    dns_mode = str(safe_payload.get("dns_mode", "none")).strip().lower()
+    cfg["dns_mode"] = dns_mode
+
+    cf = safe_payload.get("cloudflare", {}) or {}
+    cfg["cloudflare"] = {
+        "enabled": bool(cf.get("enabled")) or dns_mode == "cloudflare",
+        "zone_name": str(cf.get("zone_name", "")).strip(),
+        "zone_id": str(cf.get("zone_id", "")).strip(),
+        "api_token": str(cf.get("api_token", "")).strip(),
+    }
 
     if password:
         cfg["ui_password_hash"] = _hash_password(password)
 
     save_config(cfg)
 
-    return {
-        "ok": True
-    }
-
+    return {"ok": True}
 @app.post("/api/create-offer", response_model=OfferResponse)
 def create_offer(payload: OfferRequest) -> OfferResponse:
     return _create_offer_internal(payload)
@@ -1354,6 +1381,18 @@ async def public_index_page():
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" href="/assets/icon.png" sizes="32x32" />
+  <link rel="icon" href="/assets/icon.png" sizes="192x192" />
+  <link rel="icon" href="/assets/icon.png" sizes="512x512" />
+  <link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
+  <link rel="icon" href="/assets/icon.png" sizes="32x32" />
+  <link rel="icon" href="/assets/icon.png" sizes="192x192" />
+  <link rel="icon" href="/assets/icon.png" sizes="512x512" />
+  <link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
+  <link rel="icon" href="/assets/icon.png" sizes="32x32" />
+  <link rel="icon" href="/assets/icon.png" sizes="192x192" />
+  <link rel="icon" href="/assets/icon.png" sizes="512x512" />
+  <link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
   <title>Lightning Payments</title>
   <style>
     body {{
@@ -1563,6 +1602,10 @@ def _pay_login_html() -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" href="/assets/icon.png" sizes="32x32" />
+  <link rel="icon" href="/assets/icon.png" sizes="192x192" />
+  <link rel="icon" href="/assets/icon.png" sizes="512x512" />
+  <link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
   <title>BOLT12 Pay Login</title>
   <link rel="icon" type="image/png" href="/assets/icon.png" />
   <meta http-equiv="Cache-Control" content="no-store" />
@@ -1935,6 +1978,10 @@ async def public_alias_page(alias_name: str):
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" href="/assets/icon.png" sizes="32x32" />
+<link rel="icon" href="/assets/icon.png" sizes="192x192" />
+<link rel="icon" href="/assets/icon.png" sizes="512x512" />
+<link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
 <title>{bip353_address}</title>
 
 <style>
