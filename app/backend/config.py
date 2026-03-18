@@ -11,6 +11,7 @@ DEFAULT_CONFIG = {
     "lnurl_base_domain": "",
     "lnurl_base_url": "",
     "dns_mode": "none",   # none | manual | cloudflare
+    "ui_password_hash": "",
     "cloudflare": {
         "enabled": False,
         "zone_name": "",

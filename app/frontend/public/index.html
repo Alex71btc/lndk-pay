@@ -463,6 +463,11 @@
 
       <label class="label" for="setupLnurlBaseUrl" style="margin-top:14px;">LNURL Base URL</label>
       <input id="setupLnurlBaseUrl" type="text" placeholder="z. B. https://pay.example.com" />
+      
+      <label class="label" for="setupPassword" style="margin-top:14px;">Passwort setzen</label>
+      <input id="setupPassword" type="password" placeholder="Neues Passwort" />
+      <label class="label" for="setupPasswordConfirm" style="margin-top:14px;">Passwort bestätigen</label>
+      <input id="setupPasswordConfirm" type="password" placeholder="Passwort erneut eingeben" />
 
       <label class="label" for="setupDnsMode" style="margin-top:14px;">DNS Mode</label>
       <select id="setupDnsMode">
@@ -706,6 +711,8 @@
     const cfZoneName = document.getElementById('cfZoneName');
     const cfZoneId = document.getElementById('cfZoneId');
     const cfApiToken = document.getElementById('cfApiToken');
+    const setupPassword = document.getElementById('setupPassword');
+    const setupPasswordConfirm = document.getElementById('setupPasswordConfirm');
 
     const aliasNameInput = document.getElementById('aliasNameInput');
     const aliasDescriptionInput = document.getElementById('aliasDescriptionInput');
@@ -892,47 +899,83 @@ if (mode === 'invoice') {
       return true;
     }
 
-    async function saveSetup() {
-      const payload = {
-        public_bolt12_address: setupBolt12Address.value.trim(),
-        public_lnurl_address: setupLnurlAddress.value.trim(),
-        lnurl_base_domain: setupLnurlBaseDomain.value.trim(),
-        lnurl_base_url: setupLnurlBaseUrl.value.trim(),
-        dns_mode: setupDnsMode.value,
-        cloudflare: {
-          enabled: setupDnsMode.value === 'cloudflare',
-          zone_name: cfZoneName.value.trim(),
-          zone_id: cfZoneId.value.trim(),
-          api_token: cfApiToken.value.trim()
-        }
-      };
+async function saveSetup() {
+  let requireRelogin = false;
 
-      saveSetupBtn.disabled = true;
-      saveSetupBtn.textContent = 'Speichere...';
+  try {
+    saveSetupBtn.disabled = true;
+    saveSetupBtn.textContent = 'Speichere...';
 
-      try {
-        const response = await fetch('/api/setup/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+    const password = (setupPassword?.value || '').trim();
+    const passwordConfirm = (setupPasswordConfirm?.value || '').trim();
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data?.detail || 'Setup konnte nicht gespeichert werden');
-        }
-
-        setStatus('Setup gespeichert. Lade App neu...');
-        window.location.reload();
-      } catch (error) {
-        setStatus(`Setup-Fehler: ${error?.message || error}`, 'error', true);
-      } finally {
-        saveSetupBtn.disabled = false;
-        saveSetupBtn.textContent = 'Setup speichern';
-      }
+    if (password && password !== passwordConfirm) {
+      throw new Error('Passwörter stimmen nicht überein');
     }
 
+    const payload = {
+      public_bolt12_address: (setupBolt12Address.value || '').trim(),
+      public_lnurl_address: (setupLnurlAddress.value || '').trim(),
+      lnurl_base_domain: (setupLnurlBaseDomain.value || '').trim().toLowerCase(),
+      lnurl_base_url: (setupLnurlBaseUrl.value || '').trim(),
+      dns_mode: (setupDnsMode.value || 'none').trim(),
+      cloudflare: {
+        zone_name: (cfZoneName.value || '').trim(),
+        zone_id: (cfZoneId.value || '').trim(),
+        api_token: (cfApiToken.value || '').trim(),
+      },
+      password: password
+    };
+
+    const response = await fetch('/api/setup/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.detail || 'Setup konnte nicht gespeichert werden');
+    }
+
+    if (password) {
+      requireRelogin = true;
+
+      setStatus('Setup und Passwort gespeichert. Bitte jetzt neu einloggen.', 'success');
+
+      saveSetupBtn.disabled = false;
+      saveSetupBtn.textContent = 'Neu einloggen';
+
+      saveSetupBtn.onclick = async () => {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            cache: 'no-store'
+          });
+        } catch {}
+
+        window.location.href = '/pay-login?next=%2Fapp%3Fsetup%3D1';
+      };
+
+      return;
+    }
+
+    setStatus('Setup gespeichert.');
+    window.location.reload();
+
+  } catch (error) {
+    setStatus(`Setup-Fehler: ${error?.message || error}`, 'error', true);
+
+  } finally {
+    if (!requireRelogin) {
+      saveSetupBtn.disabled = false;
+      saveSetupBtn.textContent = 'Setup speichern';
+      saveSetupBtn.onclick = saveSetup;
+    }
+  }
+}
     async function loadPublicInfo() {
       try {
         const response = await fetch('/api/info');

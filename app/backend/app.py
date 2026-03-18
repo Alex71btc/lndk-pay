@@ -12,7 +12,7 @@ import hmac
 import struct
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, quote
 
 import dns.exception
 import dns.resolver
@@ -39,28 +39,58 @@ ADMIN_DIR = PROJECT_ROOT / "frontend" / "admin"
 
 LNDK_CLI = os.environ.get("LNDK_CLI", "lndk-cli")
 LNDK_NETWORK = os.environ.get("LNDK_NETWORK", "bitcoin")
-LNDK_GRPC_HOST = os.environ.get("LNDK_GRPC_HOST", "https://YOUR_NODE_IP")
-LNDK_GRPC_PORT = os.environ.get("LNDK_GRPC_PORT", "7000")
+LNDK_GRPC_HOST = os.environ.get("LNDK_GRPC_HOST", "").strip()
+LNDK_GRPC_PORT = os.environ.get("LNDK_GRPC_PORT", "7000").strip()
 LNDK_CERT_PATH = os.environ.get("LNDK_CERT_PATH", str(Path.home() / "lndk-tls-cert.pem"))
 LNDK_MACAROON_PATH = os.environ.get("LNDK_MACAROON_PATH", str(Path.home() / "admin.macaroon"))
 REQUEST_TIMEOUT = float(os.environ.get("LNDK_TIMEOUT_SECONDS", "30"))
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 ALLOW_PAY_OFFER = os.environ.get("ALLOW_PAY_OFFER", "false").lower() in {"1", "true", "yes", "on"}
 
+PUBLIC_BIP353_ADDRESS = os.environ.get("PUBLIC_BIP353_ADDRESS", "").strip()
+PUBLIC_LNURL_ADDRESS = os.environ.get("PUBLIC_LNURL_ADDRESS", "").strip()
+LNURL_BASE_DOMAIN = os.environ.get("LNURL_BASE_DOMAIN", "").strip().lower()
+LNURL_BASE_URL = os.environ.get("LNURL_BASE_URL", "").strip().rstrip("/")
+LND_REST_URL = os.environ.get("LND_REST_URL", "").strip().rstrip("/")
+LND_REST_INSECURE = os.environ.get("LND_REST_INSECURE", "false").lower() in {"1", "true", "yes", "on"}
 PAY_UI_PASSWORD = os.getenv("PAY_UI_PASSWORD", "").strip()
 PAY_UI_SESSION_TTL = int(os.getenv("PAY_UI_SESSION_TTL", "1800"))
 PAY_UI_COOKIE_NAME = "pay_session"
-PAY_UI_ENABLED = bool(PAY_UI_PASSWORD)
 PAY_SESSIONS: dict[str, dict] = {}
+
+
+def _hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def _get_ui_password_hash() -> str:
+    cfg = load_config()
+    return str(cfg.get("ui_password_hash", "")).strip()
+
+
+def _is_pay_ui_enabled() -> bool:
+    return bool(_get_ui_password_hash() or PAY_UI_PASSWORD)
+
+
+def _verify_ui_password(password: str) -> bool:
+    stored_hash = _get_ui_password_hash()
+
+    if stored_hash:
+        return hmac.compare_digest(_hash_password(password or ""), stored_hash)
+
+    if PAY_UI_PASSWORD:
+        return hmac.compare_digest(password or "", PAY_UI_PASSWORD)
+
+    return False
 
 
 def get_public_bolt12_address():
     cfg = load_config()
-    return cfg.get("public_bolt12_address") or os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@pay.local")
+    return (cfg.get("public_bolt12_address") or "").strip() or PUBLIC_BIP353_ADDRESS
 
 def get_public_lnurl_address():
     cfg = load_config()
-    return cfg.get("public_lnurl_address") or os.environ.get("PUBLIC_LNURL_ADDRESS", "lnurl@pay.local")
+    return (cfg.get("public_lnurl_address") or "").strip() or PUBLIC_LNURL_ADDRESS
 
 def get_cloudflare_config():
     cfg = load_config()
@@ -76,20 +106,13 @@ def get_cloudflare_config():
 DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "10"))
 DNS_RESOLVER_TIMEOUT = float(os.environ.get("DNS_RESOLVER_TIMEOUT", "10"))
 
-LNURL_BASE_DOMAIN = os.environ.get("LNURL_BASE_DOMAIN", "yourdomain.com").strip().lower()
-LNURL_BASE_URL = os.environ.get("LNURL_BASE_URL", f"https://{LNURL_BASE_DOMAIN}").strip().rstrip("/")
 LNURL_MIN_SENDABLE_MSAT = int(os.environ.get("LNURL_MIN_SENDABLE_MSAT", "1000"))
 LNURL_MAX_SENDABLE_MSAT = int(os.environ.get("LNURL_MAX_SENDABLE_MSAT", "1000000000"))
 LNURL_COMMENT_ALLOWED = int(os.environ.get("LNURL_COMMENT_ALLOWED", "120"))
 LNURL_ALIAS_MODE = os.environ.get("LNURL_ALIAS_MODE", "shared").strip().lower()
-LNURL_SHARED_DESCRIPTION = os.environ.get(
-    "LNURL_SHARED_DESCRIPTION",
-    f"LNURL payment via {LNURL_BASE_DOMAIN}",
-).strip()
+LNURL_SHARED_DESCRIPTION = os.environ.get("LNURL_SHARED_DESCRIPTION", "LNURL payment").strip()
 LNURL_DEFAULT_DESCRIPTION = os.environ.get("LNURL_DEFAULT_DESCRIPTION", "Lightning payment").strip()
 LNURL_ALIAS_MAP_RAW = os.environ.get("LNURL_ALIAS_MAP", "").strip()
-LND_REST_INSECURE = os.environ.get("LND_REST_INSECURE", "false").lower() in {"1", "true", "yes", "on"}
-LND_REST_URL = os.environ.get("LND_REST_URL", "https://YOUR_NODE_IP:8080").strip().rstrip("/")
 LND_TLS_CERT_PATH = os.environ.get("LND_TLS_CERT_PATH", "/secrets/tls.cert").strip()
 LND_MACAROON_PATH = os.environ.get("LND_MACAROON_PATH", "/secrets/admin.macaroon").strip()
 LND_REST_TIMEOUT = float(os.environ.get("LND_REST_TIMEOUT_SECONDS", "30"))
@@ -113,7 +136,7 @@ class OfferRequest(BaseModel):
         ge=1,
         description="Minimum amount in sats. If omitted, backend uses 1 sat.",
     )
-    description: str = Field(default="bolt12@alex71btc.com", min_length=1, max_length=200)
+    description: str = Field(default="bolt12@example.com", min_length=1, max_length=200)
     issuer: Optional[str] = Field(default=None, max_length=120)
     expiry: Optional[int] = Field(default=None, ge=1)
     quantity: Optional[int] = Field(default=None, ge=0)
@@ -623,15 +646,12 @@ def _read_macaroon_hex(path: str) -> str:
         raise HTTPException(status_code=500, detail=f"failed to read macaroon file: {exc}") from exc
 def get_lnurl_base_domain():
     cfg = load_config()
-    return (cfg.get("lnurl_base_domain") or os.environ.get("LNURL_BASE_DOMAIN", "yourdomain.com")).strip().lower()
+    return (cfg.get("lnurl_base_domain") or "").strip().lower() or LNURL_BASE_DOMAIN
 
 
 def get_lnurl_base_url():
     cfg = load_config()
-    return (cfg.get("lnurl_base_url") or os.environ.get(
-        "LNURL_BASE_URL",
-        f"https://{get_lnurl_base_domain()}",
-    )).strip().rstrip("/")
+    return (cfg.get("lnurl_base_url") or "").strip().rstrip("/") or LNURL_BASE_URL
 
 async def _create_bolt11_invoice(
     *,
@@ -692,9 +712,9 @@ async def _create_bolt11_invoice(
 def get_bip353_base_domain():
     cfg = load_config()
     return (
-        cfg.get("bip353_base_domain")
-        or os.environ.get("BIP353_BASE_DOMAIN")
-        or os.environ.get("PUBLIC_BIP353_ADDRESS", "bolt12@alex71btc.com").split("@", 1)[-1]
+        (cfg.get("bip353_base_domain") or "").strip()
+        or os.environ.get("BIP353_BASE_DOMAIN", "").strip()
+        or (PUBLIC_BIP353_ADDRESS.split("@", 1)[-1] if "@" in PUBLIC_BIP353_ADDRESS else "")
     ).strip().lower()
 
 
@@ -1020,7 +1040,7 @@ async def lnurl_callback(
 
 @app.get("/api/setup/status")
 def setup_status(request: StarletteRequest):
-    if PAY_UI_ENABLED and not _is_pay_session_valid(request):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     cfg = load_config()
@@ -1041,10 +1061,15 @@ app.mount("/assets", StaticFiles(directory="/app/assets"), name="assets")
 
 @app.post("/api/setup/config")
 def set_setup_config(payload: dict):
-
     cfg = load_config()
 
-    cfg.update(payload)
+    safe_payload = dict(payload or {})
+    password = str(safe_payload.pop("password", "")).strip()
+
+    cfg.update(safe_payload)
+
+    if password:
+        cfg["ui_password_hash"] = _hash_password(password)
 
     save_config(cfg)
 
@@ -1199,7 +1224,7 @@ def update_alias(name: str, payload: AliasUpdateRequest):
 
 @app.post("/api/create-invoice", response_model=CreateInvoiceResponse)
 async def create_invoice(payload: CreateInvoiceRequest, request: StarletteRequest) -> CreateInvoiceResponse:
-    if PAY_UI_ENABLED and not _is_pay_session_valid(request):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
     result = await _create_bolt11_invoice(
         amount_sat=payload.amount_sat,
@@ -1526,7 +1551,7 @@ def _is_pay_session_valid(request: StarletteRequest) -> bool:
 
 
 def require_pay_auth(request: Request) -> None:
-    if not PAY_UI_ENABLED:
+    if not _is_pay_ui_enabled():
         return
     if not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -1645,8 +1670,14 @@ if PUBLIC_DIR.exists():
 
 @app.get("/app")
 async def app_shell(request: StarletteRequest):
-    if PAY_UI_ENABLED and not _is_pay_session_valid(request):
-        return RedirectResponse(url="/pay-login?next=/app", status_code=307)
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        next_url = str(request.url.path)
+        if request.url.query:
+            next_url += f"?{request.url.query}"
+        return RedirectResponse(
+            url=f"/pay-login?next={quote(next_url, safe='/?=&')}",
+            status_code=307,
+        )
 
     index_file = PUBLIC_DIR / "index.html"
     if not index_file.exists():
@@ -1660,8 +1691,14 @@ async def app_shell(request: StarletteRequest):
 
 @app.get("/pay")
 def pay_page(request: StarletteRequest):
-    if PAY_UI_ENABLED and not _is_pay_session_valid(request):
-        return RedirectResponse(url="/pay-login?next=/pay", status_code=307)
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        next_url = str(request.url.path)
+        if request.url.query:
+            next_url += f"?{request.url.query}"
+        return RedirectResponse(
+            url=f"/pay-login?next={quote(next_url, safe='/?=&')}",
+            status_code=307,
+        )
 
     index_file = ADMIN_DIR / "index.html"
     if not index_file.exists():
@@ -1680,7 +1717,7 @@ def admin_legacy_redirect() -> RedirectResponse:
 
 @app.get("/pay-login")
 def pay_login_page():
-    if not PAY_UI_ENABLED:
+    if not _is_pay_ui_enabled():
         return RedirectResponse(url="/pay", status_code=307)
     file = ADMIN_DIR / "pay-login.html"
     if not file.exists():
@@ -1693,10 +1730,10 @@ def pay_login_page():
 
 @app.post("/api/auth/login")
 def api_auth_login(payload: PayLoginRequest):
-    if not PAY_UI_ENABLED:
+    if not _is_pay_ui_enabled():
         return JSONResponse({"ok": True, "disabled": True}, headers=_no_store_headers())
 
-    if not hmac.compare_digest(payload.password or "", PAY_UI_PASSWORD):
+    if not _verify_ui_password(payload.password or ""):
         raise HTTPException(status_code=401, detail="Invalid password")
 
     token = _create_pay_session()
@@ -1716,8 +1753,9 @@ def api_auth_login(payload: PayLoginRequest):
 
 @app.get("/api/auth/session")
 def api_auth_session(request: StarletteRequest):
-    ok = _is_pay_session_valid(request) if PAY_UI_ENABLED else True
-    return JSONResponse({"ok": ok, "enabled": PAY_UI_ENABLED}, headers=_no_store_headers())
+    enabled = _is_pay_ui_enabled()
+    ok = _is_pay_session_valid(request) if enabled else True
+    return JSONResponse({"ok": ok, "enabled": enabled}, headers=_no_store_headers())
 
 
 @app.post("/api/auth/logout")
