@@ -485,7 +485,7 @@
 
       <div id="cloudflareFields" class="section" hidden>
         <label class="label">Cloudflare Zone Name</label>
-        <input id="cfZoneName" type="text" placeholder="z. B. alex71btc.com">
+        <input id="cfZoneName" type="text" placeholder="z. B. example.com">
 
         <label class="label" style="margin-top:10px;">Cloudflare Zone ID</label>
         <input id="cfZoneId" type="text" placeholder="Zone ID aus Cloudflare Dashboard">
@@ -581,7 +581,7 @@
       </div>
 
       <div class="hint">
-        Standardmäßig zeigt der QR die BOLT12-Adresse <span class="mono">bolt12@alex71btc.com</span>.
+        Standardmäßig zeigt der QR die BOLT12-Adresse <span class="mono">bolt12@example.com</span>.
         Wenn du auf LNURL-Fallback umschaltest, wird stattdessen der LNURL-Inhalt angezeigt.
       </div>
     </section>
@@ -716,7 +716,7 @@
 
     let deferredPrompt = null;
     let statusTimer = null;
-    let currentAddress = 'bolt12@alex71btc.com';
+    let currentAddress = '';
     let fallbackAddress = 'lnurl@yourdomain.com';
     let currentOffer = '';
     let currentLnurl = '';
@@ -942,7 +942,7 @@ if (mode === 'invoice') {
           throw new Error(data?.detail || 'Public info konnte nicht geladen werden');
         }
 
-        currentAddress = data.address || 'bolt12@alex71btc.com';
+        currentAddress = data.address || '';
         fallbackAddress = localStorage.getItem('lnurl_fallback_address')
           || data.fallback_address
           || 'lnurl@yourdomain.com';
@@ -964,13 +964,15 @@ if (mode === 'invoice') {
         }
       } catch (error) {
         console.error('Public load error:', error);
-        addressBox.textContent = currentAddress || 'bolt12@alex71btc.com';
+        addressBox.textContent = currentAddress || '';
         fallbackAddressBox.textContent = fallbackAddress || 'lnurl@yourdomain.com';
         fallbackAddressInput.value = fallbackAddress || 'lnurl@yourdomain.com';
         offerBox.textContent = currentOffer || 'Offer nicht geladen';
 
         try {
-          renderQrForValue(currentAddress || 'bolt12@alex71btc.com', 'address');
+         if (currentAddress) {
+         renderQrForValue(currentAddress, 'address');
+        }
         } catch (_) {}
 
         setStatus(`Load failed: ${error?.message || error}`, 'error', true);
