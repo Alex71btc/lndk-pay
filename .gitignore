@@ -10,3 +10,5 @@ app/secrets/
 *.bak
 cookies.txt
 deploy/docker-compose.local.yml
+app/docker-compose.yml
+app/docker-compose.yml
