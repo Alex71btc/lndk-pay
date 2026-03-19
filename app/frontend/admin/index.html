@@ -466,22 +466,24 @@ main.card .headerRow {
 <main class="card">
   <div class="titleBlock">
     <div class="pill">BOLT12 Pay Server</div>
-
-    <div class="headerRow" style="display:flex;align-items:center;gap:16px;margin-top:8px;margin-bottom:10px;">
-     <img
-        src="/assets/icon.png"
-        alt="BOLT12 Pay Server Logo"
-        style="
-    display:block;
+<div class="headerRow" style="display:flex;align-items:center;gap:16px;margin-top:8px;margin-bottom:10px;">
+  <a href="/" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+    <img
+      src="/assets/icon.png"
+      alt="BOLT12 Pay Server Logo"
+      style="
+  display:block;
     width:110px;
     height:110px;
     min-width:110px;
     max-width:110px;
+    cursor:pointer;
     object-fit:contain;
     flex:0 0 110px;
     filter:drop-shadow(0 0 3px rgba(255,200,0,0.45));
-  "
->
+      "
+    >
+  </a>
       <h1 style="margin:0;line-height:1.1;">⚡ Lightning BOLT12 Pay</h1>
     </div>
   </div>
@@ -501,8 +503,8 @@ main.card .headerRow {
       <section class="section payHero">
         <h2>Offer bezahlen</h2>
 
-        <label class="label" for="payOfferInput">Offer oder BIP353-Adresse</label>
-        <input id="payOfferInput" type="text" placeholder="lno... oder bolt12@alex71btc.com" />
+        <label class="label" for="payOfferInput">Offer, Invoice oder Lightning Address</label>
+        <input id="payOfferInput" type="text" placeholder="lno... oder lnbc... oder name@domain" />
 
         <label class="label" for="payAmountInput" style="margin-top:14px;">Zahlbetrag in sats</label>
         <input id="payAmountInput" type="number" min="1" step="1" placeholder="z. B. 1000" />
@@ -511,12 +513,12 @@ main.card .headerRow {
         <input id="payerNoteInput" type="text" placeholder="z. B. test" />
 
         <div class="row">
-          <button id="payOfferBtn" type="button">Offer bezahlen</button>
+          <button id="payOfferBtn" type="button">⚡ Zahlung starten</button>
           <button class="secondary" id="useCurrentOfferBtn" type="button">Aktuelles Offer übernehmen</button>
         </div>
 
         <div class="hint">
-          Kernfunktion: direkte LNDK-Offer-Zahlung zum Testen von Interop und echten Payments.
+          Hauptfokus: BOLT12 Offer Pay. Automatische Erkennung für BOLT12, BOLT11 und LNURL / Lightning Address.
         </div>
       </section>
 
@@ -738,7 +740,28 @@ main.card .headerRow {
     function getCurrentOffer() {
       return offerInput.value.trim();
     }
+function normalizePaymentInput(raw) {
+  return normalizeScannedText(raw);
+}
 
+function getDefaultAddressDomain() {
+  const parts = String(DEFAULT_ADDRESS || '').trim().toLowerCase().split('@');
+  return parts.length === 2 ? parts[1] : '';
+}
+
+function detectPaymentType(raw) {
+  const value = normalizePaymentInput(raw).toLowerCase();
+
+  if (!value) return 'empty';
+  if (value.startsWith('lno')) return 'bolt12';
+  if (value.startsWith('lnbc') || value.startsWith('lntb') || value.startsWith('lnbcrt')) return 'bolt11';
+
+  if (value.includes('@') && !value.includes(' ')) return 'ambiguous_address';
+
+  if (value.startsWith('lnurl1')) return 'lnurl';
+
+  return 'unknown';
+}
     function getActiveValue() {
       return getCurrentOffer() || DEFAULT_ADDRESS;
     }
@@ -906,24 +929,67 @@ if ('serviceWorker' in navigator) {
         historyList.appendChild(wrap);
       }
     }
+async function readJsonOrThrow(response) {
+  const rawText = await response.text();
+  let data = null;
 
-    async function readJsonOrThrow(response) {
-      const rawText = await response.text();
-      let data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    throw new Error(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
+  }
 
+  if (!response.ok) {
+    let message = 'Serverfehler';
+
+    if (data?.detail) {
+      if (typeof data.detail === 'string') {
+        message = data.detail;
+      } else {
+        try {
+          message = JSON.stringify(data.detail);
+        } catch {
+          message = String(data.detail);
+        }
+      }
+    } else if (typeof data?.raw_output === 'string') {
+      message = data.raw_output;
+    } else if (typeof data?.message === 'string') {
+      message = data.message;
+    } else if (data) {
       try {
-        data = rawText ? JSON.parse(rawText) : null;
+        message = JSON.stringify(data);
       } catch {
-        throw new Error(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
+        message = String(data);
       }
-
-      if (!response.ok) {
-        throw new Error(data?.detail || data?.raw_output || data?.message || 'Serverfehler');
-      }
-
-      return data;
     }
 
+    throw new Error(message);
+  }
+
+  return data;
+}
+function errorToMessage(error) {
+  if (!error) return 'Unbekannter Fehler';
+
+  if (typeof error === 'string') return error;
+
+  if (error instanceof Error) return error.message || 'Unbekannter Fehler';
+
+  if (typeof error === 'object') {
+    if (typeof error.detail === 'string') return error.detail;
+    if (typeof error.error === 'string') return error.error;
+    if (typeof error.message === 'string') return error.message;
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+}
     function applyScanResult(rawValue) {
       const value = normalizeScannedText(rawValue);
       if (!value) {
@@ -982,7 +1048,7 @@ if ('serviceWorker' in navigator) {
           () => {}
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorToMessage(error);
         closeScanner(false);
         if (/permission|NotAllowedError/i.test(message)) {
           setStatus('Kein Kamera-Zugriff erlaubt.', 'error', true);
@@ -1074,7 +1140,7 @@ if ('serviceWorker' in navigator) {
 
         setStatus('Offer erfolgreich erzeugt.');
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorToMessage(error);
         setStatus(`Fehler: ${message}`, 'error', true);
       } finally {
         btn.disabled = false;
@@ -1111,50 +1177,155 @@ if ('serviceWorker' in navigator) {
       setStatus('Aktuelles Offer in Pay übernommen.');
     });
 
-    document.getElementById('payOfferBtn').addEventListener('click', async () => {
-      const offer = normalizeScannedText(payOfferInput.value);
-      const amountSat = payAmountInput.value.trim();
-      const payerNote = payerNoteInput.value.trim();
+async function payBolt12Flow() {
+  const offer = normalizePaymentInput(payOfferInput.value);
+  const amountSat = payAmountInput.value.trim();
+  const payerNote = payerNoteInput.value.trim();
 
-      if (!offer) {
-        setStatus('Bitte ein Offer oder eine BIP353-Adresse eingeben.', 'error');
-        return;
-      }
+  if (!offer) {
+    setStatus('Bitte ein BOLT12-Offer oder eine BIP353-Adresse eingeben.', 'error');
+    return;
+  }
 
-      if (!amountSat) {
-        setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error');
-        return;
-      }
+  if (!amountSat) {
+    setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error');
+    return;
+  }
 
-      const payload = {
-        offer,
-        amount_sat: Number(amountSat)
-      };
-      if (payerNote) payload.payer_note = payerNote;
+  const payload = {
+    offer,
+    amount_sat: Number(amountSat)
+  };
+  if (payerNote) payload.payer_note = payerNote;
 
-      const btn = document.getElementById('payOfferBtn');
-      btn.disabled = true;
-      btn.textContent = 'Bezahle...';
-      setStatus(`Bezahle: ${offer.slice(0, 48)}${offer.length > 48 ? '…' : ''}`, 'warn');
+  const btn = document.getElementById('payOfferBtn');
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = 'Bezahle...';
+  setStatus(`Bezahle: ${offer.slice(0, 48)}${offer.length > 48 ? '…' : ''}`, 'warn');
 
-      try {
-        const response = await fetch('/api/pay-offer', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        const data = await readJsonOrThrow(response);
-        setStatus(data?.raw_output || 'Offer erfolgreich bezahlt.');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setStatus(`Fehler: ${message}`, 'error', true);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Offer bezahlen';
-      }
+  try {
+    const response = await fetch('/api/pay-offer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
 
+    const data = await readJsonOrThrow(response);
+    setStatus(data?.raw_output || 'Offer erfolgreich bezahlt.');
+  } catch (error) {
+    const message = errorToMessage(error);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
+async function payBolt11Flow() {
+  const invoice = normalizePaymentInput(payOfferInput.value);
+  const btn = document.getElementById('payOfferBtn');
+
+  if (!invoice) {
+    setStatus('Bitte eine BOLT11-Invoice eingeben.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = 'Bezahle Invoice...';
+  setStatus(`Bezahle Invoice: ${invoice.slice(0, 64)}${invoice.length > 64 ? '…' : ''}`, 'warn');
+
+  try {
+    const response = await fetch('/api/pay-bolt11', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invoice })
+    });
+  const data = await readJsonOrThrow(response);
+  decodeOutput.value = data?.raw_output || '';
+  setStatus('BOLT11-Rechnung erfolgreich bezahlt.');
+  } catch (error) {
+    const message = errorToMessage(error);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
+async function startSmartPayment() {
+  const rawInput = payOfferInput.value.trim();
+  const kind = detectPaymentType(rawInput);
+
+  if (kind === 'empty') {
+    setStatus('Bitte Offer, Invoice oder Lightning Address eingeben.', 'error');
+    return;
+  }
+
+  if (kind === 'bolt12') {
+    return payBolt12Flow();
+  }
+
+  if (kind === 'bolt11') {
+    return payBolt11Flow();
+  }
+
+if (kind === 'lnurl') {
+  setStatus('LNURL erkannt. Echter LNURL-Pay-Flow folgt als nächster Schritt.', 'error', true);
+  return;
+}
+  if (kind === 'ambiguous_address') {
+    return payAddressFlow();
+  }
+
+  setStatus('Unbekanntes Zahlungsformat. Erwartet: BOLT12, BOLT11 oder LNURL.', 'error', true);
+}
+
+document.getElementById('payOfferBtn').addEventListener('click', startSmartPayment);
+
+async function payAddressFlow() {
+  const target = normalizePaymentInput(payOfferInput.value);
+  const amountSat = payAmountInput.value.trim();
+  const payerNote = payerNoteInput.value.trim();
+
+  if (!target) {
+    setStatus('Bitte eine Lightning Address oder BIP353-Adresse eingeben.', 'error');
+    return;
+  }
+
+  if (!amountSat) {
+    setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error');
+    return;
+  }
+
+const btn = document.getElementById('payOfferBtn');
+btn.disabled = true;
+const oldText = btn.textContent;
+btn.textContent = 'Prüfe / bezahle...';
+setStatus(`Prüfe und bezahle: ${target.slice(0, 64)}${target.length > 64 ? '…' : ''}`, 'warn');
+
+  try {
+    const response = await fetch('/api/pay-address', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target,
+        amount_sat: Number(amountSat),
+        payer_note: payerNote || null
+      })
+    });
+  const data = await readJsonOrThrow(response);
+  decodeOutput.value = data?.raw_output || '';
+  setStatus('Lightning Address erfolgreich bezahlt.');
+  } catch (error) {
+    const message = errorToMessage(error);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
     document.getElementById('decodeBtn').addEventListener('click', async () => {
       const offer = normalizeScannedText(decodeInput.value);
       if (!offer) {
@@ -1178,7 +1349,7 @@ if ('serviceWorker' in navigator) {
         decodeOutput.value = data.raw_output || '';
         setStatus('Decode erfolgreich.');
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorToMessage(error);
         setStatus(`Fehler: ${message}`, 'error', true);
       } finally {
         btn.disabled = false;
@@ -1250,7 +1421,7 @@ document.getElementById('cfCreateAliasBtn').addEventListener('click', async () =
     cfResultOutput.value = JSON.stringify(data, null, 2);
     setStatus(humanAddress ? `Alias gespeichert: ${humanAddress}` : 'Cloudflare Alias gespeichert.');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorToMessage(error);
     cfResultOutput.value = String(message);
     setStatus(`Fehler: ${message}`, 'error', true);
   } finally {

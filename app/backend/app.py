@@ -32,6 +32,9 @@ from pydantic import BaseModel, Field
 from backend.config import load_config, save_config
 
 # --- Configuration ---------------------------------------------------------
+HOME_URL = "/"
+APP_URL = "/app"
+PAY_URL = "/pay"
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 PUBLIC_DIR = PROJECT_ROOT / "frontend" / "public"
@@ -154,6 +157,11 @@ class DecodeRequest(BaseModel):
 class DecodeResponse(BaseModel):
     raw_output: str
 
+class PayBolt11Request(BaseModel):
+    invoice: str = Field(
+        min_length=10,
+        description="BOLT11 invoice like lnbc...",
+    )
 
 class PayOfferRequest(BaseModel):
     offer: str = Field(
@@ -163,6 +171,13 @@ class PayOfferRequest(BaseModel):
     amount_sat: int = Field(ge=1, description="Amount to pay in sats")
     payer_note: Optional[str] = Field(default=None, max_length=300)
 
+class PayAddressRequest(BaseModel):
+    target: str = Field(
+        min_length=3,
+        description="Lightning Address or BIP353 human-readable address",
+    )
+    amount_sat: int = Field(ge=1, description="Amount to pay in sats")
+    payer_note: Optional[str] = Field(default=None, max_length=300)
 
 class PayOfferResponse(BaseModel):
     resolved_offer: str
@@ -707,6 +722,144 @@ async def _create_bolt11_invoice(
     return {
         "payment_request": payment_request,
         "payment_hash": payment_hash,
+        "raw": data,
+    }
+
+
+async def _pay_bolt11_invoice(
+    *,
+    payment_request: str,
+    fee_limit_sat: int | None = None,
+) -> dict[str, Any]:
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+
+    headers = {
+        "Grpc-Metadata-macaroon": macaroon_hex,
+        "Content-Type": "application/json",
+    }
+
+    payload: dict[str, Any] = {
+        "payment_request": payment_request,
+    }
+
+    if fee_limit_sat is not None and fee_limit_sat > 0:
+        payload["fee_limit_sat"] = str(fee_limit_sat)
+
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+    try:
+        async with httpx.AsyncClient(timeout=LND_REST_TIMEOUT, verify=verify) as client:
+            response = await client.post(
+                f"{LND_REST_URL}/v1/channels/transactions",
+                headers=headers,
+                json=payload,
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LND REST payment request failed: {exc}") from exc
+
+    try:
+        data = response.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LND REST payment returned invalid JSON")
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LND REST payment error: {data}")
+
+    return data
+
+
+async def _resolve_lnurl_invoice(
+    *,
+    target: str,
+    amount_sat: int,
+    payer_note: Optional[str] = None,
+) -> dict[str, Any]:
+    target = target.strip()
+
+    if not target or "@" not in target:
+        raise HTTPException(status_code=400, detail="Invalid lightning address")
+
+    username, domain = target.split("@", 1)
+    username = username.strip()
+    domain = domain.strip()
+
+    if not username or not domain:
+        raise HTTPException(status_code=400, detail="Invalid lightning address")
+
+    lnurlp_url = f"https://{domain}/.well-known/lnurlp/{username}"
+
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            meta_resp = await client.get(lnurlp_url)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata request failed: {exc}") from exc
+
+    try:
+        meta = meta_resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LNURL metadata returned invalid JSON")
+
+    if meta_resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata error: {meta}")
+
+    callback = meta.get("callback")
+    min_sendable = int(meta.get("minSendable") or 0)
+    max_sendable = int(meta.get("maxSendable") or 0)
+    comment_allowed = int(meta.get("commentAllowed") or 0)
+
+    if not callback:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata missing callback: {meta}")
+
+    amount_msat = amount_sat * 1000
+
+    if min_sendable and amount_msat < min_sendable:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amount too low for LNURL target. Minimum is {min_sendable // 1000} sats.",
+        )
+
+    if max_sendable and amount_msat > max_sendable:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amount too high for LNURL target. Maximum is {max_sendable // 1000} sats.",
+        )
+
+    params = {"amount": str(amount_msat)}
+    if payer_note and comment_allowed > 0:
+        params["comment"] = payer_note[:comment_allowed]
+
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            invoice_resp = await client.get(callback, params=params)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LNURL callback request failed: {exc}") from exc
+
+    try:
+        invoice_data = invoice_resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LNURL callback returned invalid JSON")
+
+    if invoice_resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LNURL callback error: {invoice_data}")
+
+    if invoice_data.get("status") == "ERROR":
+        raise HTTPException(status_code=400, detail=invoice_data.get("reason") or "LNURL returned error")
+
+    payment_request = invoice_data.get("pr")
+    if not payment_request:
+        raise HTTPException(status_code=502, detail=f"LNURL callback missing invoice: {invoice_data}")
+
+    return {
+        "lnurlp_url": lnurlp_url,
+        "callback": callback,
+        "payment_request": payment_request,
+        "metadata": meta,
+        "invoice_data": invoice_data,
+    }
+
+    return {
+        "payment_request": payment_request,
+        "payment_hash": payment_hash,
     }
 
 def get_bip353_base_domain():
@@ -1130,6 +1283,78 @@ def pay_offer(payload: PayOfferRequest) -> PayOfferResponse:
 
     raw_output = _run_command(args)
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
+@app.post("/api/pay-address", response_model=PayOfferResponse)
+async def pay_address(payload: PayAddressRequest) -> PayOfferResponse:
+    target = payload.target.strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="target required")
+
+    try:
+        normalized_offer = _normalize_offer_or_hrn(target)
+        args = _base_command() + ["pay-offer", normalized_offer, str(payload.amount_sat * 1000)]
+
+        if payload.payer_note:
+            args.append(payload.payer_note)
+
+        raw_output = _run_command(args)
+        return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
+
+    except HTTPException as exc:
+        message = str(exc.detail)
+
+        if "No BIP353 TXT record found" not in message:
+            raise
+
+        lnurl_result = await _resolve_lnurl_invoice(
+            target=target,
+            amount_sat=payload.amount_sat,
+            payer_note=payload.payer_note,
+        )
+
+        pay_result = await _pay_bolt11_invoice(
+            payment_request=lnurl_result["payment_request"],
+        )
+
+        raw_output = json.dumps(
+            {
+                "mode": "lnurl",
+                "target": target,
+                "payment_request": lnurl_result["payment_request"],
+                "lnurlp_url": lnurl_result["lnurlp_url"],
+                "payment_result": pay_result,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+
+        return PayOfferResponse(
+            resolved_offer=target,
+            raw_output=raw_output,
+        )
+@app.post("/api/pay-bolt11", response_model=PayOfferResponse)
+async def pay_bolt11(payload: PayBolt11Request) -> PayOfferResponse:
+
+    invoice = payload.invoice.strip()
+    if not invoice:
+        raise HTTPException(status_code=400, detail="invoice required")
+
+    result = await _pay_bolt11_invoice(payment_request=invoice)
+
+    raw_output = json.dumps(
+        {
+            "mode": "bolt11",
+            "invoice": invoice,
+            "payment_result": result,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return PayOfferResponse(
+        resolved_offer=invoice,
+        raw_output=raw_output,
+    )
+
 
 @app.post("/api/cloudflare/create-bip353")
 async def create_cloudflare_bip353(req: CloudflareBIP353Request):
@@ -1476,11 +1701,13 @@ async def public_index_page():
 <body>
   <main class="card">
 <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px;">
-  <img
-    src="/assets/icon.png"
-    alt="BOLT12 Pay Server Logo"
-    style="width:72px;height:72px;object-fit:contain;display:block;filter:drop-shadow(0 0 3px rgba(255,200,0,0.35));"
-  >
+  <a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+    <img
+      src="/assets/icon.png"
+      alt="BOLT12 Pay Server Logo"
+      style="width:72px;height:72px;object-fit:contain;display:block;cursor:pointer;filter:drop-shadow(0 0 3px rgba(255,200,0,0.35));"
+    >
+  </a>
   <h1 style="margin:0;">⚡ Lightning Payments</h1>
 </div>
     <div class="sub">
@@ -1655,7 +1882,9 @@ def _pay_login_html() -> str:
 <body>
   <main class="card">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-      <img src="/assets/icon.png" alt="Logo" style="width:48px;height:48px;border-radius:12px;">
+<a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+  <img src="/assets/icon.png" alt="Logo" style="width:48px;height:48px;border-radius:12px;cursor:pointer;">
+</a>
       <div>
         <div style="font-size:1.25rem;font-weight:800;">⚡ BOLT12 Pay</div>
         <div class="muted">Protected Pay Area</div>
@@ -2091,13 +2320,14 @@ button:hover {{
 <main class="card">
 <h1>⚡ BOLT12 Payment Page</h1>
 <div style="text-align:center;margin:0 0 16px 0;">
-  <img
-    src="/assets/icon.png"
-    alt="BOLT12 Pay Server Logo"
-    style="width:64px;height:64px;object-fit:contain;display:block;margin:0 auto;filter:drop-shadow(0 0 2px rgba(255,200,0,0.30));"
-  >
+  <a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+    <img
+      src="/assets/icon.png"
+      alt="BOLT12 Pay Server Logo"
+      style="width:64px;height:64px;object-fit:contain;display:block;margin:0 auto;cursor:pointer;filter:drop-shadow(0 0 2px rgba(255,200,0,0.30));"
+    >
+  </a>
 </div>
-
 <div class="mono">{bip353_address}</div>
 
 <div class="sub">
