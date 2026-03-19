@@ -21,15 +21,13 @@ import qrcode
 import hashlib
 import base64
 import bech32
-from pathlib import Path
 from io import BytesIO
-from fastapi.responses import FileResponse, Response, HTMLResponse, RedirectResponse, JSONResponse
-from starlette.requests import Request as StarletteRequest
 from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi.responses import FileResponse, Response, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, Field
-
 from backend.config import load_config, save_config
 
 # --- Configuration ---------------------------------------------------------
@@ -214,7 +212,8 @@ class LnurlPayMetadataResponse(BaseModel):
     metadata: str
     tag: str = "payRequest"
     commentAllowed: int = 0
-    allowsNostr: bool = False
+    allowsNostr: bool = True
+    nostrPubkey: str = ""
 
 
 class CloudflareBIP353Request(BaseModel):
@@ -259,6 +258,107 @@ class PayLoginRequest(BaseModel):
 
 
 # --- App -------------------------------------------------------------------
+
+
+# -------------------------------
+# NOSTR NIP-05 Mapping
+# -------------------------------
+
+
+def _get_nostr_pubkey_for_name(name: str) -> str:
+    if not name:
+        return ""
+    return NOSTR_NAME_MAP.get(name.strip().lower(), "")
+
+
+
+
+def _npub_to_hex_pubkey(npub: str) -> str:
+    npub = (npub or "").strip().lower()
+    if not npub:
+        return ""
+
+    hrp, data = bech32.bech32_decode(npub)
+    if hrp != "npub" or data is None:
+        return ""
+
+    decoded = bech32.convertbits(data, 5, 8, False)
+    if decoded is None:
+        return ""
+
+    return bytes(decoded).hex()
+
+
+def _get_nostr_pubkey_for_name(name: str) -> str:
+    if not name:
+        return ""
+    return NOSTR_NAME_MAP.get(name.strip().lower(), "")
+
+
+def _get_nostr_pubkey_hex_for_name(name: str) -> str:
+    return _npub_to_hex_pubkey(_get_nostr_pubkey_for_name(name))
+
+
+def _sha256_b64(data: bytes) -> str:
+    return base64.b64encode(hashlib.sha256(data).digest()).decode()
+
+
+def _parse_zap_request(nostr_raw: str, expected_pubkey_hex: str, amount_msat: int) -> dict[str, Any]:
+    try:
+        event = json.loads(nostr_raw)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid nostr zap request JSON: {exc}") from exc
+
+    if not isinstance(event, dict):
+        raise HTTPException(status_code=400, detail="Invalid nostr zap request")
+
+    if event.get("kind") != 9734:
+        raise HTTPException(status_code=400, detail="Invalid zap request kind")
+
+    tags = event.get("tags") or []
+    if not isinstance(tags, list):
+        raise HTTPException(status_code=400, detail="Invalid zap request tags")
+
+    p_tags = [t for t in tags if isinstance(t, list) and len(t) >= 2 and t[0] == "p"]
+    if not p_tags:
+        raise HTTPException(status_code=400, detail="Zap request missing p tag")
+
+    p_value = str(p_tags[0][1]).strip().lower()
+    if expected_pubkey_hex and p_value != expected_pubkey_hex.lower():
+        raise HTTPException(status_code=400, detail="Zap request p tag does not match recipient")
+
+    amount_tags = [t for t in tags if isinstance(t, list) and len(t) >= 2 and t[0] == "amount"]
+    if amount_tags:
+        try:
+            tagged_amount = int(str(amount_tags[0][1]).strip())
+            if tagged_amount != amount_msat:
+                raise HTTPException(status_code=400, detail="Zap request amount does not match callback amount")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid zap request amount tag")
+
+    return event
+
+def _load_nostr_name_map():
+    raw = os.getenv("NOSTR_NAME_MAP", "").strip()
+    result = {}
+
+    if not raw:
+        return result
+
+    pairs = [p.strip() for p in raw.split(",") if p.strip()]
+    for pair in pairs:
+        if ":" not in pair:
+            continue
+        name, npub = pair.split(":", 1)
+        result[name.strip().lower()] = npub.strip()
+
+    return result
+
+
+NOSTR_NAME_MAP = _load_nostr_name_map()
+
 app = FastAPI(title="LNDK Backend", version="0.5.0")
 
 app.add_middleware(
@@ -1401,6 +1501,8 @@ def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
         maxSendable=max_sendable,
         metadata=_lnurl_metadata_json(alias["identifier"], alias["description"]),
         commentAllowed=max(0, LNURL_COMMENT_ALLOWED),
+        allowsNostr=True,
+        nostrPubkey=_get_nostr_pubkey_hex_for_name(alias["username"]),
     )
 
 
@@ -1409,6 +1511,8 @@ async def lnurl_callback(
     username: str,
     amount: int = Query(..., ge=1, description="Requested amount in millisatoshis"),
     comment: Optional[str] = Query(default=None),
+    nostr: Optional[str] = Query(default=None),
+    lnurl: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
     alias = _resolve_lnurl_alias(username)
 
@@ -1434,6 +1538,17 @@ async def lnurl_callback(
     description_hash_b64 = base64.b64encode(description_hash).decode("ascii")
 
     memo = comment.strip() if comment else ""
+    zap_request_event = None
+    recipient_nostr_hex = _get_nostr_pubkey_hex_for_name(username)
+
+    if nostr:
+        zap_request_event = _parse_zap_request(
+            nostr_raw=nostr,
+            expected_pubkey_hex=recipient_nostr_hex,
+            amount_msat=amount,
+        )
+        description_hash_b64 = _sha256_b64(nostr.encode("utf-8"))
+        memo = ""
 
     invoice = await _create_bolt11_invoice(
         amount_sat=amount_sat,
@@ -1446,6 +1561,8 @@ async def lnurl_callback(
     success_message = f"Payment request for {alias['identifier']}"
     if comment:
         success_message = f"{success_message} • Comment: {comment}"
+    if zap_request_event:
+        success_message = f"Zap invoice for {alias['identifier']}"
 
     return {
         "pr": payment_request,
@@ -1455,6 +1572,8 @@ async def lnurl_callback(
             "message": success_message,
         },
         "disposable": False,
+        "allowsNostr": True,
+        "nostrPubkey": _get_nostr_pubkey_hex_for_name(username),
     }
 
 @app.get("/api/setup/status")
@@ -2820,3 +2939,27 @@ if __name__ == "__main__":
         print(f"Serving web files from: {PUBLIC_DIR}")
     else:
         print(f"Warning: {PUBLIC_DIR} does not exist")
+
+
+
+@app.get("/.well-known/nostr.json")
+async def nostr_well_known(name: str = Query(default=None)):
+    if name:
+        key = name.strip().lower()
+        pubkey = NOSTR_NAME_MAP.get(key)
+        if not pubkey:
+            return JSONResponse({"names": {}}, status_code=200)
+
+        pubkey_hex = _npub_to_hex_pubkey(pubkey)
+        if not pubkey_hex:
+            return JSONResponse({"names": {}}, status_code=200)
+
+        return {"names": {key: pubkey_hex}}
+
+    result = {}
+    for key, pubkey in NOSTR_NAME_MAP.items():
+        pubkey_hex = _npub_to_hex_pubkey(pubkey)
+        if pubkey_hex:
+            result[key] = pubkey_hex
+
+    return {"names": result}
