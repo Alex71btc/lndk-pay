@@ -1222,6 +1222,50 @@ async function payBolt12Flow() {
   }
 }
 
+async function payLnurlFlow() {
+  const lnurl = normalizePaymentInput(payOfferInput.value);
+  const amountSat = payAmountInput.value.trim();
+  const payerNote = payerNoteInput.value.trim();
+  const btn = document.getElementById('payOfferBtn');
+
+  if (!lnurl) {
+    setStatus('Bitte LNURL eingeben.', 'error');
+    return;
+  }
+
+  if (!amountSat) {
+    setStatus('Bitte einen Zahlbetrag in sats eingeben.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = 'Bezahle LNURL...';
+  setStatus(`Bezahle LNURL: ${lnurl.slice(0, 64)}${lnurl.length > 64 ? '…' : ''}`, 'warn');
+
+  try {
+    const response = await fetch('/api/pay-lnurl', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lnurl,
+        amount_sat: Number(amountSat),
+        comment: payerNote || null
+      })
+    });
+
+    const data = await readJsonOrThrow(response);
+    decodeOutput.value = data?.raw_output || '';
+    setStatus('LNURL-Zahlung erfolgreich bezahlt.');
+  } catch (error) {
+    const message = errorToMessage(error);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
 async function payBolt11Flow() {
   const invoice = normalizePaymentInput(payOfferInput.value);
   const btn = document.getElementById('payOfferBtn');
@@ -1272,8 +1316,7 @@ async function startSmartPayment() {
   }
 
 if (kind === 'lnurl') {
-  setStatus('LNURL erkannt. Echter LNURL-Pay-Flow folgt als nächster Schritt.', 'error', true);
-  return;
+  return payLnurlFlow();
 }
   if (kind === 'ambiguous_address') {
     return payAddressFlow();

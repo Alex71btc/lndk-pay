@@ -20,6 +20,7 @@ import httpx
 import qrcode
 import hashlib
 import base64
+import bech32
 from pathlib import Path
 from io import BytesIO
 from fastapi.responses import FileResponse, Response, HTMLResponse, RedirectResponse, JSONResponse
@@ -765,6 +766,32 @@ async def _pay_bolt11_invoice(
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"LND REST payment error: {data}")
 
+    payment_error = data.get("payment_error") or data.get("paymentError") or ""
+    failure_reason = data.get("failure_reason") or data.get("failureReason") or ""
+
+    combined_error = f"{payment_error} {failure_reason}".strip().lower()
+
+    if "already paid" in combined_error:
+        raise HTTPException(status_code=400, detail="Diese Rechnung wurde bereits bezahlt.")
+
+    if "self payment" in combined_error:
+        raise HTTPException(status_code=400, detail="Selbstzahlungen sind nicht erlaubt.")
+
+    if "no route" in combined_error:
+        raise HTTPException(status_code=400, detail="Keine Route gefunden.")
+
+    if "insufficient balance" in combined_error:
+        raise HTTPException(status_code=400, detail="Nicht genügend Guthaben.")
+
+    if "timeout" in combined_error:
+        raise HTTPException(status_code=400, detail="Zahlung hat zu lange gedauert.")
+
+    if payment_error:
+        raise HTTPException(status_code=400, detail=str(payment_error))
+
+    if failure_reason and str(failure_reason).lower() not in {"failure_reason_none", "none", ""}:
+        raise HTTPException(status_code=400, detail=str(failure_reason))
+
     return data
 
 
@@ -851,6 +878,100 @@ async def _resolve_lnurl_invoice(
 
     return {
         "lnurlp_url": lnurlp_url,
+        "callback": callback,
+        "payment_request": payment_request,
+        "metadata": meta,
+        "invoice_data": invoice_data,
+    }
+
+
+def _decode_lnurl_bech32(lnurl: str) -> str:
+    lnurl = lnurl.strip().lower()
+    hrp, data = bech32.bech32_decode(lnurl)
+    if hrp != "lnurl" or data is None:
+        raise HTTPException(status_code=400, detail="Ungültiger LNURL-String.")
+
+    decoded = bech32.convertbits(data, 5, 8, False)
+    if decoded is None:
+        raise HTTPException(status_code=400, detail="LNURL konnte nicht dekodiert werden.")
+
+    try:
+        return bytes(decoded).decode("utf-8")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"LNURL URL decode failed: {exc}") from exc
+
+
+async def _resolve_lnurl_bech32_invoice(
+    *,
+    lnurl: str,
+    amount_sat: int,
+    comment: Optional[str] = None,
+) -> dict[str, Any]:
+    url = _decode_lnurl_bech32(lnurl)
+
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            meta_resp = await client.get(url)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata request failed: {exc}") from exc
+
+    try:
+        meta = meta_resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LNURL metadata returned invalid JSON")
+
+    if meta_resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata error: {meta}")
+
+    callback = meta.get("callback")
+    min_sendable = int(meta.get("minSendable") or 0)
+    max_sendable = int(meta.get("maxSendable") or 0)
+    comment_allowed = int(meta.get("commentAllowed") or 0)
+
+    if not callback:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata missing callback: {meta}")
+
+    amount_msat = amount_sat * 1000
+
+    if min_sendable and amount_msat < min_sendable:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amount too low for LNURL target. Minimum is {min_sendable // 1000} sats.",
+        )
+
+    if max_sendable and amount_msat > max_sendable:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amount too high for LNURL target. Maximum is {max_sendable // 1000} sats.",
+        )
+
+    params = {"amount": str(amount_msat)}
+    if comment and comment_allowed > 0:
+        params["comment"] = comment[:comment_allowed]
+
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            invoice_resp = await client.get(callback, params=params)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LNURL callback request failed: {exc}") from exc
+
+    try:
+        invoice_data = invoice_resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LNURL callback returned invalid JSON")
+
+    if invoice_resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LNURL callback error: {invoice_data}")
+
+    if invoice_data.get("status") == "ERROR":
+        raise HTTPException(status_code=400, detail=invoice_data.get("reason") or "LNURL returned error")
+
+    payment_request = invoice_data.get("pr")
+    if not payment_request:
+        raise HTTPException(status_code=502, detail=f"LNURL callback missing invoice: {invoice_data}")
+
+    return {
+        "lnurl_url": url,
         "callback": callback,
         "payment_request": payment_request,
         "metadata": meta,
@@ -1355,6 +1476,39 @@ async def pay_bolt11(payload: PayBolt11Request) -> PayOfferResponse:
         raw_output=raw_output,
     )
 
+class PayLnurlRequest(BaseModel):
+    lnurl: str
+    amount_sat: int
+    comment: Optional[str] = None
+
+
+@app.post("/api/pay-lnurl", response_model=PayOfferResponse)
+async def pay_lnurl(payload: PayLnurlRequest) -> PayOfferResponse:
+    result = await _resolve_lnurl_bech32_invoice(
+        lnurl=payload.lnurl,
+        amount_sat=payload.amount_sat,
+        comment=payload.comment,
+    )
+
+    pay_result = await _pay_bolt11_invoice(
+        payment_request=result["payment_request"],
+    )
+
+    raw_output = json.dumps(
+        {
+            "mode": "lnurl",
+            "lnurl": payload.lnurl,
+            "payment_request": result["payment_request"],
+            "payment_result": pay_result,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return PayOfferResponse(
+        resolved_offer=payload.lnurl,
+        raw_output=raw_output,
+    )
 
 @app.post("/api/cloudflare/create-bip353")
 async def create_cloudflare_bip353(req: CloudflareBIP353Request):
