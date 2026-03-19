@@ -506,6 +506,17 @@ main.card .headerRow {
         <label class="label" for="payOfferInput">Offer, Invoice oder Lightning Address</label>
         <input id="payOfferInput" type="text" placeholder="lno... oder lnbc... oder name@domain" />
 
+        <div id="payLivePreview" class="section" style="margin-top:12px;padding:14px 16px;display:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,0.18);">
+          <div style="display:flex;gap:14px;align-items:center;">
+            <img id="payPreviewImage" alt="Preview" style="display:none;width:64px;height:64px;border-radius:16px;object-fit:cover;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);box-shadow:0 4px 12px rgba(0,0,0,0.18);" />
+            <div style="flex:1;min-width:0;">
+              <div id="payPreviewTitle" style="font-weight:800;font-size:16px;line-height:1.25;"></div>
+              <div id="payPreviewDesc" class="sub" style="margin-top:5px;font-size:14px;line-height:1.45;word-break:break-word;"></div>
+              <div id="payPreviewMeta" class="hint" style="margin-top:8px;font-size:13px;line-height:1.4;word-break:break-word;"></div>
+            </div>
+          </div>
+        </div>
+
         <label class="label" for="payAmountInput" style="margin-top:14px;">Zahlbetrag in sats</label>
         <input id="payAmountInput" type="number" min="1" step="1" placeholder="z. B. 1000" />
 
@@ -580,6 +591,14 @@ main.card .headerRow {
         <label class="label" for="decodeOutput" style="margin-top:14px;">Decode-Ausgabe</label>
         <textarea id="decodeOutput" class="mono copyable" readonly placeholder="Hier erscheint die Decode-Ausgabe..." title="Zum Kopieren antippen"></textarea>
       </section>
+
+      <section class="section">
+        <h2>Letztes Zahlungsergebnis</h2>
+
+        <label class="label" for="paymentResultOutput">Payment-Ausgabe</label>
+        <textarea id="paymentResultOutput" class="mono copyable" readonly placeholder="Hier erscheint das letzte Zahlungsergebnis..." title="Zum Kopieren antippen"></textarea>
+      </section>
+
     </div>
 
     <details class="section">
@@ -659,9 +678,15 @@ main.card .headerRow {
     const payOfferInput = document.getElementById('payOfferInput');
     const payAmountInput = document.getElementById('payAmountInput');
     const payerNoteInput = document.getElementById('payerNoteInput');
+    const payLivePreview = document.getElementById('payLivePreview');
+    const payPreviewImage = document.getElementById('payPreviewImage');
+    const payPreviewTitle = document.getElementById('payPreviewTitle');
+    const payPreviewDesc = document.getElementById('payPreviewDesc');
+    const payPreviewMeta = document.getElementById('payPreviewMeta');
 
     const decodeInput = document.getElementById('decodeInput');
     const decodeOutput = document.getElementById('decodeOutput');
+    const paymentResultOutput = document.getElementById('paymentResultOutput');
 
     const historyList = document.getElementById('historyList');
 
@@ -740,6 +765,28 @@ main.card .headerRow {
     function getCurrentOffer() {
       return offerInput.value.trim();
     }
+
+function updatePayUiForInput() {
+  const rawInput = payOfferInput.value.trim();
+  const kind = detectPaymentType(rawInput);
+
+  // Default-Zustand
+  payAmountInput.disabled = false;
+  payAmountInput.placeholder = 'z. B. 1000';
+  payerNoteInput.disabled = false;
+  payerNoteInput.placeholder = 'z. B. test';
+
+  if (kind === 'bolt11') {
+    payAmountInput.value = '';
+    payAmountInput.disabled = true;
+    payAmountInput.placeholder = 'Betrag kommt aus Invoice';
+
+    payerNoteInput.value = '';
+    payerNoteInput.disabled = true;
+    payerNoteInput.placeholder = 'Kommentar nicht für BOLT11';
+  }
+}
+
 function normalizePaymentInput(raw) {
   return normalizeScannedText(raw);
 }
@@ -969,6 +1016,156 @@ async function readJsonOrThrow(response) {
 
   return data;
 }
+
+
+function safeJsonParse(text) {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatSats(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return `${n.toLocaleString('de-DE')} sats`;
+}
+
+function renderSuccessOutput(title, lines, detailsObj = null) {
+  const summary = [title, ...lines.filter(Boolean)].join('\n');
+
+  if (paymentResultOutput) {
+    if (detailsObj) {
+      paymentResultOutput.value = `${summary}\n\n--- Details ---\n${JSON.stringify(detailsObj, null, 2)}`;
+    } else {
+      paymentResultOutput.value = summary;
+    }
+
+    if (typeof paymentResultOutput.scrollIntoView === 'function') {
+      paymentResultOutput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+}
+
+
+
+let payPreviewTimer = null;
+
+function resetPayUiState() {
+  payAmountInput.disabled = false;
+  payAmountInput.placeholder = 'z. B. 1000';
+
+  payerNoteInput.disabled = false;
+  payerNoteInput.placeholder = 'z. B. test';
+
+  if (payLivePreview) payLivePreview.style.display = 'none';
+  if (payPreviewImage) {
+    payPreviewImage.style.display = 'none';
+    payPreviewImage.src = '';
+  }
+  if (payPreviewTitle) payPreviewTitle.textContent = '';
+  if (payPreviewDesc) payPreviewDesc.textContent = '';
+  if (payPreviewMeta) payPreviewMeta.textContent = '';
+}
+
+function renderPayPreview(data) {
+  if (!payLivePreview) return;
+
+  payLivePreview.style.display = 'block';
+
+  const title = data?.title || '';
+  const desc = data?.description || '';
+  payPreviewTitle.textContent = title;
+  payPreviewDesc.textContent = desc;
+
+  const metaParts = [];
+  if (data?.amount_sat) metaParts.push(`${formatSats(data.amount_sat)}`);
+  if (data?.min_sat || data?.max_sat) metaParts.push(`${data.min_sat || 0} - ${data.max_sat || 0} sats`);
+  if (data?.comment_allowed) metaParts.push(`Kommentar bis ${data.comment_allowed} Zeichen`);
+
+  payPreviewMeta.textContent = metaParts.join(' • ');
+
+  if (data?.image_data_url) {
+    payPreviewImage.src = data.image_data_url;
+    payPreviewImage.style.display = 'block';
+  } else {
+    payPreviewImage.src = '';
+    payPreviewImage.style.display = 'none';
+  }
+}
+
+async function loadPayPreview() {
+  const rawInput = payOfferInput.value.trim();
+  const kind = detectPaymentType(rawInput);
+
+  resetPayUiState();
+
+  if (!rawInput) return;
+
+  // Nur sinnvolle Preview-Requests feuern
+  if (kind === 'bolt11' && rawInput.length < 20) return;
+  if (kind === 'lnurl' && rawInput.length < 20) return;
+  if (kind === 'ambiguous_address' && (!rawInput.includes('@') || rawInput.endsWith('@'))) return;
+  if (!['bolt11', 'ambiguous_address', 'lnurl'].includes(kind)) return;
+
+  if (kind === 'bolt11') {
+    payAmountInput.value = '';
+    payAmountInput.disabled = true;
+    payAmountInput.placeholder = 'Betrag kommt aus Invoice';
+
+    payerNoteInput.value = '';
+    payerNoteInput.disabled = true;
+    payerNoteInput.placeholder = 'Kommentar kommt aus Invoice';
+
+    try {
+      const response = await fetch('/api/preview-pay-target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: rawInput })
+      });
+
+      const data = await readJsonOrThrow(response);
+      renderPayPreview(data);
+    } catch {}
+    return;
+  }
+
+  if (kind === 'ambiguous_address' || kind === 'lnurl') {
+    try {
+      const response = await fetch('/api/preview-pay-target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: rawInput })
+      });
+
+      const data = await readJsonOrThrow(response);
+      renderPayPreview(data);
+    } catch {}
+    return;
+  }
+}
+
+function getLnurlSuccessActionText(obj) {
+  const action = obj?.invoice_data?.successAction;
+  if (!action || typeof action !== 'object') return '';
+
+  if (action.tag === 'message' && action.message) {
+    return `💬 ${action.message}`;
+  }
+
+  if (action.tag === 'url' && action.url) {
+    return `🔗 ${action.description || 'Link verfügbar'}: ${action.url}`;
+  }
+
+  if (action.tag === 'aes' && action.description) {
+    return `🔐 ${action.description}`;
+  }
+
+  return '';
+}
+
 function errorToMessage(error) {
   if (!error) return 'Unbekannter Fehler';
 
@@ -1212,7 +1409,19 @@ async function payBolt12Flow() {
     });
 
     const data = await readJsonOrThrow(response);
-    setStatus(data?.raw_output || 'Offer erfolgreich bezahlt.');
+    const parsed = safeJsonParse(data?.raw_output);
+
+    renderSuccessOutput(
+      '✅ BOLT12-Offer erfolgreich bezahlt',
+      [
+        amountSat ? `⚡ ${formatSats(amountSat)}` : '',
+        offer.includes('@') ? `👤 ${offer}` : '🧾 Direktes Offer bezahlt',
+        payerNote ? `📝 Kommentar: ${payerNote}` : ''
+      ],
+      parsed || { raw_output: data?.raw_output || '' }
+    );
+
+    setStatus(data?.raw_output || 'Successfully paid for offer!');
   } catch (error) {
     const message = errorToMessage(error);
     setStatus(`Fehler: ${message}`, 'error', true);
@@ -1255,7 +1464,19 @@ async function payLnurlFlow() {
     });
 
     const data = await readJsonOrThrow(response);
-    decodeOutput.value = data?.raw_output || '';
+    const parsed = safeJsonParse(data?.raw_output);
+    const successActionText = getLnurlSuccessActionText(parsed);
+
+    renderSuccessOutput(
+      '✅ LNURL-Zahlung erfolgreich bezahlt',
+      [
+        amountSat ? `⚡ ${formatSats(amountSat)}` : '',
+        payerNote ? `📝 Kommentar: ${payerNote}` : '',
+        successActionText
+      ],
+      parsed || { raw_output: data?.raw_output || '' }
+    );
+
     setStatus('LNURL-Zahlung erfolgreich bezahlt.');
   } catch (error) {
     const message = errorToMessage(error);
@@ -1286,9 +1507,19 @@ async function payBolt11Flow() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ invoice })
     });
-  const data = await readJsonOrThrow(response);
-  decodeOutput.value = data?.raw_output || '';
-  setStatus('BOLT11-Rechnung erfolgreich bezahlt.');
+const data = await readJsonOrThrow(response);
+const parsed = safeJsonParse(data?.raw_output);
+
+renderSuccessOutput(
+  '✅ BOLT11-Rechnung erfolgreich bezahlt',
+  [
+    '🧾 Rechnung verarbeitet',
+    '⚡ Betrag aus Invoice übernommen'
+  ],
+  parsed || { raw_output: data?.raw_output || '' }
+);
+
+setStatus('BOLT11-Rechnung erfolgreich bezahlt.');
   } catch (error) {
     const message = errorToMessage(error);
     setStatus(`Fehler: ${message}`, 'error', true);
@@ -1299,8 +1530,29 @@ async function payBolt11Flow() {
 }
 
 async function startSmartPayment() {
+  updatePayUiForInput();
+
   const rawInput = payOfferInput.value.trim();
   const kind = detectPaymentType(rawInput);
+
+// BOLT11 → Betrag kommt aus Invoice
+// Default (immer zuerst!)
+payAmountInput.disabled = false;
+payAmountInput.placeholder = 'z. B. 1000';
+
+// BOLT11 Sonderfall
+if (kind === 'bolt11') {
+  payAmountInput.disabled = true;
+  payAmountInput.placeholder = 'Betrag kommt aus Invoice';
+
+  setStatus('Hinweis: Betrag wird aus der Rechnung übernommen.');
+}
+payerNoteInput.disabled = false;
+
+if (kind === 'bolt11') {
+  payAmountInput.disabled = true;
+  payerNoteInput.disabled = true;
+}
 
   if (kind === 'empty') {
     setStatus('Bitte Offer, Invoice oder Lightning Address eingeben.', 'error');
@@ -1358,9 +1610,32 @@ setStatus(`Prüfe und bezahle: ${target.slice(0, 64)}${target.length > 64 ? '…
         payer_note: payerNote || null
       })
     });
-  const data = await readJsonOrThrow(response);
-  decodeOutput.value = data?.raw_output || '';
-  setStatus('Lightning Address erfolgreich bezahlt.');
+const data = await readJsonOrThrow(response);
+const parsed = safeJsonParse(data?.raw_output);
+const successActionText = getLnurlSuccessActionText(parsed);
+
+const isBip353 = parsed?.mode === 'bip353';
+const title = isBip353
+  ? '✅ BOLT12-Offer erfolgreich bezahlt'
+  : '✅ Lightning Address erfolgreich bezahlt';
+
+const statusText = isBip353
+  ? (parsed?.raw_output || 'Successfully paid for offer!')
+  : 'Lightning Address erfolgreich bezahlt.';
+
+renderSuccessOutput(
+  title,
+  [
+    `👤 ${target}`,
+    amountSat ? `⚡ ${formatSats(amountSat)}` : '',
+    payerNote ? `📝 Kommentar: ${payerNote}` : '',
+    !isBip353 ? successActionText : ''
+  ],
+  parsed || { raw_output: data?.raw_output || '' }
+);
+
+setStatus(statusText);
+
   } catch (error) {
     const message = errorToMessage(error);
     setStatus(`Fehler: ${message}`, 'error', true);
@@ -1399,7 +1674,14 @@ setStatus(`Prüfe und bezahle: ${target.slice(0, 64)}${target.length > 64 ? '…
         btn.textContent = 'Decode';
       }
     });
-
+    
+    payOfferInput.addEventListener('input', () => {
+      if (payPreviewTimer) clearTimeout(payPreviewTimer);
+      payPreviewTimer = setTimeout(() => {
+        loadPayPreview();
+      }, 450);
+    });
+    
     decodeOutput.addEventListener('click', async () => {
       const value = decodeOutput.value.trim();
       if (!value) {

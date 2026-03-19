@@ -428,6 +428,55 @@ def _lightning_address_to_lnurlp_url(address: str) -> str:
     user, domain = clean.split("@", 1)
     return f"https://{domain}/.well-known/lnurlp/{user}"
 
+def _extract_lnurl_metadata_info(metadata_raw: Any) -> dict[str, Any]:
+    text_plain = ""
+    image_data_url = ""
+    entries: list[Any] = []
+
+    if isinstance(metadata_raw, str):
+        try:
+            entries = json.loads(metadata_raw)
+        except Exception:
+            entries = []
+    elif isinstance(metadata_raw, list):
+        entries = metadata_raw
+
+    for item in entries:
+        if not isinstance(item, list) or len(item) != 2:
+            continue
+        k, v = item[0], item[1]
+        if k == "text/plain" and isinstance(v, str):
+            text_plain = v
+        elif isinstance(k, str) and k.startswith("image/") and isinstance(v, str):
+            if ";base64" in k:
+                mime = k.split(";")[0]
+                image_data_url = f"data:{mime};base64,{v}"
+            else:
+                image_data_url = f"data:{k},{v}"
+
+    return {
+        "text_plain": text_plain,
+        "image_data_url": image_data_url,
+        "raw": metadata_raw,
+    }
+
+
+async def _fetch_lnurl_metadata_from_url(url: str) -> dict[str, Any]:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            resp = await client.get(url)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata request failed: {exc}") from exc
+
+    try:
+        data = resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LNURL metadata returned invalid JSON")
+
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata error: {data}")
+
+    return data
 
 def _resolve_bip353_address(address: str) -> str:
     if not HRN_RE.match(address):
@@ -758,23 +807,27 @@ async def _pay_bolt11_invoice(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LND REST payment request failed: {exc}") from exc
 
+    raw_text = (response.text or "").strip()
+
     try:
         data = response.json()
     except Exception:
-        raise HTTPException(status_code=502, detail="LND REST payment returned invalid JSON")
+        data = None
 
-    if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"LND REST payment error: {data}")
+    combined_error = ""
 
-    payment_error = data.get("payment_error") or data.get("paymentError") or ""
-    failure_reason = data.get("failure_reason") or data.get("failureReason") or ""
-
-    combined_error = f"{payment_error} {failure_reason}".strip().lower()
+    if isinstance(data, dict):
+        message_text = data.get("message") or ""
+        payment_error = data.get("payment_error") or data.get("paymentError") or ""
+        failure_reason = data.get("failure_reason") or data.get("failureReason") or ""
+        combined_error = f"{message_text} {payment_error} {failure_reason} {raw_text}".strip().lower()
+    else:
+        combined_error = raw_text.lower()
 
     if "already paid" in combined_error:
         raise HTTPException(status_code=400, detail="Diese Rechnung wurde bereits bezahlt.")
 
-    if "self payment" in combined_error:
+    if "self payment" in combined_error or "self-payments not allowed" in combined_error:
         raise HTTPException(status_code=400, detail="Selbstzahlungen sind nicht erlaubt.")
 
     if "no route" in combined_error:
@@ -785,6 +838,19 @@ async def _pay_bolt11_invoice(
 
     if "timeout" in combined_error:
         raise HTTPException(status_code=400, detail="Zahlung hat zu lange gedauert.")
+
+    if response.status_code >= 400:
+        if isinstance(data, dict):
+            detail = data.get("message") or data.get("detail") or data.get("payment_error") or data.get("failure_reason") or raw_text
+        else:
+            detail = raw_text or f"LND REST payment failed with HTTP {response.status_code}"
+        raise HTTPException(status_code=502, detail=str(detail))
+
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=502, detail=f"LND REST payment returned non-JSON: {raw_text[:300]}")
+
+    payment_error = data.get("payment_error") or data.get("paymentError") or ""
+    failure_reason = data.get("failure_reason") or data.get("failureReason") or ""
 
     if payment_error:
         raise HTTPException(status_code=400, detail=str(payment_error))
@@ -899,7 +965,70 @@ def _decode_lnurl_bech32(lnurl: str) -> str:
         return bytes(decoded).decode("utf-8")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"LNURL URL decode failed: {exc}") from exc
+def _extract_lnurl_metadata_info(metadata_raw: Any) -> dict[str, Any]:
+    text_plain = ""
+    image_data_url = ""
+    entries: list[Any] = []
 
+    if isinstance(metadata_raw, str):
+        try:
+            entries = json.loads(metadata_raw)
+        except Exception:
+            entries = []
+    elif isinstance(metadata_raw, list):
+        entries = metadata_raw
+
+    for item in entries:
+        if not isinstance(item, list) or len(item) != 2:
+            continue
+        k, v = item[0], item[1]
+        if k == "text/plain" and isinstance(v, str):
+            text_plain = v
+        elif isinstance(k, str) and k.startswith("image/") and isinstance(v, str):
+            if ";base64" in k:
+                mime = k.split(";")[0]
+                image_data_url = f"data:{mime};base64,{v}"
+            else:
+                image_data_url = f"data:{k},{v}"
+
+    return {
+        "text_plain": text_plain,
+        "image_data_url": image_data_url,
+        "raw": metadata_raw,
+    }
+
+
+async def _fetch_lnurl_metadata_from_url(url: str) -> dict[str, Any]:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            resp = await client.get(url)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata request failed: {exc}") from exc
+
+    try:
+        data = resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="LNURL metadata returned invalid JSON")
+
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LNURL metadata error: {data}")
+
+    return data
+
+
+def _lightning_address_to_lnurlp_url(target: str) -> str:
+    target = target.strip()
+    if "@" not in target:
+        raise HTTPException(status_code=400, detail="Invalid lightning address")
+
+    username, domain = target.split("@", 1)
+    username = username.strip()
+    domain = domain.strip()
+
+    if not username or not domain:
+        raise HTTPException(status_code=400, detail="Invalid lightning address")
+
+    return f"https://{domain}/.well-known/lnurlp/{username}"
 
 async def _resolve_lnurl_bech32_invoice(
     *,
@@ -1417,7 +1546,19 @@ async def pay_address(payload: PayAddressRequest) -> PayOfferResponse:
         if payload.payer_note:
             args.append(payload.payer_note)
 
-        raw_output = _run_command(args)
+        raw_cli_output = _run_command(args)
+
+        raw_output = json.dumps(
+            {
+                "mode": "bip353",
+                "target": target,
+                "resolved_offer": normalized_offer,
+                "raw_output": raw_cli_output,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+
         return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 
     except HTTPException as exc:
@@ -1476,11 +1617,100 @@ async def pay_bolt11(payload: PayBolt11Request) -> PayOfferResponse:
         raw_output=raw_output,
     )
 
+class DecodeBolt11Request(BaseModel):
+    invoice: str = Field(min_length=10, description="BOLT11 invoice like lnbc...")
+
+
+class PreviewPayTargetRequest(BaseModel):
+    target: str = Field(min_length=3, description="Lightning Address or lnurl1...")
+
 class PayLnurlRequest(BaseModel):
     lnurl: str
     amount_sat: int
     comment: Optional[str] = None
 
+@app.post("/api/preview-pay-target")
+async def preview_pay_target(payload: PreviewPayTargetRequest):
+    target = payload.target.strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="target required")
+
+    lowered = target.lower()
+
+    if lowered.startswith("lnbc") or lowered.startswith("lntb") or lowered.startswith("lnbcrt"):
+        macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+        headers = {"Grpc-Metadata-macaroon": macaroon_hex}
+        verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+        try:
+            async with httpx.AsyncClient(timeout=LND_REST_TIMEOUT, verify=verify) as client:
+                response = await client.get(f"{LND_REST_URL}/v1/payreq/{target}", headers=headers)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"LND REST decodepayreq failed: {exc}") from exc
+
+        try:
+            data = response.json()
+        except Exception:
+            raise HTTPException(status_code=502, detail="LND REST decodepayreq returned invalid JSON")
+
+        if response.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"LND REST decodepayreq error: {data}")
+
+        return {
+            "kind": "bolt11",
+            "title": "BOLT11 Invoice",
+            "amount_sat": data.get("num_satoshis") or data.get("numSatoshis") or "",
+            "description": data.get("description") or "",
+            "destination": data.get("destination") or "",
+            "image_data_url": "",
+            "comment_allowed": 0,
+            "min_sat": "",
+            "max_sat": "",
+        }
+
+    if "@" in target and " " not in target:
+        lnurlp_url = _lightning_address_to_lnurlp_url(target)
+        meta = await _fetch_lnurl_metadata_from_url(lnurlp_url)
+        meta_info = _extract_lnurl_metadata_info(meta.get("metadata"))
+
+        return {
+            "kind": "lightning_address",
+            "title": "Lightning Address",
+            "identifier": target,
+            "description": meta_info["text_plain"] or meta.get("description", ""),
+            "image_data_url": meta_info["image_data_url"],
+            "comment_allowed": int(meta.get("commentAllowed") or 0),
+            "min_sat": int(meta.get("minSendable") or 0) // 1000,
+            "max_sat": int(meta.get("maxSendable") or 0) // 1000,
+            "raw": meta,
+        }
+
+    if lowered.startswith("lnurl1"):
+        url = _decode_lnurl_bech32(target)
+        meta = await _fetch_lnurl_metadata_from_url(url)
+        meta_info = _extract_lnurl_metadata_info(meta.get("metadata"))
+
+        return {
+            "kind": "lnurl",
+            "title": "LNURL Pay",
+            "identifier": target,
+            "description": meta_info["text_plain"] or meta.get("description", ""),
+            "image_data_url": meta_info["image_data_url"],
+            "comment_allowed": int(meta.get("commentAllowed") or 0),
+            "min_sat": int(meta.get("minSendable") or 0) // 1000,
+            "max_sat": int(meta.get("maxSendable") or 0) // 1000,
+            "raw": meta,
+        }
+
+    return {
+        "kind": "unknown",
+        "title": "",
+        "description": "",
+        "image_data_url": "",
+        "comment_allowed": 0,
+        "min_sat": "",
+        "max_sat": "",
+    }
 
 @app.post("/api/pay-lnurl", response_model=PayOfferResponse)
 async def pay_lnurl(payload: PayLnurlRequest) -> PayOfferResponse:

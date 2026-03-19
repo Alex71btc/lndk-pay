@@ -3,3 +3,4 @@ uvicorn[standard]
 dnspython
 httpx
 qrcode[pil]
+bech32
