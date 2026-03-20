@@ -105,6 +105,7 @@ def get_cloudflare_config():
         "zone_id": str(cf.get("zone_id", "")).strip(),
         "api_token": str(cf.get("api_token", "")).strip(),
     }
+
 DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "10"))
 DNS_RESOLVER_TIMEOUT = float(os.environ.get("DNS_RESOLVER_TIMEOUT", "10"))
 
@@ -118,7 +119,20 @@ LNURL_ALIAS_MAP_RAW = os.environ.get("LNURL_ALIAS_MAP", "").strip()
 LND_TLS_CERT_PATH = os.environ.get("LND_TLS_CERT_PATH", "/secrets/tls.cert").strip()
 LND_MACAROON_PATH = os.environ.get("LND_MACAROON_PATH", "/secrets/admin.macaroon").strip()
 LND_REST_TIMEOUT = float(os.environ.get("LND_REST_TIMEOUT_SECONDS", "30"))
+# --- Nostr / Zap Config ----------------------------------------------
 
+NOSTR_SERVER_PRIVKEY = os.environ.get("NOSTR_SERVER_PRIVKEY", "").strip().lower()
+
+NOSTR_DEFAULT_RELAYS = [
+    x.strip()
+    for x in os.environ.get(
+        "NOSTR_DEFAULT_RELAYS",
+        "wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net"
+    ).split(",")
+    if x.strip()
+]
+
+NOSTR_ZAP_POLL_INTERVAL = int(os.environ.get("NOSTR_ZAP_POLL_INTERVAL", "15"))
 
 # Extract the lno... offer string from lndk-cli output like:
 # Offer: CreateOfferResponse { offer: "lno1..." }.
@@ -296,8 +310,14 @@ def _get_nostr_pubkey_for_name(name: str) -> str:
 
 
 def _get_nostr_pubkey_hex_for_name(name: str) -> str:
-    return _npub_to_hex_pubkey(_get_nostr_pubkey_for_name(name))
+    identity = _get_identity_entry(name)
+    if identity and identity.get("nostr_pubkey"):
+        return identity["nostr_pubkey"]
 
+    return _get_nostr_pubkey_hex_for_name_from_env(name)
+
+def _get_nostr_pubkey_hex_for_name_from_env(name: str) -> str:
+    return NOSTR_NAME_MAP.get(name.strip().lower(), "")
 
 def _sha256_b64(data: bytes) -> str:
     return base64.b64encode(hashlib.sha256(data).digest()).decode()
@@ -368,7 +388,137 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# --- Identity Config (Nostr / NIP-05 / Zap) -------------------------------
 
+class IdentityConfigPayload(BaseModel):
+    alias: str
+    nostr_pubkey: str
+    relays: list[str] | None = None
+    nip05_enabled: bool = True
+    zap_enabled: bool = True
+
+
+def _normalize_nostr_pubkey(value: str) -> str:
+    v = (value or "").strip()
+
+    if re.fullmatch(r"[0-9a-fA-F]{64}", v):
+        return v.lower()
+
+    if v.startswith("npub"):
+        raise ValueError("Bitte aktuell HEX-Pubkey verwenden; npub-Import machen wir im nächsten Schritt sauber.")
+
+    raise ValueError("Ungültiger Nostr Pubkey. Erwartet 64-stelligen HEX-Pubkey.")
+
+
+def _get_identity_map() -> dict[str, dict]:
+    cfg = load_config()
+    identity_map = cfg.get("identity_map", {})
+    return identity_map if isinstance(identity_map, dict) else {}
+
+
+def _save_identity_map(data: dict[str, dict]) -> None:
+    cfg = load_config()
+    cfg["identity_map"] = data
+    save_config(cfg)
+
+
+def _get_identity_entry(alias: str) -> dict:
+    alias = (alias or "").strip().lower()
+    if not alias:
+        return {}
+    return _get_identity_map().get(alias, {})
+
+
+def _get_nostr_identity_for_name(name: str) -> dict:
+    username = (name or "").strip().lower()
+    if not username:
+        return {}
+
+    entry = _get_identity_entry(username)
+    if entry:
+        return {
+            "alias": username,
+            "nostr_pubkey": str(entry.get("nostr_pubkey", "")).strip().lower(),
+            "relays": entry.get("relays", []) or [],
+            "nip05_enabled": bool(entry.get("nip05_enabled", True)),
+            "zap_enabled": bool(entry.get("zap_enabled", True)),
+            "source": "config",
+        }
+
+    # Fallback auf bestehende ENV-Map
+    env_pub = _get_nostr_pubkey_hex_for_name_from_env(username)
+    if env_pub:
+        return {
+            "alias": username,
+            "nostr_pubkey": env_pub,
+            "relays": [],
+            "nip05_enabled": True,
+            "zap_enabled": True,
+            "source": "env",
+        }
+
+    return {}
+
+
+@app.get("/api/identity-config")
+async def get_identity_config(alias: str):
+    alias = (alias or "").strip().lower()
+    if not alias:
+        raise HTTPException(status_code=400, detail="alias is required")
+
+    entry = _get_identity_entry(alias)
+    if not entry:
+        return {
+            "alias": alias,
+            "nostr_pubkey": "",
+            "relays": [],
+            "nip05_enabled": True,
+            "zap_enabled": True,
+            "exists": False,
+        }
+
+    return {
+        "alias": alias,
+        "nostr_pubkey": str(entry.get("nostr_pubkey", "")).strip(),
+        "relays": entry.get("relays", []) or [],
+        "nip05_enabled": bool(entry.get("nip05_enabled", True)),
+        "zap_enabled": bool(entry.get("zap_enabled", True)),
+        "exists": True,
+    }
+
+
+@app.post("/api/identity-config")
+async def save_identity_config(payload: IdentityConfigPayload):
+    alias = (payload.alias or "").strip().lower()
+    if not alias:
+        raise HTTPException(status_code=400, detail="alias is required")
+
+    try:
+        normalized_pubkey = _normalize_nostr_pubkey(payload.nostr_pubkey)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    relays = [str(x).strip() for x in (payload.relays or []) if str(x).strip()]
+
+    identity_map = _get_identity_map()
+    identity_map[alias] = {
+        "nostr_pubkey": normalized_pubkey,
+        "relays": relays,
+        "nip05_enabled": bool(payload.nip05_enabled),
+        "zap_enabled": bool(payload.zap_enabled),
+    }
+    _save_identity_map(identity_map)
+
+    return {
+        "alias": alias,
+        "nostr_pubkey": normalized_pubkey,
+        "relays": relays,
+        "nip05_enabled": bool(payload.nip05_enabled),
+        "zap_enabled": bool(payload.zap_enabled),
+        "saved": True,
+    }
+
+# --- End Identity Config ---------------------------------------------------
 
 # --- Helpers ----------------------------------------------------------------
 def _base_command() -> list[str]:
@@ -1557,7 +1707,48 @@ async def lnurl_callback(
     )
 
     payment_request = invoice["payment_request"] if isinstance(invoice, dict) else str(invoice)
+    # --- ZAP QUEUE STORE -----------------------------------------
+    if nostr and zap_request_event:
+        try:
+            zap_request = json.loads(nostr)
 
+            def _extract_relays(tags):
+                for t in tags:
+                    if isinstance(t, list) and len(t) > 1 and t[0] == "relays":
+                        return t[1:]
+                return []
+
+            relays = _extract_relays(zap_request.get("tags", []))
+
+            payment_hash = ""
+            if isinstance(invoice, dict):
+                payment_hash = str(invoice.get("payment_hash") or "").strip()
+
+            if not payment_hash:
+                raise ValueError("Invoice missing payment_hash")
+
+            pending = _get_pending_zaps()
+
+            pending[payment_hash] = {
+                "created_at": int(time.time()),
+                "recipient_pubkey_hex": recipient_nostr_hex,
+                "payer_pubkey_hex": zap_request.get("pubkey"),
+                "amount_msat": amount,
+                "payment_request": payment_request,
+                "relays": relays,
+                "zap_request_event": zap_request,
+                "comment": comment or "",
+                "is_zap": bool(zap_request_event),
+                "identifier": alias["identifier"],
+                "published": False,
+            }
+
+            _save_pending_zaps(pending)
+            print("zap queued:", payment_hash)
+
+        except Exception as e:
+            print("zap queue error:", e)
+    # -------------------------------------------------------------
     success_message = f"Payment request for {alias['identifier']}"
     if comment:
         success_message = f"{success_message} • Comment: {comment}"
@@ -2963,3 +3154,235 @@ async def nostr_well_known(name: str = Query(default=None)):
             result[key] = pubkey_hex
 
     return {"names": result}
+
+
+# ===== ZAP EVENT PUBLISHING =====
+
+import asyncio
+from contextlib import suppress
+
+import coincurve
+import websockets
+
+def _hex_to_bytes(value: str) -> bytes:
+    return bytes.fromhex((value or "").strip())
+
+def _nostr_server_pubkey_hex() -> str:
+    if not NOSTR_SERVER_PRIVKEY:
+        return ""
+    pk = coincurve.PrivateKey(_hex_to_bytes(NOSTR_SERVER_PRIVKEY))
+    compressed = pk.public_key.format(compressed=True).hex()
+    return compressed[2:]
+
+def _nostr_event_id_hex(event):
+    payload = [
+        0,
+        event["pubkey"],
+        event["created_at"],
+        event["kind"],
+        event["tags"],
+        event["content"],
+    ]
+    raw = json.dumps(payload, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+def _sign_nostr_event(event):
+    event = dict(event)
+    event["pubkey"] = _nostr_server_pubkey_hex()
+    event["id"] = _nostr_event_id_hex(event)
+
+    privkey = coincurve.PrivateKey(_hex_to_bytes(NOSTR_SERVER_PRIVKEY))
+    sig = privkey.sign_schnorr(bytes.fromhex(event["id"]), aux_randomness=b"\x00"*32)
+    event["sig"] = sig.hex()
+    return event
+
+async def _publish_nostr_event_to_relay(relay_url, event):
+    try:
+        async with websockets.connect(relay_url) as ws:
+            await ws.send(json.dumps(["EVENT", event]))
+            return {"relay": relay_url, "ok": True}
+    except Exception as e:
+        return {"relay": relay_url, "ok": False, "error": str(e)}
+
+async def _publish_nostr_event(relays, event):
+    return await asyncio.gather(*[
+        _publish_nostr_event_to_relay(r, event) for r in relays
+    ])
+
+
+def _build_notification_event(item, settled_invoice):
+    amount_msat = int(item.get("amount_msat") or 0)
+    amount_sat = amount_msat // 1000 if amount_msat else 0
+    comment = (item.get("comment") or "").strip()
+    identifier = item.get("identifier") or "your address"
+    is_zap = bool(item.get("is_zap"))
+
+    if is_zap and comment:
+        content = f"⚡ Zap received on {identifier}: {amount_sat} sats • {comment}"
+    elif is_zap:
+        content = f"⚡ Zap received on {identifier}: {amount_sat} sats"
+    else:
+        content = f"⚡ Lightning payment received on {identifier}: {amount_sat} sats"
+
+    tags = [
+        ["p", item["recipient_pubkey_hex"]],
+    ]
+
+    payer = item.get("payer_pubkey_hex")
+    if payer:
+        tags.append(["P", payer])
+
+    if amount_msat:
+        tags.append(["amount", str(amount_msat)])
+
+    if comment:
+        tags.append(["comment", comment])
+
+    return {
+        "kind": 1,
+        "created_at": int(time.time()),
+        "tags": tags,
+        "content": content,
+    }
+
+def _normalize_relays(relays):
+    out = []
+    seen = set()
+
+    for relay in relays or []:
+        parts = str(relay).replace("\r", "").split("\n")
+        for part in parts:
+            value = part.strip()
+            if not value:
+                continue
+            if not value.startswith("wss://"):
+                continue
+            if value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+
+    return out
+
+
+def _get_pending_zaps():
+    cfg = load_config()
+    data = cfg.get("pending_zaps", {}) or {}
+
+    changed = False
+    for item in data.values():
+        if isinstance(item, dict):
+            cleaned = _normalize_relays(item.get("relays", []))
+            if cleaned != item.get("relays", []):
+                item["relays"] = cleaned
+                changed = True
+
+    if changed:
+        cfg["pending_zaps"] = data
+        save_config(cfg)
+
+    return data
+
+def _save_pending_zaps(data):
+    cfg = load_config()
+    cfg["pending_zaps"] = data
+    save_config(cfg)
+
+import base64
+
+async def _lookup_invoice(payment_hash):
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+    headers = {"Grpc-Metadata-macaroon": macaroon_hex}
+
+    # --- FIX: Base64 → HEX ---
+    try:
+        raw = base64.b64decode(payment_hash)
+        payment_hash_hex = raw.hex()
+    except Exception:
+        payment_hash_hex = payment_hash  # fallback (alte Einträge)
+    # -------------------------
+
+    async with httpx.AsyncClient(timeout=10, verify=False) as client:
+        r = await client.get(
+            f"{LND_REST_URL}/v1/invoice/{payment_hash_hex}",
+            headers=headers
+        )
+        return r.json()
+
+async def _process_pending_zaps_once():
+    pending = _get_pending_zaps()
+
+    for k, item in list(pending.items()):
+        if item.get("published"):
+            continue
+
+        inv = await _lookup_invoice(k)
+        if not inv.get("settled"):
+            continue
+
+        zap_request = item.get("zap_request_event") or {}
+
+        tags = [
+            ["p", item["recipient_pubkey_hex"]],
+            ["bolt11", item["payment_request"]],
+            ["description", json.dumps(zap_request, separators=(",", ":"), ensure_ascii=False)],
+        ]
+
+        payer_pubkey = item.get("payer_pubkey_hex")
+        if payer_pubkey:
+            tags.append(["P", payer_pubkey])
+
+        for t in zap_request.get("tags", []):
+            if isinstance(t, list) and len(t) >= 2 and t[0] in {"e", "a"}:
+                tags.append(t)
+
+        if item.get("amount_msat"):
+            tags.append(["amount", str(item["amount_msat"])])
+
+        preimage = inv.get("r_preimage") or inv.get("payment_preimage") or ""
+        if preimage:
+            tags.append(["preimage", preimage])
+
+        event = {
+            "kind": 9735,
+            "created_at": int(time.time()),
+            "tags": tags,
+            "content": "",
+        }
+
+        signed = _sign_nostr_event(event)
+        relays = item.get("relays") or NOSTR_DEFAULT_RELAYS
+
+        result = await _publish_nostr_event(relays, signed)
+
+        notification_event = _build_notification_event(item, inv)
+        signed_notification = _sign_nostr_event(notification_event)
+        notification_result = await _publish_nostr_event(relays, signed_notification)
+
+        item["published"] = True
+        item["result"] = result
+        item["notification_result"] = notification_result
+        item["notification_event"] = signed_notification
+        pending[k] = item
+
+    _save_pending_zaps(pending)
+
+async def _zap_publisher_loop():
+    while True:
+        try:
+            await _process_pending_zaps_once()
+        except Exception as e:
+            print("zap loop error", e)
+        await asyncio.sleep(NOSTR_ZAP_POLL_INTERVAL)
+
+@app.on_event("startup")
+async def start_zap_loop():
+    if NOSTR_SERVER_PRIVKEY:
+        asyncio.create_task(_zap_publisher_loop())
+        print("zap publisher loop started")
+
+@app.get("/api/debug/pending-zaps")
+def debug_zaps():
+    return _get_pending_zaps()
+
+# ===== END ZAP EVENTS =====

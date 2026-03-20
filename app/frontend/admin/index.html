@@ -609,6 +609,44 @@ main.card .headerRow {
       <div id="historyList" class="historyList"></div>
     </details>
 
+    <section class="section">
+      <h2>Nostr / Identity</h2>
+
+      <label class="label" for="identityAliasInput">Lightning Address Alias</label>
+      <input id="identityAliasInput" type="text" placeholder="z. B. alex" />
+
+      <label class="label" for="identityPubkeyInput" style="margin-top:14px;">Nostr Pubkey (hex oder npub)</label>
+      <input id="identityPubkeyInput" type="text" placeholder="hex... oder npub1..." />
+
+      <label class="label" for="identityRelaysInput" style="margin-top:14px;">Relays (optional, kommagetrennt)</label>
+      <input id="identityRelaysInput" type="text" placeholder="wss://relay.damus.io,wss://nos.lol" />
+
+      <div class="row">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input id="identityNip05EnabledInput" type="checkbox" checked />
+          <span>NIP-05 aktiv</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input id="identityZapEnabledInput" type="checkbox" checked />
+          <span>Zap / Nostr aktiv</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="loadIdentityBtn" class="secondary" type="button">Identity laden</button>
+        <button id="saveIdentityBtn" type="button">Identity speichern</button>
+      </div>
+
+      <div class="hint">
+        Ordnet einer Lightning Address wie <span class="mono">name@domain</span> einen Nostr Pubkey zu.
+        Diese Zuordnung wird für NIP-05 und LNURL Zaps verwendet.
+      </div>
+
+      <label class="label" for="identityResultOutput" style="margin-top:14px;">Identity Ergebnis</label>
+      <textarea id="identityResultOutput" class="mono copyable" readonly placeholder="Hier erscheint die Identity-Konfiguration..." title="Zum Kopieren antippen"></textarea>
+    </section>
+
     <details class="section">
       <summary>Alias / Cloudflare BIP353</summary>
 
@@ -689,6 +727,13 @@ main.card .headerRow {
     const paymentResultOutput = document.getElementById('paymentResultOutput');
 
     const historyList = document.getElementById('historyList');
+
+    const identityAliasInput = document.getElementById('identityAliasInput');
+    const identityPubkeyInput = document.getElementById('identityPubkeyInput');
+    const identityRelaysInput = document.getElementById('identityRelaysInput');
+    const identityNip05EnabledInput = document.getElementById('identityNip05EnabledInput');
+    const identityZapEnabledInput = document.getElementById('identityZapEnabledInput');
+    const identityResultOutput = document.getElementById('identityResultOutput');
 
     const cfRecordNameInput = document.getElementById('cfRecordNameInput');
     const cfOfferInput = document.getElementById('cfOfferInput');
@@ -1081,9 +1126,18 @@ function renderPayPreview(data) {
   payPreviewDesc.textContent = desc;
 
   const metaParts = [];
+  if (data?.kind) {
+    if (data.kind === 'lightning_address') metaParts.push('Lightning Address');
+    if (data.kind === 'lnurl') metaParts.push('LNURL Pay');
+    if (data.kind === 'bolt11') metaParts.push('BOLT11 Invoice');
+    if (data.kind === 'bolt12') metaParts.push('BOLT12 Offer');
+  }
   if (data?.amount_sat) metaParts.push(`${formatSats(data.amount_sat)}`);
   if (data?.min_sat || data?.max_sat) metaParts.push(`${data.min_sat || 0} - ${data.max_sat || 0} sats`);
   if (data?.comment_allowed) metaParts.push(`Kommentar bis ${data.comment_allowed} Zeichen`);
+  if (data?.allows_nostr === true || data?.allowsNostr === true) metaParts.push('Zap möglich');
+  if (data?.nip05_active === true) metaParts.push('NIP-05 aktiv');
+  if (data?.nostr_pubkey) metaParts.push(`Nostr: ${String(data.nostr_pubkey).slice(0, 16)}…`);
 
   payPreviewMeta.textContent = metaParts.join(' • ');
 
@@ -1186,6 +1240,88 @@ function errorToMessage(error) {
   }
 
   return String(error);
+}
+
+async function loadIdentityConfig(alias = '') {
+  const resolvedAlias = (alias || identityAliasInput.value || '').trim().toLowerCase();
+
+  if (!resolvedAlias) {
+    setStatus('Bitte zuerst einen Alias eingeben.', 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/identity-config?alias=${encodeURIComponent(resolvedAlias)}`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+
+    const data = await readJsonOrThrow(response);
+
+    identityAliasInput.value = data.alias || resolvedAlias;
+    identityPubkeyInput.value = data.nostr_pubkey || '';
+    identityRelaysInput.value = Array.isArray(data.relays) ? data.relays.join(',') : '';
+    identityNip05EnabledInput.checked = data.nip05_enabled !== false;
+    identityZapEnabledInput.checked = data.zap_enabled !== false;
+    identityResultOutput.value = JSON.stringify(data, null, 2);
+
+    setStatus(`Identity geladen: ${resolvedAlias}`);
+  } catch (error) {
+    const message = errorToMessage(error);
+    identityResultOutput.value = String(message);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  }
+}
+
+async function saveIdentityConfig() {
+  const alias = identityAliasInput.value.trim().toLowerCase();
+  const nostrPubkey = identityPubkeyInput.value.trim();
+  const relays = identityRelaysInput.value
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+
+  if (!alias) {
+    setStatus('Bitte einen Lightning Address Alias eingeben.', 'error');
+    return;
+  }
+
+  if (!nostrPubkey) {
+    setStatus('Bitte einen Nostr Pubkey eingeben.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('saveIdentityBtn');
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = 'Speichere...';
+
+  try {
+    const response = await fetch('/api/identity-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        alias,
+        nostr_pubkey: nostrPubkey,
+        relays,
+        nip05_enabled: !!identityNip05EnabledInput.checked,
+        zap_enabled: !!identityZapEnabledInput.checked
+      })
+    });
+
+    const data = await readJsonOrThrow(response);
+    identityResultOutput.value = JSON.stringify(data, null, 2);
+    setStatus(`Identity gespeichert: ${alias}`);
+  } catch (error) {
+    const message = errorToMessage(error);
+    identityResultOutput.value = String(message);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
 }
     function applyScanResult(rawValue) {
       const value = normalizeScannedText(rawValue);
@@ -1820,6 +1956,18 @@ async function checkPaySession() {
     window.location.href = '/pay-login';
   }
 }
+
+document.getElementById('loadIdentityBtn')?.addEventListener('click', async () => {
+  await loadIdentityConfig();
+});
+
+document.getElementById('saveIdentityBtn')?.addEventListener('click', async () => {
+  await saveIdentityConfig();
+});
+
+identityResultOutput?.addEventListener('click', async () => {
+  await copyText(identityResultOutput.value, 'Identity-Ergebnis kopiert.');
+});
 
 document.getElementById('logoutBtn')?.addEventListener('click', async () => {
   try {
