@@ -582,7 +582,7 @@ def _get_nostr_identity_for_name(name: str) -> dict:
         return {
             "alias": username,
             "nostr_pubkey": str(entry.get("nostr_pubkey", "")).strip().lower(),
-            "relays": entry.get("relays", []) or [],
+            "relays": _normalize_relays(entry.get("relays") or NOSTR_DEFAULT_RELAYS),
             "nip05_enabled": bool(entry.get("nip05_enabled", True)),
             "zap_enabled": bool(entry.get("zap_enabled", True)),
             "source": "config",
@@ -594,7 +594,7 @@ def _get_nostr_identity_for_name(name: str) -> dict:
         return {
             "alias": username,
             "nostr_pubkey": env_pub,
-            "relays": [],
+            "relays": _normalize_relays(NOSTR_DEFAULT_RELAYS),
             "nip05_enabled": True,
             "zap_enabled": True,
             "source": "env",
@@ -614,7 +614,7 @@ async def get_identity_config(alias: str):
         return {
             "alias": alias,
             "nostr_pubkey": "",
-            "relays": [],
+            "relays": _normalize_relays(NOSTR_DEFAULT_RELAYS),
             "nip05_enabled": True,
             "zap_enabled": True,
             "exists": False,
@@ -623,7 +623,7 @@ async def get_identity_config(alias: str):
     return {
         "alias": alias,
         "nostr_pubkey": str(entry.get("nostr_pubkey", "")).strip(),
-        "relays": entry.get("relays", []) or [],
+        "relays": _normalize_relays(entry.get("relays") or NOSTR_DEFAULT_RELAYS),
         "nip05_enabled": bool(entry.get("nip05_enabled", True)),
         "zap_enabled": bool(entry.get("zap_enabled", True)),
         "exists": True,
