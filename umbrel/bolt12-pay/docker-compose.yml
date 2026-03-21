@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  bolt12-pay:
+    image: alex71btc/bolt12-pay:latest
+    container_name: bolt12-pay
+    restart: unless-stopped
+
+    ports:
+      - "8081:8081"
+
+    environment:
+      APP_DATA_DIR: /data
+      CORS_ORIGINS: "*"
+
+      # --- LNDK ---
+      LNDK_CLI: /usr/local/bin/lndk-cli
+      LNDK_NETWORK: bitcoin
+      LNDK_GRPC_HOST: ${LNDK_GRPC_HOST}
+      LNDK_GRPC_PORT: ${LNDK_GRPC_PORT:-7000}
+      LNDK_CERT_PATH: /secrets/lndk-tls-cert.pem
+      LNDK_MACAROON_PATH: /secrets/admin.macaroon
+      LNDK_TIMEOUT_SECONDS: ${LNDK_TIMEOUT_SECONDS:-30}
+      ALLOW_PAY_OFFER: "true"
+
+      # --- LND REST ---
+      LND_REST_URL: ${LND_REST_URL}
+      LND_TLS_CERT_PATH: /secrets/tls.cert
+      LND_MACAROON_PATH: /secrets/admin.macaroon
+      LND_REST_INSECURE: ${LND_REST_INSECURE:-false}
+
+      # --- LNURL runtime defaults ---
+      LNURL_MIN_SENDABLE_MSAT: ${LNURL_MIN_SENDABLE_MSAT:-1000}
+      LNURL_MAX_SENDABLE_MSAT: ${LNURL_MAX_SENDABLE_MSAT:-1000000000}
+      LNURL_COMMENT_ALLOWED: ${LNURL_COMMENT_ALLOWED:-120}
+      LNURL_ALIAS_MODE: ${LNURL_ALIAS_MODE:-shared}
+      LNURL_SHARED_DESCRIPTION: ${LNURL_SHARED_DESCRIPTION:-LNURL payment}
+      LNURL_DEFAULT_DESCRIPTION: ${LNURL_DEFAULT_DESCRIPTION:-Lightning payment}
+
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+    volumes:
+      - bolt12_pay_data:/data
+      - lndk_secrets:/secrets:ro
+
+volumes:
+  bolt12_pay_data:
+  lndk_secrets:
+    external: true

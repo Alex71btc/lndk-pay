@@ -3,11 +3,11 @@ id: bolt12-pay
 name: BOLT12 Pay
 tagline: Self-hosted BOLT12 pay server with LNURL fallback
 category: finance
-version: "0.1.0"
+version: "0.2.47"
 port: 8081
 description: >-
   Self-hosted Lightning payment server with BOLT12 offers, LNURL fallback,
-  BIP353 support, public pay page and admin UI.
+  BIP353 support, public pay page, admin UI and Nostr zap notifications.
 developer: Alex71btc
 website: https://github.com/Alex71btc/lndk-pay
 submitter: Alex71btc
