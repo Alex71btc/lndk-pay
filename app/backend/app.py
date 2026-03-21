@@ -97,6 +97,92 @@ def get_public_lnurl_address():
     cfg = load_config()
     return (cfg.get("public_lnurl_address") or "").strip() or PUBLIC_LNURL_ADDRESS
 
+
+
+def _mask_secret(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if len(value) <= 12:
+        return "*" * len(value)
+    return value[:4] + "…" + value[-4:]
+
+
+def _hex_pubkey_to_npub(pubkey_hex: str) -> str:
+    try:
+        data = bytes.fromhex(pubkey_hex)
+        five = bech32.convertbits(data, 8, 5, True)
+        if not five:
+            return ""
+        return bech32.bech32_encode("npub", five)
+    except Exception:
+        return ""
+
+
+def _derive_pubkey_from_privkey_hex(privkey_hex: str) -> str:
+    privkey_hex = (privkey_hex or "").strip().lower()
+    if not privkey_hex:
+        return ""
+    try:
+        priv = coincurve.PrivateKey(bytes.fromhex(privkey_hex))
+        return priv.public_key_xonly.format().hex()
+    except Exception:
+        return ""
+
+
+def _normalize_nsec_to_hex(nsec: str) -> str:
+    nsec = (nsec or "").strip()
+    if not nsec:
+        return ""
+    if len(nsec) == 64:
+        return nsec.lower()
+    hrp, data = bech32.bech32_decode(nsec)
+    if hrp != "nsec" or data is None:
+        raise ValueError("Invalid nsec")
+    decoded = bech32.convertbits(data, 5, 8, False)
+    if not decoded:
+        raise ValueError("Invalid nsec payload")
+    return bytes(decoded).hex()
+
+
+def _generate_nostr_private_key_hex() -> str:
+    return secrets.token_hex(32)
+
+
+def _get_nostr_admin_status() -> dict[str, Any]:
+    cfg = load_config()
+
+    server_privkey = str(
+        cfg.get("nostr_server_privkey")
+        or _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or ""
+    ).strip().lower()
+
+    notify_nsec = str(
+        cfg.get("nostr_notify_nsec")
+        or _get_secret("NOSTR_NOTIFY_NSEC", "nostr_notify_nsec", default="")
+        or ""
+    ).strip()
+
+    server_pubkey_hex = _derive_pubkey_from_privkey_hex(server_privkey) if server_privkey else ""
+    notify_pubkey_hex = ""
+
+    try:
+        notify_hex = _normalize_nsec_to_hex(notify_nsec) if notify_nsec else ""
+        notify_pubkey_hex = _derive_pubkey_from_privkey_hex(notify_hex) if notify_hex else ""
+    except Exception:
+        notify_pubkey_hex = ""
+
+    return {
+        "server_key_configured": bool(server_privkey),
+        "server_pubkey_hex": server_pubkey_hex,
+        "server_npub": _hex_pubkey_to_npub(server_pubkey_hex) if server_pubkey_hex else "",
+        "notify_key_configured": bool(notify_nsec),
+        "notify_pubkey_hex": notify_pubkey_hex,
+        "notify_npub": _hex_pubkey_to_npub(notify_pubkey_hex) if notify_pubkey_hex else "",
+        "notify_nsec_masked": _mask_secret(notify_nsec),
+    }
+
 def get_cloudflare_config():
     cfg = load_config()
     cf = cfg.get("cloudflare", {}) or {}
@@ -3592,6 +3678,48 @@ async def start_zap_loop():
     if NOSTR_SERVER_PRIVKEY:
         asyncio.create_task(_zap_publisher_loop())
         print("zap publisher loop started")
+
+
+
+@app.get("/api/admin/nostr-status")
+async def api_admin_nostr_status(request: StarletteRequest):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return _get_nostr_admin_status()
+
+
+@app.post("/api/admin/nostr-notify-key")
+async def api_admin_nostr_notify_key(request: StarletteRequest):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    data = await request.json()
+    nsec = str(data.get("notify_nsec") or "").strip()
+
+    if not nsec:
+        raise HTTPException(status_code=400, detail="notify_nsec is required")
+
+    try:
+        _normalize_nsec_to_hex(nsec)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid nsec")
+
+    cfg = load_config()
+    cfg["nostr_notify_nsec"] = nsec
+    save_config(cfg)
+    return {"ok": True, "status": _get_nostr_admin_status()}
+
+
+@app.post("/api/admin/nostr-server-key/generate")
+async def api_admin_nostr_server_key_generate(request: StarletteRequest):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    privkey_hex = _generate_nostr_private_key_hex()
+    cfg = load_config()
+    cfg["nostr_server_privkey"] = privkey_hex
+    save_config(cfg)
+
+    return {"ok": True, "status": _get_nostr_admin_status()}
 
 @app.get("/api/debug/pending-zaps")
 def debug_zaps():

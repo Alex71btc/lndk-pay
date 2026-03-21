@@ -18,7 +18,7 @@
   <meta name="application-name" content="BOLT12 Pay" />
   <title>BOLT12 Pay</title>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
@@ -647,6 +647,32 @@ main.card .headerRow {
       <textarea id="identityResultOutput" class="mono copyable" readonly placeholder="Hier erscheint die Identity-Konfiguration..." title="Zum Kopieren antippen"></textarea>
     </section>
 
+    <section class="section">
+      <h2>Nostr Notification Keys</h2>
+
+      <label class="label">Server signer</label>
+      <div id="nostrServerStatus" class="valueBox">Loading...</div>
+      <div id="nostrServerPubkey" class="hint mono" style="margin-top:8px;"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="generateNostrServerKeyBtn" type="button">Neuen Server-Key generieren</button>
+      </div>
+
+      <label class="label" for="nostrNotifyNsecInput" style="margin-top:18px;">Notification NSEC</label>
+      <input id="nostrNotifyNsecInput" type="password" placeholder="nsec1..." />
+
+      <div id="nostrNotifyStatus" class="hint" style="margin-top:8px;"></div>
+      <div id="nostrNotifyPubkey" class="hint mono" style="margin-top:6px;"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="saveNostrNotifyKeyBtn" type="button">Notification NSEC speichern</button>
+      </div>
+
+      <div class="hint" style="margin-top:12px;">
+        Der Server-Key signiert App-interne Nostr-Events. Der Notification-NSEC wird für DM-/Push-kompatible Zap-Benachrichtigungen verwendet.
+      </div>
+    </section>
+
     <details class="section">
       <summary>Alias / Cloudflare BIP353</summary>
 
@@ -734,6 +760,13 @@ main.card .headerRow {
     const identityNip05EnabledInput = document.getElementById('identityNip05EnabledInput');
     const identityZapEnabledInput = document.getElementById('identityZapEnabledInput');
     const identityResultOutput = document.getElementById('identityResultOutput');
+
+    const nostrServerStatus = document.getElementById('nostrServerStatus');
+    const nostrServerPubkey = document.getElementById('nostrServerPubkey');
+    const nostrNotifyNsecInput = document.getElementById('nostrNotifyNsecInput');
+    const nostrNotifyStatus = document.getElementById('nostrNotifyStatus');
+    const nostrNotifyPubkey = document.getElementById('nostrNotifyPubkey');
+
 
     const cfRecordNameInput = document.getElementById('cfRecordNameInput');
     const cfOfferInput = document.getElementById('cfOfferInput');
@@ -903,16 +936,6 @@ function detectPaymentType(raw) {
       saveHistory(items);
       renderHistory();
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      await navigator.serviceWorker.register('/service-worker.js');
-      console.log('Service Worker registered');
-    } catch (err) {
-      console.error('Service Worker registration failed', err);
-    }
-  });
-}
 
     }
 
@@ -920,16 +943,6 @@ if ('serviceWorker' in navigator) {
       localStorage.removeItem(HISTORY_KEY);
       renderHistory();
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      await navigator.serviceWorker.register('/service-worker.js');
-      console.log('Service Worker registered');
-    } catch (err) {
-      console.error('Service Worker registration failed', err);
-    }
-  });
-}
 
       setStatus('Offer-History gelöscht.');
     }
@@ -1002,16 +1015,6 @@ if ('serviceWorker' in navigator) {
           saveHistory(next);
           renderHistory();
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      await navigator.serviceWorker.register('/service-worker.js');
-      console.log('Service Worker registered');
-    } catch (err) {
-      console.error('Service Worker registration failed', err);
-    }
-  });
-}
 
           setStatus('History-Eintrag gelöscht.');
         });
@@ -1240,6 +1243,75 @@ function errorToMessage(error) {
   }
 
   return String(error);
+}
+
+
+async function loadNostrStatus() {
+  try {
+    const res = await fetch('/api/admin/nostr-status', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (nostrServerStatus) {
+      nostrServerStatus.textContent = data.server_key_configured ? 'Configured' : 'Missing';
+    }
+    if (nostrServerPubkey) {
+      nostrServerPubkey.textContent = data.server_npub || data.server_pubkey_hex || '';
+    }
+    if (nostrNotifyStatus) {
+      nostrNotifyStatus.textContent = data.notify_key_configured
+        ? `Configured: ${data.notify_nsec_masked || ''}`
+        : 'Missing';
+    }
+    if (nostrNotifyPubkey) {
+      nostrNotifyPubkey.textContent = data.notify_npub || data.notify_pubkey_hex || '';
+    }
+  } catch (err) {
+    console.error('loadNostrStatus failed', err);
+  }
+}
+
+async function saveNostrNotifyKey() {
+  const notify_nsec = (nostrNotifyNsecInput?.value || '').trim();
+  if (!notify_nsec) {
+    setStatus('Bitte Notification NSEC eingeben.', 'warn');
+    return;
+  }
+
+  const res = await fetch('/api/admin/nostr-notify-key', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ notify_nsec })
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    setStatus(data.detail || 'Notification NSEC konnte nicht gespeichert werden.', 'error', true);
+    return;
+  }
+
+  if (nostrNotifyNsecInput) nostrNotifyNsecInput.value = '';
+  await loadNostrStatus();
+  setStatus('Notification NSEC gespeichert.', 'ok');
+}
+
+async function generateNostrServerKey() {
+  const res = await fetch('/api/admin/nostr-server-key/generate', {
+    method: 'POST',
+    credentials: 'same-origin'
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    setStatus(data.detail || 'Server-Key konnte nicht generiert werden.', 'error', true);
+    return;
+  }
+
+  await loadNostrStatus();
+  setStatus('Neuer Nostr Server-Key generiert.', 'ok');
 }
 
 async function loadIdentityConfig(alias = '') {
@@ -1931,16 +2003,6 @@ document.getElementById('cfCreateAliasBtn').addEventListener('click', async () =
     renderOfferQr(DEFAULT_ADDRESS);
     renderHistory();
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      await navigator.serviceWorker.register('/service-worker.js');
-      console.log('Service Worker registered');
-    } catch (err) {
-      console.error('Service Worker registration failed', err);
-    }
-  });
-}
 
 async function checkPaySession() {
   try {
@@ -1965,6 +2027,14 @@ document.getElementById('saveIdentityBtn')?.addEventListener('click', async () =
   await saveIdentityConfig();
 });
 
+document.getElementById('saveNostrNotifyKeyBtn')?.addEventListener('click', async () => {
+  await saveNostrNotifyKey();
+});
+
+document.getElementById('generateNostrServerKeyBtn')?.addEventListener('click', async () => {
+  await generateNostrServerKey();
+});
+
 identityResultOutput?.addEventListener('click', async () => {
   await copyText(identityResultOutput.value, 'Identity-Ergebnis kopiert.');
 });
@@ -1979,6 +2049,23 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
   } catch {}
   window.location.href = '/pay-login';
 });
-  </script>
+
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/service-worker.js');
+      console.log('Service Worker registered');
+    } catch (err) {
+      console.error('Service Worker registration failed', err);
+    }
+  });
+}
+
+window.addEventListener('load', async () => {
+  await loadNostrStatus();
+});
+
+</script>
 </body>
 </html>

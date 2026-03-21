@@ -1,0 +1,6 @@
+_chatgpt_backups/
+*.bak*
+patch_*.py
+data/
+*.json
+devtools/
