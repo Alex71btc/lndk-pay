@@ -124,18 +124,64 @@ LND_MACAROON_PATH = os.environ.get("LND_MACAROON_PATH", "/secrets/admin.macaroon
 LND_REST_TIMEOUT = float(os.environ.get("LND_REST_TIMEOUT_SECONDS", "30"))
 # --- Nostr / Zap Config ----------------------------------------------
 
-NOSTR_SERVER_PRIVKEY = os.environ.get("NOSTR_SERVER_PRIVKEY", "").strip().lower()
-NOSTR_NOTIFY_NSEC = os.environ.get("NOSTR_NOTIFY_NSEC", "").strip()
-NOSTR_DEFAULT_RELAYS = [
-    x.strip()
-    for x in os.environ.get(
-        "NOSTR_DEFAULT_RELAYS",
-        "wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net"
-    ).split(",")
-    if x.strip()
-]
+# === CONFIG SYSTEM (file + env fallback) ===
+APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/app/data"))
+CONFIG_DIR = APP_DATA_DIR / "config"
+CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(CONFIG_DIR / "config.json")))
+SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
 
-NOSTR_ZAP_POLL_INTERVAL = int(os.environ.get("NOSTR_ZAP_POLL_INTERVAL", "15"))
+
+def _load_json_file(path: Path):
+    try:
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _deep_get(data, *keys, default=None):
+    cur = data
+    for key in keys:
+        if not isinstance(cur, dict) or key not in cur:
+            return default
+        cur = cur[key]
+    return cur
+
+
+_APP_FILE_CONFIG = _load_json_file(CONFIG_JSON_PATH)
+_APP_FILE_SECRETS = _load_json_file(SECRETS_JSON_PATH)
+
+
+def _get_setting(env_name, *config_path, default=None):
+    env_val = os.getenv(env_name)
+    if env_val not in (None, ""):
+        return env_val
+    return _deep_get(_APP_FILE_CONFIG, *config_path, default=default)
+
+
+def _get_secret(env_name, *config_path, default=None):
+    env_val = os.getenv(env_name)
+    if env_val not in (None, ""):
+        return env_val
+    return _deep_get(_APP_FILE_SECRETS, *config_path, default=default)
+
+NOSTR_SERVER_PRIVKEY = _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="").strip().lower()
+NOSTR_NOTIFY_NSEC = _get_secret("NOSTR_NOTIFY_NSEC", "nostr_notify_nsec", default="").strip()
+_NOSTR_DEFAULT_RELAYS_RAW = _get_setting(
+    "NOSTR_DEFAULT_RELAYS",
+    "nostr",
+    "default_relays",
+    default=["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"],
+)
+
+if isinstance(_NOSTR_DEFAULT_RELAYS_RAW, str):
+    NOSTR_DEFAULT_RELAYS = [x.strip() for x in _NOSTR_DEFAULT_RELAYS_RAW.split(",") if x.strip()]
+else:
+    NOSTR_DEFAULT_RELAYS = [str(x).strip() for x in (_NOSTR_DEFAULT_RELAYS_RAW or []) if str(x).strip()]
+
+
+NOSTR_ZAP_POLL_INTERVAL = int(_get_setting("NOSTR_ZAP_POLL_INTERVAL", "nostr", "zap_poll_interval", default=15) or 15)
 
 # Extract the lno... offer string from lndk-cli output like:
 # Offer: CreateOfferResponse { offer: "lno1..." }.
@@ -364,23 +410,31 @@ def _parse_zap_request(nostr_raw: str, expected_pubkey_hex: str, amount_msat: in
     return event
 
 def _load_nostr_name_map():
-    raw = os.getenv("NOSTR_NAME_MAP", "").strip()
+    raw = NOSTR_NAME_MAP
+
+    if isinstance(raw, dict):
+        out = {}
+        for k, v in raw.items():
+            key = str(k).strip().lower()
+            val = str(v).strip()
+            if key and val:
+                out[key] = val
+        return out
+
     result = {}
-
-    if not raw:
-        return result
-
-    pairs = [p.strip() for p in raw.split(",") if p.strip()]
-    for pair in pairs:
-        if ":" not in pair:
+    for pair in str(raw or "").split(","):
+        pair = pair.strip()
+        if not pair or ":" not in pair:
             continue
         name, npub = pair.split(":", 1)
-        result[name.strip().lower()] = npub.strip()
-
+        name = name.strip().lower()
+        npub = npub.strip()
+        if name and npub:
+            result[name] = npub
     return result
 
 
-NOSTR_NAME_MAP = _load_nostr_name_map()
+NOSTR_NAME_MAP = _get_setting("NOSTR_NAME_MAP", "nostr", "name_map", default={})
 
 app = FastAPI(title="LNDK Backend", version="0.5.0")
 
@@ -3431,6 +3485,7 @@ def _save_pending_zaps(data):
     save_config(cfg)
 
 import base64
+
 
 async def _lookup_invoice(payment_hash):
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)

@@ -10,9 +10,12 @@ services:
       - "8091:8081"
 
     environment:
-      # --- Auth ---
-      PAY_UI_PASSWORD: ${PAY_UI_PASSWORD}
+      APP_DATA_DIR: /data
+
+      # --- Auth / App ---
       PAY_UI_SESSION_TTL: ${PAY_UI_SESSION_TTL:-1800}
+      APP_CONFIG_PATH: /data/config.json
+      CORS_ORIGINS: "*"
 
       # --- LNDK ---
       LNDK_CLI: /usr/local/bin/lndk-cli
@@ -30,10 +33,7 @@ services:
       LND_MACAROON_PATH: /secrets/admin.macaroon
       LND_REST_INSECURE: ${LND_REST_INSECURE:-false}
 
-      # --- LNURL / Lightning Address ---
-      PUBLIC_LNURL_ADDRESS: ${PUBLIC_LNURL_ADDRESS}
-      LNURL_BASE_DOMAIN: ${LNURL_BASE_DOMAIN}
-      LNURL_BASE_URL: ${LNURL_BASE_URL}
+      # --- LNURL / Lightning Address runtime settings ---
       LNURL_MIN_SENDABLE_MSAT: ${LNURL_MIN_SENDABLE_MSAT:-1000}
       LNURL_MAX_SENDABLE_MSAT: ${LNURL_MAX_SENDABLE_MSAT:-1000000000}
       LNURL_COMMENT_ALLOWED: ${LNURL_COMMENT_ALLOWED:-120}
@@ -41,15 +41,6 @@ services:
       LNURL_SHARED_DESCRIPTION: ${LNURL_SHARED_DESCRIPTION:-LNURL payment}
       LNURL_DEFAULT_DESCRIPTION: ${LNURL_DEFAULT_DESCRIPTION:-Lightning payment}
       LNURL_ALIAS_MAP: ""
-
-      # --- Cloudflare (optional) ---
-      CF_API_TOKEN: ${CF_API_TOKEN:-}
-      CF_ZONE_ID: ${CF_ZONE_ID:-}
-      CF_ZONE_NAME: ${CF_ZONE_NAME:-}
-
-      # --- App ---
-      APP_CONFIG_PATH: /data/config.json
-      CORS_ORIGINS: "*"
 
     dns:
       - 1.1.1.1

@@ -12,3 +12,11 @@ cookies.txt
 deploy/docker-compose.local.yml
 app/docker-compose.yml
 app/docker-compose.yml
+app/data/config/secrets.json
+app/data/config/*.local.json
+_chatgpt_backups/
+*.bak*
+patch_*.py
+app/data/config/config.json
+app/data/config/*.json
+!app/data/config/*.example.json

@@ -6,3 +6,5 @@ qrcode[pil]
 bech32
 coincurve==20.0.0
 websockets==12.0
+
+pycryptodome
