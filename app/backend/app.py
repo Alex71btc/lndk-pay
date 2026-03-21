@@ -258,13 +258,112 @@ _NOSTR_DEFAULT_RELAYS_RAW = _get_setting(
     "NOSTR_DEFAULT_RELAYS",
     "nostr",
     "default_relays",
-    default=["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"],
+    default=[
+        "wss://relay.primal.net",
+        "wss://relay.damus.io",
+        "wss://nos.lol",
+        "wss://relay.getalby.com/v1",
+        "wss://offchain.pub",
+        "wss://relay.alex71btc.com",
+    ],
 )
 
 if isinstance(_NOSTR_DEFAULT_RELAYS_RAW, str):
     NOSTR_DEFAULT_RELAYS = [x.strip() for x in _NOSTR_DEFAULT_RELAYS_RAW.split(",") if x.strip()]
 else:
     NOSTR_DEFAULT_RELAYS = [str(x).strip() for x in (_NOSTR_DEFAULT_RELAYS_RAW or []) if str(x).strip()]
+
+
+OLD_DEFAULT_NOSTR_RELAYS = [
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.primal.net",
+]
+
+TARGET_DEFAULT_NOSTR_RELAYS = [
+    "wss://relay.primal.net",
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.getalby.com/v1",
+    "wss://offchain.pub",
+    "wss://relay.alex71btc.com",
+]
+
+
+def _local_normalize_relays(relays):
+    out = []
+    seen = set()
+    for relay in relays or []:
+        parts = str(relay).replace("\r", "").split("\n")
+        for part in parts:
+            value = part.strip()
+            if not value:
+                continue
+            if not value.startswith("wss://"):
+                continue
+            if value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+    return out
+
+
+def _effective_default_nostr_relays():
+    current = _local_normalize_relays(NOSTR_DEFAULT_RELAYS)
+    old = _local_normalize_relays(OLD_DEFAULT_NOSTR_RELAYS)
+    target = _local_normalize_relays(TARGET_DEFAULT_NOSTR_RELAYS)
+
+    if not current or current == old:
+        return target
+    return current
+
+
+def _migrate_default_nostr_relays() -> None:
+    try:
+        def _local_normalize_relays(relays):
+            out = []
+            seen = set()
+            for relay in relays or []:
+                parts = str(relay).replace("\r", "").split("\n")
+                for part in parts:
+                    value = part.strip()
+                    if not value:
+                        continue
+                    if not value.startswith("wss://"):
+                        continue
+                    if value in seen:
+                        continue
+                    seen.add(value)
+                    out.append(value)
+            return out
+
+        cfg = _load_json_file(CONFIG_JSON_PATH)
+        if not isinstance(cfg, dict):
+            cfg = {}
+
+        nostr_cfg = cfg.get("nostr") or {}
+        if not isinstance(nostr_cfg, dict):
+            nostr_cfg = {}
+
+        current = nostr_cfg.get("default_relays")
+
+        normalized_current = _local_normalize_relays(current or [])
+        normalized_old = _local_normalize_relays(OLD_DEFAULT_NOSTR_RELAYS)
+        normalized_target = _local_normalize_relays(TARGET_DEFAULT_NOSTR_RELAYS)
+
+        if not normalized_current or normalized_current == normalized_old:
+            cfg.setdefault("nostr", {})
+            cfg["nostr"]["default_relays"] = normalized_target
+            CONFIG_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+            CONFIG_JSON_PATH.write_text(
+                json.dumps(cfg, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8"
+            )
+    except Exception:
+        pass
+
+
+_migrate_default_nostr_relays()
 
 
 NOSTR_ZAP_POLL_INTERVAL = int(_get_setting("NOSTR_ZAP_POLL_INTERVAL", "nostr", "zap_poll_interval", default=15) or 15)
@@ -582,7 +681,7 @@ def _get_nostr_identity_for_name(name: str) -> dict:
         return {
             "alias": username,
             "nostr_pubkey": str(entry.get("nostr_pubkey", "")).strip().lower(),
-            "relays": _normalize_relays(entry.get("relays") or NOSTR_DEFAULT_RELAYS),
+            "relays": _normalize_relays(entry.get("relays") or _effective_default_nostr_relays()),
             "nip05_enabled": bool(entry.get("nip05_enabled", True)),
             "zap_enabled": bool(entry.get("zap_enabled", True)),
             "source": "config",
@@ -594,7 +693,7 @@ def _get_nostr_identity_for_name(name: str) -> dict:
         return {
             "alias": username,
             "nostr_pubkey": env_pub,
-            "relays": _normalize_relays(NOSTR_DEFAULT_RELAYS),
+            "relays": _normalize_relays(_effective_default_nostr_relays()),
             "nip05_enabled": True,
             "zap_enabled": True,
             "source": "env",
@@ -614,7 +713,7 @@ async def get_identity_config(alias: str):
         return {
             "alias": alias,
             "nostr_pubkey": "",
-            "relays": _normalize_relays(NOSTR_DEFAULT_RELAYS),
+            "relays": _normalize_relays(_effective_default_nostr_relays()),
             "nip05_enabled": True,
             "zap_enabled": True,
             "exists": False,
@@ -623,7 +722,7 @@ async def get_identity_config(alias: str):
     return {
         "alias": alias,
         "nostr_pubkey": str(entry.get("nostr_pubkey", "")).strip(),
-        "relays": _normalize_relays(entry.get("relays") or NOSTR_DEFAULT_RELAYS),
+        "relays": _normalize_relays(entry.get("relays") or _effective_default_nostr_relays()),
         "nip05_enabled": bool(entry.get("nip05_enabled", True)),
         "zap_enabled": bool(entry.get("zap_enabled", True)),
         "exists": True,
