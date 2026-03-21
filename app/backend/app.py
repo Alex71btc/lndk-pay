@@ -29,6 +29,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, Field
 from backend.config import load_config, save_config
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from coincurve import PrivateKey, PublicKey
 
 # --- Configuration ---------------------------------------------------------
 HOME_URL = "/"
@@ -122,7 +125,7 @@ LND_REST_TIMEOUT = float(os.environ.get("LND_REST_TIMEOUT_SECONDS", "30"))
 # --- Nostr / Zap Config ----------------------------------------------
 
 NOSTR_SERVER_PRIVKEY = os.environ.get("NOSTR_SERVER_PRIVKEY", "").strip().lower()
-
+NOSTR_NOTIFY_NSEC = os.environ.get("NOSTR_NOTIFY_NSEC", "").strip()
 NOSTR_DEFAULT_RELAYS = [
     x.strip()
     for x in os.environ.get(
@@ -3186,6 +3189,60 @@ def _nostr_event_id_hex(event):
     raw = json.dumps(payload, separators=(",", ":"))
     return hashlib.sha256(raw.encode()).hexdigest()
 
+def _normalize_nostr_private_key(raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+
+    raw_lower = raw.lower()
+
+    if raw_lower.startswith("nsec1"):
+        try:
+            hrp, data = bech32.bech32_decode(raw_lower)
+            if hrp != "nsec" or data is None:
+                return ""
+            decoded = bech32.convertbits(data, 5, 8, False)
+            if decoded is None:
+                return ""
+            return bytes(decoded).hex()
+        except Exception:
+            return ""
+
+    try:
+        if len(raw_lower) == 64:
+            bytes.fromhex(raw_lower)
+            return raw_lower
+    except Exception:
+        return ""
+
+    return ""
+
+
+def _notification_signing_privkey_hex() -> str:
+    notify_hex = _normalize_nostr_private_key(NOSTR_NOTIFY_NSEC)
+    if notify_hex:
+        return notify_hex
+    return _normalize_nostr_private_key(NOSTR_SERVER_PRIVKEY)
+
+
+def _sign_nostr_event_with_privkey(event: dict[str, Any], privkey_hex: str) -> dict[str, Any]:
+    event = dict(event)
+    privkey = coincurve.PrivateKey(_hex_to_bytes(privkey_hex))
+    pubkey_hex = privkey.public_key_xonly.format().hex()
+
+    event["pubkey"] = pubkey_hex
+    serialized = json.dumps(
+        [0, pubkey_hex, event["created_at"], event["kind"], event["tags"], event["content"]],
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    event_id = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    sig = privkey.sign_schnorr(bytes.fromhex(event_id), aux_randomness=b"\x00" * 32).hex()
+
+    event["id"] = event_id
+    event["sig"] = sig
+    return event
+
 def _sign_nostr_event(event):
     event = dict(event)
     event["pubkey"] = _nostr_server_pubkey_hex()
@@ -3195,6 +3252,91 @@ def _sign_nostr_event(event):
     sig = privkey.sign_schnorr(bytes.fromhex(event["id"]), aux_randomness=b"\x00"*32)
     event["sig"] = sig.hex()
     return event
+
+def _nip04_encrypt(privkey_hex: str, pubkey_hex: str, plaintext: str) -> str:
+    privkey_bytes = bytes.fromhex(privkey_hex)
+    recipient_pubkey = PublicKey(bytes.fromhex("02" + pubkey_hex))
+
+    shared_point = recipient_pubkey.multiply(privkey_bytes)
+    shared_point_compressed = shared_point.format(compressed=True)
+
+    key = shared_point_compressed[1:33]
+
+    iv = os.urandom(16)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    encrypted = cipher.encrypt(pad(plaintext.encode("utf-8"), 16))
+
+    return (
+        base64.b64encode(encrypted).decode("ascii")
+        + "?iv="
+        + base64.b64encode(iv).decode("ascii")
+    )
+
+
+def _build_dm_event(recipient_pubkey_hex: str, encrypted_content: str) -> dict[str, Any]:
+    return {
+        "kind": 4,
+        "created_at": int(time.time()),
+        "tags": [["p", recipient_pubkey_hex]],
+        "content": encrypted_content,
+    }
+
+def _nostr_encode_bech32(hrp: str, raw: bytes) -> str:
+    data = bech32.convertbits(list(raw), 8, 5, True)
+    if data is None:
+        raise ValueError("bech32 convertbits failed")
+    return bech32.bech32_encode(hrp, data)
+
+def _build_zap_dm_message(item: dict[str, Any]) -> str:
+    sats = int(item.get("amount_msat") or 0) // 1000
+    identifier = item.get("identifier") or "your address"
+    comment = (item.get("comment") or "").strip()
+    payer_hex = (item.get("payer_pubkey_hex") or "").strip()
+    zap_request_event = item.get("zap_request_event") or {}
+
+    payer_display = "someone"
+    if payer_hex:
+        try:
+            payer_display = "@" + _nostr_encode_bech32("npub", bytes.fromhex(payer_hex))
+        except Exception:
+            payer_display = payer_hex[:12] + "…"
+
+    note_event_id = ""
+    for tag in zap_request_event.get("tags") or []:
+        if isinstance(tag, list) and len(tag) >= 2 and tag[0] == "e":
+            note_event_id = str(tag[1]).strip()
+            if note_event_id:
+                break
+
+    is_profile_zap = not bool(note_event_id)
+
+    note_ref = ""
+    if note_event_id:
+        try:
+            note_ref = "nostr:" + _nostr_encode_bech32("note", bytes.fromhex(note_event_id))
+        except Exception:
+            note_ref = note_event_id
+
+    lines = []
+
+    if is_profile_zap:
+        line = f"Received Profile Zap from {payer_display} with amount: {sats} sats ⚡"
+        if comment:
+            line += f" for Comment: {comment}"
+        return line
+
+    lines.append(f"Received Zap from {payer_display} with amount: {sats} sats ⚡ for note:")
+
+    if note_ref:
+        lines.append(note_ref)
+    else:
+        lines.append(identifier)
+
+    if comment:
+        lines.append("")
+        lines.append(f"Comment: {comment}")
+
+    return "\n".join(lines)
 
 async def _publish_nostr_event_to_relay(relay_url, event):
     try:
@@ -3355,16 +3497,31 @@ async def _process_pending_zaps_once():
 
         result = await _publish_nostr_event(relays, signed)
 
-        notification_event = _build_notification_event(item, inv)
-        signed_notification = _sign_nostr_event(notification_event)
-        notification_result = await _publish_nostr_event(relays, signed_notification)
+        try:
+            dm_message = _build_zap_dm_message(item)
+            notify_privkey_hex = _notification_signing_privkey_hex()
+            if not notify_privkey_hex:
+                raise ValueError("No notification signing key configured")
+
+            encrypted_dm = _nip04_encrypt(
+                notify_privkey_hex,
+                item["recipient_pubkey_hex"],
+                dm_message,
+            )
+            dm_event = _build_dm_event(item["recipient_pubkey_hex"], encrypted_dm)
+            notify_privkey_hex = _notification_signing_privkey_hex()
+            if not notify_privkey_hex:
+                raise ValueError("No notification signing key configured")
+            signed_dm = _sign_nostr_event_with_privkey(dm_event, notify_privkey_hex)
+            dm_result = await _publish_nostr_event(relays, signed_dm)
+            item["dm_event"] = signed_dm
+            item["dm_result"] = dm_result
+        except Exception as exc:
+            item["dm_error"] = str(exc)
 
         item["published"] = True
         item["result"] = result
-        item["notification_result"] = notification_result
-        item["notification_event"] = signed_notification
         pending[k] = item
-
     _save_pending_zaps(pending)
 
 async def _zap_publisher_loop():
