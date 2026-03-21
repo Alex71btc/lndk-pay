@@ -3,7 +3,7 @@ id: bolt12-pay
 name: BOLT12 Pay
 tagline: Self-hosted BOLT12 pay server with LNURL fallback
 category: finance
-version: "0.2.47"
+version: "0.2.49"
 port: 8081
 description: >-
   Self-hosted Lightning payment server with BOLT12 offers, LNURL fallback,
