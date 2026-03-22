@@ -3813,16 +3813,8 @@ async def _zap_publisher_loop():
 
 @app.on_event("startup")
 async def start_zap_loop():
-    server_privkey = str(
-        _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
-        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
-        or ""
-    ).strip().lower()
-    if server_privkey:
-        asyncio.create_task(_zap_publisher_loop())
-        print("zap publisher loop started")
-
-
+    asyncio.create_task(_zap_publisher_loop())
+    print("zap publisher loop started")
 
 @app.get("/api/admin/nostr-status")
 async def api_admin_nostr_status(request: StarletteRequest):
