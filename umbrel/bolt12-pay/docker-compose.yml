@@ -1,51 +1,64 @@
-version: "3.8"
+version: "3.7"
 
 services:
-  bolt12-pay:
-    image: alex71btc/bolt12-pay:latest
-    container_name: bolt12-pay
-    restart: unless-stopped
+  app_proxy:
+    environment:
+      APP_HOST: alex-bolt12-pay_web_1
+      APP_PORT: 8081
+      PROXY_AUTH_ADD: "false"
 
-    ports:
-      - "8081:8081"
-
+  web:
+    image: alex71btc/bolt12-pay:0.2.49
+    restart: on-failure
+    depends_on:
+      - lndk
     environment:
       APP_DATA_DIR: /data
+      APP_CONFIG_PATH: /data/config/config.json
+      PAY_UI_SESSION_TTL: "1800"
       CORS_ORIGINS: "*"
 
-      # --- LNDK ---
       LNDK_CLI: /usr/local/bin/lndk-cli
       LNDK_NETWORK: bitcoin
-      LNDK_GRPC_HOST: ${LNDK_GRPC_HOST}
-      LNDK_GRPC_PORT: ${LNDK_GRPC_PORT:-7000}
-      LNDK_CERT_PATH: /secrets/lndk-tls-cert.pem
-      LNDK_MACAROON_PATH: /secrets/admin.macaroon
-      LNDK_TIMEOUT_SECONDS: ${LNDK_TIMEOUT_SECONDS:-30}
+      LNDK_GRPC_HOST: https://lndk
+      LNDK_GRPC_PORT: "7000"
+      LNDK_CERT_PATH: /data/lndk/tls-cert.pem
+      LNDK_MACAROON_PATH: /lnd/data/chain/bitcoin/mainnet/admin.macaroon
+      LNDK_TIMEOUT_SECONDS: "30"
       ALLOW_PAY_OFFER: "true"
 
-      # --- LND REST ---
-      LND_REST_URL: ${LND_REST_URL}
-      LND_TLS_CERT_PATH: /secrets/tls.cert
-      LND_MACAROON_PATH: /secrets/admin.macaroon
-      LND_REST_INSECURE: ${LND_REST_INSECURE:-false}
+      LND_REST_URL: https://192.168.188.39:8080
+      LND_TLS_CERT_PATH: /lnd/tls.cert
+      LND_MACAROON_PATH: /lnd/data/chain/bitcoin/mainnet/admin.macaroon
+      LND_REST_INSECURE: "false"
 
-      # --- LNURL runtime defaults ---
-      LNURL_MIN_SENDABLE_MSAT: ${LNURL_MIN_SENDABLE_MSAT:-1000}
-      LNURL_MAX_SENDABLE_MSAT: ${LNURL_MAX_SENDABLE_MSAT:-1000000000}
-      LNURL_COMMENT_ALLOWED: ${LNURL_COMMENT_ALLOWED:-120}
-      LNURL_ALIAS_MODE: ${LNURL_ALIAS_MODE:-shared}
-      LNURL_SHARED_DESCRIPTION: ${LNURL_SHARED_DESCRIPTION:-LNURL payment}
-      LNURL_DEFAULT_DESCRIPTION: ${LNURL_DEFAULT_DESCRIPTION:-Lightning payment}
-
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
-
+      LNURL_MIN_SENDABLE_MSAT: "1000"
+      LNURL_MAX_SENDABLE_MSAT: "1000000000"
+      LNURL_COMMENT_ALLOWED: "120"
+      LNURL_ALIAS_MODE: "shared"
+      LNURL_SHARED_DESCRIPTION: "LNURL payment"
+      LNURL_DEFAULT_DESCRIPTION: "Lightning payment"
+      LNURL_ALIAS_MAP: ""
     volumes:
-      - bolt12_pay_data:/data
-      - lndk_secrets:/secrets:ro
+      - ${APP_DATA_DIR}/data:/data
+      - ${UMBREL_ROOT}/app-data/lightning/data/lnd:/lnd:ro
 
-volumes:
-  bolt12_pay_data:
-  lndk_secrets:
-    external: true
+  lndk:
+    image: alex71btc/lndk:stable
+    restart: on-failure
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - >
+        sleep 30 &&
+        exec lndk
+        --address=https://192.168.188.39:10009
+        --cert-path=/lnd/tls.cert
+        --macaroon-path=/lnd/data/chain/bitcoin/mainnet/admin.macaroon
+        --data-dir=/data/lndk
+        --grpc-host=0.0.0.0
+        --grpc-port=7000
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+      - ${UMBREL_ROOT}/app-data/lightning/data/lnd:/lnd:ro

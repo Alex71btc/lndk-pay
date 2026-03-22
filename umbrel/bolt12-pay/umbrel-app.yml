@@ -1,5 +1,5 @@
 manifestVersion: 1
-id: alex71btc-bolt12-pay
+id: alex-bolt12-pay
 name: BOLT12 Pay
 tagline: Self-hosted Lightning Address, BOLT12 and Nostr Zap Server
 category: finance
@@ -13,6 +13,8 @@ website: https://github.com/Alex71btc/lndk-pay
 submitter: Alex71btc
 repo: https://github.com/Alex71btc/lndk-pay
 support: https://github.com/Alex71btc/lndk-pay/issues
+dependencies:
+  - lightning
 gallery:
   - https://raw.githubusercontent.com/Alex71btc/lndk-pay/main/umbrel/bolt12-pay/gallery/1.png
   - https://raw.githubusercontent.com/Alex71btc/lndk-pay/main/umbrel/bolt12-pay/gallery/2.png
