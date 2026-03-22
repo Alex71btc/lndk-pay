@@ -1,0 +1,9 @@
+target
+.git
+.venv
+__pycache__
+*.tar
+*.log
+notes
+app/secrets
+app/data
