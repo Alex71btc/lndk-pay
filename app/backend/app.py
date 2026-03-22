@@ -211,9 +211,9 @@ LND_REST_TIMEOUT = float(os.environ.get("LND_REST_TIMEOUT_SECONDS", "30"))
 # --- Nostr / Zap Config ----------------------------------------------
 
 # === CONFIG SYSTEM (file + env fallback) ===
-APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/app/data"))
+APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/data"))
 CONFIG_DIR = APP_DATA_DIR / "config"
-CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(CONFIG_DIR / "config.json")))
+CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(APP_DATA_DIR / "config.json")))
 SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
 
 
@@ -235,22 +235,18 @@ def _deep_get(data, *keys, default=None):
     return cur
 
 
-_APP_FILE_CONFIG = _load_json_file(CONFIG_JSON_PATH)
-_APP_FILE_SECRETS = _load_json_file(SECRETS_JSON_PATH)
-
-
 def _get_setting(env_name, *config_path, default=None):
     env_val = os.getenv(env_name)
     if env_val not in (None, ""):
         return env_val
-    return _deep_get(_APP_FILE_CONFIG, *config_path, default=default)
+    return _deep_get(_load_json_file(CONFIG_JSON_PATH), *config_path, default=default)
 
 
 def _get_secret(env_name, *config_path, default=None):
     env_val = os.getenv(env_name)
     if env_val not in (None, ""):
         return env_val
-    return _deep_get(_APP_FILE_SECRETS, *config_path, default=default)
+    return _deep_get(_load_json_file(SECRETS_JSON_PATH), *config_path, default=default)
 
 NOSTR_SERVER_PRIVKEY = _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="").strip().lower()
 NOSTR_NOTIFY_NSEC = _get_secret("NOSTR_NOTIFY_NSEC", "nostr_notify_nsec", default="").strip()
@@ -3377,25 +3373,44 @@ if __name__ == "__main__":
 
 @app.get("/.well-known/nostr.json")
 async def nostr_well_known(name: str = Query(default=None)):
-    if name:
-        key = name.strip().lower()
-        pubkey = NOSTR_NAME_MAP.get(key)
-        if not pubkey:
-            return JSONResponse({"names": {}}, status_code=200)
+    cfg = load_config()
+    identity_map = cfg.get("identity_map", {}) or {}
+    nostr_cfg = cfg.get("nostr", {}) or {}
+    default_relays = nostr_cfg.get("default_relays", []) or []
 
-        pubkey_hex = _npub_to_hex_pubkey(pubkey)
+    names = {}
+    relays = {}
+
+    def _add_alias(alias_name: str, item: dict):
+        if not isinstance(item, dict):
+            return
+        if not item.get("nip05_enabled"):
+            return
+
+        pubkey_hex = str(item.get("nostr_pubkey") or "").strip().lower()
         if not pubkey_hex:
-            return JSONResponse({"names": {}}, status_code=200)
+            return
 
-        return {"names": {key: pubkey_hex}}
+        names[alias_name] = pubkey_hex
 
-    result = {}
-    for key, pubkey in NOSTR_NAME_MAP.items():
-        pubkey_hex = _npub_to_hex_pubkey(pubkey)
-        if pubkey_hex:
-            result[key] = pubkey_hex
+        alias_relays = item.get("relays") or default_relays
+        if isinstance(alias_relays, list) and alias_relays:
+            relays[pubkey_hex] = alias_relays
 
-    return {"names": result}
+    if name:
+        alias_name = name.strip().lower()
+        item = identity_map.get(alias_name)
+        if item:
+            _add_alias(alias_name, item)
+    else:
+        for alias_name, item in identity_map.items():
+            _add_alias(alias_name, item)
+
+    response = {"names": names}
+    if relays:
+        response["relays"] = relays
+
+    return JSONResponse(response, status_code=200)
 
 
 # ===== ZAP EVENT PUBLISHING =====
@@ -3410,9 +3425,14 @@ def _hex_to_bytes(value: str) -> bytes:
     return bytes.fromhex((value or "").strip())
 
 def _nostr_server_pubkey_hex() -> str:
-    if not NOSTR_SERVER_PRIVKEY:
+    server_privkey = str(
+        _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or ""
+    ).strip().lower()
+    if not server_privkey:
         return ""
-    pk = coincurve.PrivateKey(_hex_to_bytes(NOSTR_SERVER_PRIVKEY))
+    pk = coincurve.PrivateKey(_hex_to_bytes(server_privkey))
     compressed = pk.public_key.format(compressed=True).hex()
     return compressed[2:]
 
@@ -3458,10 +3478,22 @@ def _normalize_nostr_private_key(raw: str) -> str:
 
 
 def _notification_signing_privkey_hex() -> str:
-    notify_hex = _normalize_nostr_private_key(NOSTR_NOTIFY_NSEC)
-    if notify_hex:
-        return notify_hex
-    return _normalize_nostr_private_key(NOSTR_SERVER_PRIVKEY)
+    notify_nsec = str(
+        _get_secret("NOSTR_NOTIFY_NSEC", "nostr_notify_nsec", default="")
+        or ""
+    ).strip()
+    if notify_nsec:
+        return _normalize_nostr_private_key(notify_nsec)
+
+    server_privkey = str(
+        _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or ""
+    ).strip().lower()
+    if server_privkey:
+        return _normalize_nostr_private_key(server_privkey)
+
+    return ""
 
 
 def _sign_nostr_event_with_privkey(event: dict[str, Any], privkey_hex: str) -> dict[str, Any]:
@@ -3487,7 +3519,14 @@ def _sign_nostr_event(event):
     event["pubkey"] = _nostr_server_pubkey_hex()
     event["id"] = _nostr_event_id_hex(event)
 
-    privkey = coincurve.PrivateKey(_hex_to_bytes(NOSTR_SERVER_PRIVKEY))
+    server_privkey = str(
+        _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or ""
+    ).strip().lower()
+    if not server_privkey:
+        raise ValueError("No nostr server private key configured")
+    privkey = coincurve.PrivateKey(_hex_to_bytes(server_privkey))
     sig = privkey.sign_schnorr(bytes.fromhex(event["id"]), aux_randomness=b"\x00"*32)
     event["sig"] = sig.hex()
     return event
@@ -3774,7 +3813,12 @@ async def _zap_publisher_loop():
 
 @app.on_event("startup")
 async def start_zap_loop():
-    if NOSTR_SERVER_PRIVKEY:
+    server_privkey = str(
+        _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or ""
+    ).strip().lower()
+    if server_privkey:
         asyncio.create_task(_zap_publisher_loop())
         print("zap publisher loop started")
 
@@ -3785,6 +3829,24 @@ async def api_admin_nostr_status(request: StarletteRequest):
     if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
     return _get_nostr_admin_status()
+
+
+
+def load_secrets() -> dict:
+    path = Path("/data/config/secrets.json")
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_secrets(data: dict) -> None:
+    path = Path("/data/config/secrets.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
 
 
 @app.post("/api/admin/nostr-notify-key")
@@ -3802,9 +3864,9 @@ async def api_admin_nostr_notify_key(request: StarletteRequest):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid nsec")
 
-    cfg = load_config()
-    cfg["nostr_notify_nsec"] = nsec
-    save_config(cfg)
+    secrets = load_secrets()
+    secrets["nostr_notify_nsec"] = nsec
+    save_secrets(secrets)
     return {"ok": True, "status": _get_nostr_admin_status()}
 
 
