@@ -12,7 +12,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend ./backend
 COPY frontend ./frontend
 COPY assets /app/assets
+COPY data /app/data
+COPY entrypoint.sh /app/entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8081
 
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8081"]
+CMD ["/app/entrypoint.sh"]
