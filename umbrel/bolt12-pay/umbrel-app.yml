@@ -1,22 +1,32 @@
 manifestVersion: 1
 id: alex-bolt12-pay
 name: BOLT12 Pay
-tagline: Self-hosted Lightning Address, BOLT12 and Nostr Zap Server
+tagline: First self-hosted BIP353 Lightning Address & BOLT12 Offer app for LND nodes
 category: finance
-version: "0.2.49"
-port: 8092
+version: "0.2.53"
+port: 8091
 description: >-
-  Self-hosted Lightning payment server with BOLT12 offers, LNURL fallback,
-  BIP353 support, public pay page, admin UI, NIP-05 mapping and Nostr zap notifications.
+  BOLT12 Pay brings next-generation Lightning payments to LND nodes. Create
+  standard Lightning Addresses, publish BIP353 aliases, create and pay BOLT12
+  Offers, and run your own Nostr Zap + NIP-05 server — fully self-hosted.
+
 developer: Alex71btc
 website: https://github.com/Alex71btc/lndk-pay
 submitter: Alex71btc
+submission: https://github.com/Alex71btc/umbrel-community-store
 repo: https://github.com/Alex71btc/lndk-pay
 support: https://github.com/Alex71btc/lndk-pay/issues
+gallery:
+  - 1.jpg
+  - 2.jpg
+  - 3.jpg
+releaseNotes: >-
+  Adds runtime config bootstrap, improved Zap publishing, NIP-05 integration,
+  and self-hosted BIP353 / Lightning Address workflows for Umbrel.
 dependencies:
   - lightning
-gallery:
-  - https://raw.githubusercontent.com/Alex71btc/lndk-pay/main/umbrel/bolt12-pay/gallery/1.png
-  - https://raw.githubusercontent.com/Alex71btc/lndk-pay/main/umbrel/bolt12-pay/gallery/2.png
-dockerCompose:
-  file: docker-compose.yml
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+torOnly: false
+icon: icon.png

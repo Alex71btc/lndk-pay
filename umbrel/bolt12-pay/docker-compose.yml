@@ -8,13 +8,15 @@ services:
       PROXY_AUTH_ADD: "false"
 
   web:
-    image: alex71btc/bolt12-pay:0.2.49
+    image: alex71btc/bolt12-pay:0.2.53
     restart: on-failure
     depends_on:
       - lndk
     environment:
       APP_DATA_DIR: /data
-      APP_CONFIG_PATH: /data/config/config.json
+      APP_CONFIG_PATH: /data/config.json
+      CONFIG_JSON_PATH: /data/config.json
+      SECRETS_JSON_PATH: /data/config/secrets.json
       PAY_UI_SESSION_TTL: "1800"
       CORS_ORIGINS: "*"
 
@@ -27,7 +29,7 @@ services:
       LNDK_TIMEOUT_SECONDS: "30"
       ALLOW_PAY_OFFER: "true"
 
-      LND_REST_URL: https://192.168.188.39:8080
+      LND_REST_URL: https://lightning_lnd_1:8080
       LND_TLS_CERT_PATH: /lnd/tls.cert
       LND_MACAROON_PATH: /lnd/data/chain/bitcoin/mainnet/admin.macaroon
       LND_REST_INSECURE: "false"
@@ -53,7 +55,7 @@ services:
       - >
         sleep 30 &&
         exec lndk
-        --address=https://192.168.188.39:10009
+        --address=https://lightning_lnd_1:10009
         --cert-path=/lnd/tls.cert
         --macaroon-path=/lnd/data/chain/bitcoin/mainnet/admin.macaroon
         --data-dir=/data/lndk
