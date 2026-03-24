@@ -4,3 +4,11 @@ patch_*.py
 data/
 *.json
 devtools/
+# local backups
+*.before*
+*.safe
+*~
+
+# exported html junk
+Projekt BOLT12 Pay.html
+Projekt BOLT12 Pay_files/
