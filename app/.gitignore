@@ -4,3 +4,12 @@ patch_*.py
 data/
 *.json
 devtools/
+# backups
+*.bak
+*.bak2
+*.before*
+*.safe
+*~
+
+# temp html exports
+Projekt*
