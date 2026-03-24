@@ -2466,14 +2466,6 @@ window.addEventListener('load', async () => {
 
   
   const I18N = {
-    create_offer: { de: "Offer erzeugen", en: "Create Offer" },
-    min_amount: { de: "Mindestbetrag in sats", en: "Minimum amount in sats" },
-    description: { de: "Beschreibung / Memo", en: "Description / Memo" },
-    create_button: { de: "Offer erstellen", en: "Create Offer" },
-    decode_title: { de: "Decode Offer", en: "Decode Offer" },
-    decode_placeholder: { de: "Hier erscheint die Decode output...", en: "Decode output will appear here..." },
-    toast_qr: { de: "QR aktualisiert.", en: "QR refreshed." },
-    toast_pay: { de: "Prüfe und bezahle:", en: "Checking and paying:" },
     pay_title: { de: "Offer bezahlen", en: "Pay Offer" },
     pay_amount: { de: "Zahlbetrag in sats", en: "Payment amount in sats" },
     pay_button: { de: "⚡ Zahlung starten", en: "⚡ Start payment" }

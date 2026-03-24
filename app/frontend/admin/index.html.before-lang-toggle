@@ -467,12 +467,6 @@ main.card .headerRow {
   <div class="titleBlock">
     <div class="pill">BOLT12 Pay Server</div>
 <div class="headerRow" style="display:flex;align-items:center;gap:16px;margin-top:8px;margin-bottom:10px;">
-
-<div style="position:absolute; top:20px; right:20px; display:flex; gap:6px;">
-  <button class="secondary" onclick="setAppLang('de')">DE</button>
-  <button class="secondary" onclick="setAppLang('en')">EN</button>
-</div>
-
   <a href="/" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
     <img
       src="/assets/icon.png"
@@ -507,7 +501,7 @@ main.card .headerRow {
 </div>
     <div class="heroGrid">
       <section class="section payHero">
-        <h2><span data-i18n="pay_title">Offer bezahlen</span></h2>
+        <h2>Offer bezahlen</h2>
 
         <label class="label" for="payOfferInput">Offer, Invoice oder Lightning Address</label>
         <input id="payOfferInput" type="text" placeholder="lno... oder lnbc... oder name@domain" />
@@ -523,14 +517,14 @@ main.card .headerRow {
           </div>
         </div>
 
-        <label class="label" for="payAmountInput" style="margin-top:14px;"><span data-i18n="pay_amount">Zahlbetrag in sats</span></label>
+        <label class="label" for="payAmountInput" style="margin-top:14px;">Zahlbetrag in sats</label>
         <input id="payAmountInput" type="number" min="1" step="1" placeholder="z. B. 1000" />
 
         <label class="label" for="payerNoteInput" style="margin-top:14px;">Payer Note (optional)</label>
         <input id="payerNoteInput" type="text" placeholder="z. B. test" />
 
         <div class="row">
-          <button id="payOfferBtn" type="button"><span data-i18n="pay_button">⚡ Zahlung starten</span></button>
+          <button id="payOfferBtn" type="button">⚡ Zahlung starten</button>
           <button class="secondary" id="useCurrentOfferBtn" type="button">Aktuelles Offer übernehmen</button>
         </div>
 
@@ -540,16 +534,16 @@ main.card .headerRow {
       </section>
 
       <section class="section">
-        <h2><span data-i18n="create_offer">Offer erzeugen</span></h2>
+        <h2>Offer erzeugen</h2>
 
-        <label class="label" for="amountInput"><span data-i18n="min_amount">Mindestbetrag in sats</span></label>
+        <label class="label" for="amountInput">Mindestbetrag in sats</label>
         <input id="amountInput" type="number" min="1" step="1" placeholder="Leer = Backend nutzt 1 sat" />
 
         <label class="label" for="messageInput" style="margin-top:14px;">Beschreibung / Label</label>
         <input id="messageInput" type="text" placeholder="z. B. coffee, tip, donation" />
 
         <div class="row">
-          <button id="createOfferBtn" type="button"><span data-i18n="create_offer">Offer erzeugen</span></button>
+          <button id="createOfferBtn" type="button">Offer erzeugen</button>
         </div>
 
         <div class="hint">
@@ -922,13 +916,6 @@ function detectPaymentType(raw) {
         colorDark: '#000000',
         colorLight: '#ffffff'
       });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
     }
 
     function loadHistory() {
@@ -988,13 +975,6 @@ function detectPaymentType(raw) {
         offer.addEventListener('click', async () => {
           await copyText(item.offer, 'Offer kopiert.');
         });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
         const actions = document.createElement('div');
         actions.className = 'historyActions';
@@ -1007,13 +987,6 @@ function detectPaymentType(raw) {
           payOfferInput.value = item.offer || '';
           setStatus('Offer in Pay übernommen.');
         });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
         const useQrBtn = document.createElement('button');
         useQrBtn.className = 'secondary';
@@ -1024,13 +997,6 @@ function detectPaymentType(raw) {
           renderOfferQr(getActiveValue());
           setStatus('Offer als aktueller QR übernommen.');
         });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
         const copyBtn = document.createElement('button');
         copyBtn.className = 'secondary';
@@ -1039,13 +1005,6 @@ function detectPaymentType(raw) {
         copyBtn.addEventListener('click', async () => {
           await copyText(item.offer, 'Offer kopiert.');
         });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
         const delBtn = document.createElement('button');
         delBtn.className = 'danger';
@@ -1059,13 +1018,6 @@ function detectPaymentType(raw) {
 
           setStatus('History-Eintrag gelöscht.');
         });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
         actions.append(usePayBtn, useQrBtn, copyBtn, delBtn);
         wrap.append(meta, offer, actions);
@@ -1141,13 +1093,6 @@ function renderSuccessOutput(title, lines, detailsObj = null) {
 
     if (typeof paymentResultOutput.scrollIntoView === 'function') {
       paymentResultOutput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
     }
   }
 }
@@ -1237,13 +1182,6 @@ async function loadPayPreview() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target: rawInput })
       });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
       const data = await readJsonOrThrow(response);
       renderPayPreview(data);
@@ -1258,13 +1196,6 @@ async function loadPayPreview() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target: rawInput })
       });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
       const data = await readJsonOrThrow(response);
       renderPayPreview(data);
@@ -1318,13 +1249,6 @@ function errorToMessage(error) {
 async function loadNostrStatus() {
   try {
     const res = await fetch('/api/admin/nostr-status', { credentials: 'same-origin' });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
     if (!res.ok) return;
     const data = await res.json();
 
@@ -1360,13 +1284,6 @@ async function saveNostrNotifyKey() {
     credentials: 'same-origin',
     body: JSON.stringify({ notify_nsec })
   });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
   const data = await res.json().catch(() => ({}));
 
@@ -1385,13 +1302,6 @@ async function generateNostrServerKey() {
     method: 'POST',
     credentials: 'same-origin'
   });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
   const data = await res.json().catch(() => ({}));
 
@@ -1418,13 +1328,6 @@ async function loadIdentityConfig(alias = '') {
       credentials: 'same-origin',
       cache: 'no-store'
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     const data = await readJsonOrThrow(response);
 
@@ -1479,13 +1382,6 @@ async function saveIdentityConfig() {
         zap_enabled: !!identityZapEnabledInput.checked
       })
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     const data = await readJsonOrThrow(response);
     identityResultOutput.value = JSON.stringify(data, null, 2);
@@ -1598,13 +1494,6 @@ async function saveIdentityConfig() {
       const installBtn = document.getElementById('installBtn');
       installBtn.hidden = false;
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('installBtn').addEventListener('click', async () => {
       if (!deferredPrompt) {
@@ -1620,13 +1509,6 @@ async function saveIdentityConfig() {
 
       deferredPrompt = null;
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('createOfferBtn').addEventListener('click', async () => {
       const amountValue = amountInput.value.trim();
@@ -1646,13 +1528,6 @@ async function saveIdentityConfig() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
         const data = await readJsonOrThrow(response);
 
@@ -1667,13 +1542,6 @@ async function saveIdentityConfig() {
           amountText,
           timeText: new Date().toLocaleString('de-DE')
         });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
         setStatus('Offer erfolgreich erzeugt.');
       } catch (error) {
@@ -1684,58 +1552,23 @@ async function saveIdentityConfig() {
         btn.textContent = 'Offer erzeugen';
       }
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('copyOfferBtn').addEventListener('click', async () => {
       await copyText(getActiveValue(), 'Aktiver Inhalt kopiert.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('makeOfferQrBtn').addEventListener('click', () => {
       renderOfferQr(getActiveValue());
-      setStatus(I18N.toast_qr[getLang()]);
+      setStatus('QR aktualisiert.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     offerPreviewBox.addEventListener('click', async () => {
       await copyText(getActiveValue(), 'Aktiver Inhalt kopiert.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     offerQrBox.addEventListener('click', async () => {
       await copyText(getActiveValue(), 'Aktiver Inhalt kopiert.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('useCurrentOfferBtn').addEventListener('click', () => {
       const currentOffer = getCurrentOffer();
@@ -1748,13 +1581,6 @@ async function saveIdentityConfig() {
       payOfferInput.value = currentOffer;
       setStatus('Aktuelles Offer in Pay übernommen.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 async function payBolt12Flow() {
   const offer = normalizePaymentInput(payOfferInput.value);
@@ -1789,13 +1615,6 @@ async function payBolt12Flow() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     const data = await readJsonOrThrow(response);
     const parsed = safeJsonParse(data?.raw_output);
@@ -1851,13 +1670,6 @@ async function payLnurlFlow() {
         comment: payerNote || null
       })
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     const data = await readJsonOrThrow(response);
     const parsed = safeJsonParse(data?.raw_output);
@@ -1903,13 +1715,6 @@ async function payBolt11Flow() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ invoice })
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 const data = await readJsonOrThrow(response);
 const parsed = safeJsonParse(data?.raw_output);
 
@@ -2001,7 +1806,7 @@ const btn = document.getElementById('payOfferBtn');
 btn.disabled = true;
 const oldText = btn.textContent;
 btn.textContent = 'Prüfe / bezahle...';
-setStatus(`${I18N.toast_pay[getLang()]}  ${target.slice(0, 64)}${target.length > 64 ? '…' : ''}`, 'warn');
+setStatus(`Prüfe und bezahle: ${target.slice(0, 64)}${target.length > 64 ? '…' : ''}`, 'warn');
 
   try {
     const response = await fetch('/api/pay-address', {
@@ -2013,13 +1818,6 @@ setStatus(`${I18N.toast_pay[getLang()]}  ${target.slice(0, 64)}${target.length >
         payer_note: payerNote || null
       })
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 const data = await readJsonOrThrow(response);
 const parsed = safeJsonParse(data?.raw_output);
 const successActionText = getLnurlSuccessActionText(parsed);
@@ -2072,13 +1870,6 @@ setStatus(statusText);
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ offer })
         });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
         const data = await readJsonOrThrow(response);
         decodeOutput.value = data.raw_output || '';
@@ -2091,13 +1882,6 @@ setStatus(statusText);
         btn.textContent = 'Decode';
       }
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
     
     payOfferInput.addEventListener('input', () => {
       if (payPreviewTimer) clearTimeout(payPreviewTimer);
@@ -2105,13 +1889,6 @@ setStatus(statusText);
         loadPayPreview();
       }, 450);
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
     
     decodeOutput.addEventListener('click', async () => {
       const value = decodeOutput.value.trim();
@@ -2121,13 +1898,6 @@ setStatus(statusText);
       }
       await copyText(value, 'Decode-Ausgabe kopiert.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
 
@@ -2141,13 +1911,6 @@ setStatus(statusText);
       cfOfferInput.value = currentOffer;
       setStatus('Aktuelles Offer in Cloudflare-Formular übernommen.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 
 document.getElementById('cfCreateAliasBtn').addEventListener('click', async () => {
@@ -2178,13 +1941,6 @@ document.getElementById('cfCreateAliasBtn').addEventListener('click', async () =
         offer: offer
       })
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     const data = await readJsonOrThrow(response);
 
@@ -2206,104 +1962,41 @@ document.getElementById('cfCreateAliasBtn').addEventListener('click', async () =
     btn.textContent = 'Alias bei Cloudflare speichern';
   }
 });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
     cfHumanAddressOutput.addEventListener('click', async () => {
       await copyText(cfHumanAddressOutput.value, 'Adresse kopiert.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     cfResultOutput.addEventListener('click', async () => {
       await copyText(cfResultOutput.value, 'Cloudflare-Ergebnis kopiert.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('cfCopyHumanAddressBtn').addEventListener('click', async () => {
       await copyText(cfHumanAddressOutput.value, 'Adresse kopiert.');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('scanToDecodeBtn').addEventListener('click', async () => {
       await openScanner('decode');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('scanToPayBtn').addEventListener('click', async () => {
       await openScanner('pay');
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.getElementById('closeScannerBtn').addEventListener('click', async () => {
       await closeScanner(true);
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     scannerModal.addEventListener('click', async event => {
       if (event.target === scannerModal) {
         await closeScanner(false);
       }
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
     document.addEventListener('keydown', async event => {
       if (event.key === 'Escape' && scannerModal.classList.contains('show')) {
         await closeScanner(false);
       }
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
     
     checkPaySession();
     setCurrentOffer('');
@@ -2317,13 +2010,6 @@ async function checkPaySession() {
       credentials: 'same-origin',
       cache: 'no-store'
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
     const data = await res.json();
     if (data.enabled && !data.ok) {
       window.location.href = '/pay-login';
@@ -2336,57 +2022,22 @@ async function checkPaySession() {
 document.getElementById('loadIdentityBtn')?.addEventListener('click', async () => {
   await loadIdentityConfig();
 });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 document.getElementById('saveIdentityBtn')?.addEventListener('click', async () => {
   await saveIdentityConfig();
 });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 document.getElementById('saveNostrNotifyKeyBtn')?.addEventListener('click', async () => {
   await saveNostrNotifyKey();
 });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 document.getElementById('generateNostrServerKeyBtn')?.addEventListener('click', async () => {
   await generateNostrServerKey();
 });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 identityResultOutput?.addEventListener('click', async () => {
   await copyText(identityResultOutput.value, 'Identity-Ergebnis kopiert.');
 });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 document.getElementById('logoutBtn')?.addEventListener('click', async () => {
   try {
@@ -2395,23 +2046,9 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
       credentials: 'same-origin',
       cache: 'no-store'
     });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
   } catch {}
   window.location.href = '/pay-login';
 });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 
 if ('serviceWorker' in navigator) {
@@ -2423,85 +2060,12 @@ if ('serviceWorker' in navigator) {
       console.error('Service Worker registration failed', err);
     }
   });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 }
 
 window.addEventListener('load', async () => {
   await loadNostrStatus();
 });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
 
 </script>
-
-<script>
-(function () {
-  const KEY = "app_lang";
-  const defaultLang = "de";
-
-  function getLang() {
-    return localStorage.getItem(KEY) || defaultLang;
-  }
-
-  function setLang(lang) {
-    localStorage.setItem(KEY, lang);
-    document.documentElement.setAttribute("lang", lang); applyI18n();
-  }
-
-  function init() {
-    const lang = getLang();
-    document.documentElement.setAttribute("lang", lang); applyI18n();
-  }
-
-  
-  const I18N = {
-    create_offer: { de: "Offer erzeugen", en: "Create Offer" },
-    min_amount: { de: "Mindestbetrag in sats", en: "Minimum amount in sats" },
-    description: { de: "Beschreibung / Memo", en: "Description / Memo" },
-    create_button: { de: "Offer erstellen", en: "Create Offer" },
-    decode_title: { de: "Decode Offer", en: "Decode Offer" },
-    decode_placeholder: { de: "Hier erscheint die Decode output...", en: "Decode output will appear here..." },
-    toast_qr: { de: "QR aktualisiert.", en: "QR refreshed." },
-    toast_pay: { de: "Prüfe und bezahle:", en: "Checking and paying:" },
-    pay_title: { de: "Offer bezahlen", en: "Pay Offer" },
-    pay_amount: { de: "Zahlbetrag in sats", en: "Payment amount in sats" },
-    pay_button: { de: "⚡ Zahlung starten", en: "⚡ Start payment" }
-  };
-
-  function applyI18n() {
-    const lang = getLang();
-    
-document.querySelectorAll("[data-i18n]").forEach
-(el => {
-      const key = el.getAttribute("data-i18n");
-      if (I18N[key] && I18N[key][lang]) {
-        el.textContent = I18N[key][lang];
-      }
-    });
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (I18N[key] && I18N[key][lang]) {
-        el.setAttribute("placeholder", I18N[key][lang]);
-      }
-    });
-
-  }
-
-window.setAppLang = setLang;
-  init(); applyI18n();
-})();
-</script>
-
 </body>
 </html>
