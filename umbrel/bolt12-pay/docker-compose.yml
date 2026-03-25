@@ -8,8 +8,8 @@ services:
       PROXY_AUTH_ADD: "false"
 
   web:
-    image: alex71btc/bolt12-pay:0.2.53
-    restart: on-failure
+    image: alex71btc/bolt12-pay:0.2.57
+    restart: unless-stopped
     depends_on:
       - lndk
     environment:
@@ -32,7 +32,7 @@ services:
       LND_REST_URL: https://lightning_lnd_1:8080
       LND_TLS_CERT_PATH: /lnd/tls.cert
       LND_MACAROON_PATH: /lnd/data/chain/bitcoin/mainnet/admin.macaroon
-      LND_REST_INSECURE: "false"
+      LND_REST_INSECURE: "true"
 
       LNURL_MIN_SENDABLE_MSAT: "1000"
       LNURL_MAX_SENDABLE_MSAT: "1000000000"
@@ -47,20 +47,24 @@ services:
 
   lndk:
     image: alex71btc/lndk:stable
-    restart: on-failure
+    restart: unless-stopped
     entrypoint:
       - /bin/sh
       - -c
     command:
-      - >
-        sleep 30 &&
-        exec lndk
-        --address=https://lightning_lnd_1:10009
-        --cert-path=/lnd/tls.cert
-        --macaroon-path=/lnd/data/chain/bitcoin/mainnet/admin.macaroon
-        --data-dir=/data/lndk
-        --grpc-host=0.0.0.0
-        --grpc-port=7000
+      - |
+        echo "Waiting for LND TLS + macaroon..."
+        while [ ! -f /lnd/tls.cert ] || [ ! -f /lnd/data/chain/bitcoin/mainnet/admin.macaroon ]; do
+          echo "Waiting for cert/macaroon..."
+          sleep 5
+        done
+
+        echo "Starting LNDK with retry loop..."
+        while true; do
+          lndk --address=https://lightning_lnd_1:10009 --cert-path=/lnd/tls.cert --macaroon-path=/lnd/data/chain/bitcoin/mainnet/admin.macaroon --data-dir=/data/lndk --grpc-host=0.0.0.0 --grpc-port=7000
+          echo "LNDK exited or failed. Retrying in 10s..."
+          sleep 10
+        done
     volumes:
       - ${APP_DATA_DIR}/data:/data
       - ${UMBREL_ROOT}/app-data/lightning/data/lnd:/lnd:ro

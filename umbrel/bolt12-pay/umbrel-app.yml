@@ -1,15 +1,44 @@
 manifestVersion: 1
 id: alex-bolt12-pay
 name: BOLT12 Pay
+icon: https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/icon_v2.png
 tagline: First self-hosted BIP353 Lightning Address & BOLT12 Offer app for LND nodes
 category: finance
-version: "0.2.53"
+version: "0.2.57"
 port: 8091
 description: >-
-  BOLT12 Pay brings next-generation Lightning payments to LND nodes. Create
-  standard Lightning Addresses, publish BIP353 aliases, create and pay BOLT12
-  Offers, and run your own Nostr Zap + NIP-05 server — fully self-hosted.
+  ⚡ BOLT12 Pay is the first self-hosted app bringing BIP353 Lightning Addresses
+  and native BOLT12 Offer creation and payments to LND nodes.
 
+  If you own a domain, BOLT12 Pay turns it into a powerful Lightning Address
+  and Nostr Zap server with full control over identities, payments, and notifications.
+
+  🔥 Features
+
+  ⚡ BIP353 Lightning Addresses
+  - Publish human-readable Lightning aliases for your domain
+  - Cloudflare-powered automatic DNS publishing
+  - No third-party services required
+
+  ⚡ BOLT12 Offers (experimental)
+  - Create and pay BOLT12 Offers on LND via LNDK
+  - One of the first real-world Offer implementations for LND
+
+  ⚡ Lightning Address / LNURL
+  - Fully self-hosted LNURL server
+  - Compatible with all standard wallets
+
+  ⚡ Nostr Integration
+  - NIP-05 support
+  - Zap receiving + publishing
+  - Encrypted DM notifications
+  - Multi-relay support
+
+  ⚙️ Self-hosted by design
+  - Full control over keys, relays, and identities
+
+  🚨 Experimental
+  - BOLT12 support on LND is cutting-edge and evolving
 developer: Alex71btc
 website: https://github.com/Alex71btc/lndk-pay
 submitter: Alex71btc
@@ -20,13 +49,19 @@ gallery:
   - 1.jpg
   - 2.jpg
   - 3.jpg
-releaseNotes: >-
-  Adds runtime config bootstrap, improved Zap publishing, NIP-05 integration,
-  and self-hosted BIP353 / Lightning Address workflows for Umbrel.
+releaseNotes: |
+  Major UI update with full bilingual support (EN/DE) and improved UX.
+
+  • Full English + German interface with live language switching
+  • All UI texts, toasts, and status messages translated
+  • Offer History now uses language-aware timestamps (auto-switch)
+  • Fixed QR code initialization and refresh issues
+  • Improved payment summaries for BOLT12, BOLT11 and LNURL
+  • Cleaner Nostr Identity and Cloudflare BIP353 UI
+  • Removed hardcoded strings and unified translation system
 dependencies:
   - lightning
 path: ""
 defaultUsername: ""
 defaultPassword: ""
 torOnly: false
-icon: icon.png
