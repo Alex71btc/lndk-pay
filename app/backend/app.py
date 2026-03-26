@@ -2509,27 +2509,27 @@ async def public_index_page():
     for alias_name, alias in aliases.items():
         description = alias.get("description") or "Lightning payment"
         amount_sat = alias.get("amount_sat")
-        amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
+        amount_label = f"{amount_sat} sats" if amount_sat else "variable amount"
 
         items_html += f"""
         <div class="aliasCard">
           <div class="aliasTitle mono">{alias_name}@{get_lnurl_base_domain()}</div>
           <div class="aliasMeta">
             {description}<br />
-            Betrag: {amount_label}
+            Amount: {amount_label}
           </div>
           <div class="row">
-            <button onclick="window.location.href='/{alias_name}'">Öffnen</button>
-            <button class="secondary" onclick="navigator.clipboard.writeText('{alias_name}@{get_lnurl_base_domain()}')">Adresse kopieren</button>
+            <button onclick="window.location.href='/{alias_name}'">Open</button>
+            <button class="secondary" onclick="navigator.clipboard.writeText('{alias_name}@{get_lnurl_base_domain()}')">Copy address</button>
           </div>
         </div>
         """
 
     if not items_html:
         items_html = """
-        <div class="aliasCard">
-          <div class="aliasMeta">Noch keine öffentlichen Aliase vorhanden.</div>
-        </div>
+    <div class="aliasCard" data-empty-alias-list="1">
+      <div class="aliasMeta">No public aliases available yet.</div>
+    </div>
         """
 
     html = f"""
@@ -2631,30 +2631,173 @@ async def public_index_page():
   </style>
 </head>
 <body>
-  <main class="card">
+<main class="card">
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+    <div style="
+      display:inline-flex;
+      gap:4px;
+      padding:4px;
+      border-radius:16px;
+      border:1px solid #26324a;
+      background:rgba(19,28,46,.92);
+    ">
+      <button id="landingLangDe"
+        style="
+          min-width:36px;
+          height:26px;
+          padding:0 8px;
+          border-radius:10px;
+          border:none;
+          background:transparent;
+          color:#a7b0c3;
+          font-size:.78rem;
+          font-weight:700;
+        "
+      >DE</button>
+
+      <button id="landingLangEn"
+        style="
+          min-width:36px;
+          height:26px;
+          padding:0 8px;
+          border-radius:10px;
+          font-size:.78rem;
+          border:none;
+          background:#3a4254;
+          color:#eef2ff;
+          font-weight:700;
+        "
+      >EN</button>
+    </div>
+  </div>
 <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px;">
-  <a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+  <a href="{HOME_URL}" aria-label="Back to homepage" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
     <img
       src="/assets/icon.png"
       alt="BOLT12 Pay Server Logo"
       style="width:72px;height:72px;object-fit:contain;display:block;cursor:pointer;filter:drop-shadow(0 0 3px rgba(255,200,0,0.35));"
     >
   </a>
-  <h1 style="margin:0;">⚡ Lightning Payments</h1>
+<h1 id="landingTitle" style="margin:0;">⚡ Lightning Payments</h1>
 </div>
-    <div class="sub">
-      Öffentliche Zahlungsseiten auf <span class="mono">{get_lnurl_base_domain()}</span><br />
-      <span style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 Fallback</span>
-    </div>
+<div class="sub">
+  <span id="landingSubtitle">Public payment pages on</span> <span class="mono">{get_lnurl_base_domain()}</span><br />
+  <span id="landingSubline" style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 fallback</span>
+</div>
     <div class="row" style="margin-bottom: 18px;">
-      <button class="secondary" onclick="window.location.href='/app'">Open App</button>
-      <button class="secondary" onclick="window.location.href='/pay'">Open Pay</button>
-      <button class="secondary" onclick="window.location.href='/app?setup=1'">Setup Wizard</button>
+<button id="landingOpenApp" class="secondary" onclick="window.location.href='/app'">Open App</button>
+<button id="landingOpenPay" class="secondary" onclick="window.location.href='/pay'">Open Pay</button>
+<button id="landingSetup" class="secondary" onclick="window.location.href='/app?setup=1'">Setup Wizard</button>
     </div>
     <div class="aliasList">
       {items_html}
     </div>
   </main>
+<script>
+(function () {{
+  const T = {{
+    en: {{
+      title: "⚡ Lightning Payments",
+      subtitle: "Public payment pages on",
+      subline: "BOLT12 • Lightning Address • BOLT11 fallback",
+      openApp: "Open App",
+      openPay: "Open Pay",
+      setup: "Setup Wizard",
+      empty: "No public aliases available yet."
+    }},
+    de: {{
+      title: "⚡ Lightning Zahlungen",
+      subtitle: "Öffentliche Zahlungsseiten auf",
+      subline: "BOLT12 • Lightning Address • BOLT11 Fallback",
+      openApp: "App öffnen",
+      openPay: "Bezahlen öffnen",
+      setup: "Setup Assistent",
+      empty: "Noch keine öffentlichen Aliase vorhanden."
+    }}
+  }};
+function getLang() {{
+  const stored = localStorage.getItem("app_lang");
+  if (stored) return stored;
+
+  const nav = navigator.language || "";
+  if (nav.startsWith("de")) return "de";
+
+  return "en";
+}}
+
+
+  window.setLang = function (lang) {{
+    localStorage.setItem("app_lang", lang);
+    applyLang();
+  }};
+
+  function setActive(lang) {{
+    const deBtn = document.getElementById("landingLangDe");
+    const enBtn = document.getElementById("landingLangEn");
+    if (!deBtn || !enBtn) return;
+
+    const activeBg = "#3a4254";
+    const activeColor = "#eef2ff";
+    const idleBg = "transparent";
+    const idleColor = "#a7b0c3";
+
+    [deBtn, enBtn].forEach((btn) => {{
+      btn.style.boxShadow = "none";
+      btn.style.border = "none";
+    }});
+
+    if (lang === "de") {{
+      deBtn.style.background = activeBg;
+      deBtn.style.color = activeColor;
+      enBtn.style.background = idleBg;
+      enBtn.style.color = idleColor;
+    }} else {{
+      enBtn.style.background = activeBg;
+      enBtn.style.color = activeColor;
+      deBtn.style.background = idleBg;
+      deBtn.style.color = idleColor;
+    }}
+  }}
+
+  function applyLang() {{
+    const lang = getLang();
+    const t = T[lang] || T.en;
+
+    const title = document.getElementById("landingTitle");
+    const subtitle = document.getElementById("landingSubtitle");
+    const subline = document.getElementById("landingSubline");
+    const openApp = document.getElementById("landingOpenApp");
+    const openPay = document.getElementById("landingOpenPay");
+    const setup = document.getElementById("landingSetup");
+
+    if (title) title.textContent = t.title;
+    if (subtitle) subtitle.textContent = t.subtitle;
+    if (subline) subline.textContent = t.subline;
+    if (openApp) openApp.textContent = t.openApp;
+    if (openPay) openPay.textContent = t.openPay;
+    if (setup) setup.textContent = t.setup;
+
+    const aliasList = document.querySelector(".aliasList");
+    const emptyCard = aliasList ? aliasList.querySelector('[data-empty-alias-list="1"]') : null;
+    if (emptyCard) {{
+      emptyCard.innerHTML = '<div class="aliasMeta">' + t.empty + '</div>';
+    }}
+
+    setActive(lang);
+  }}
+
+  window.addEventListener("load", function () {{
+    const deBtn = document.getElementById("landingLangDe");
+    const enBtn = document.getElementById("landingLangEn");
+
+    if (deBtn) deBtn.onclick = function () {{ window.setLang("de"); }};
+    if (enBtn) enBtn.onclick = function () {{ window.setLang("en"); }};
+
+    applyLang();
+  }});
+}})();
+</script>
 </body>
 </html>
 """
@@ -2814,7 +2957,7 @@ def _pay_login_html() -> str:
 <body>
   <main class="card">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-<a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+<a href="{HOME_URL}" aria-label="Back to homepage" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
   <img src="/assets/icon.png" alt="Logo" style="width:48px;height:48px;border-radius:12px;cursor:pointer;">
 </a>
       <div>
@@ -3053,7 +3196,7 @@ async def public_alias_page(alias_name: str):
 
     description = alias.get("description") or "Lightning payment"
     amount_sat = alias.get("amount_sat")
-    amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
+    amount_label = f"{amount_sat} sats" if amount_sat else "variable amount"
 
     last_offer = alias.get("last_offer") or ""
 
@@ -3252,7 +3395,7 @@ button:hover {{
 <main class="card">
 <h1>⚡ BOLT12 Payment Page</h1>
 <div style="text-align:center;margin:0 0 16px 0;">
-  <a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+  <a href="{HOME_URL}" aria-label="Back to homepage" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
     <img
       src="/assets/icon.png"
       alt="BOLT12 Pay Server Logo"
@@ -3264,7 +3407,7 @@ button:hover {{
 
 <div class="sub">
 {description}<br/>
-Betrag: {amount_label}<br/>
+Amount: {amount_label}<br/>
 <span style="font-size:.92rem;">BOLT12 zuerst · LNURL und BOLT11 nur als Fallback</span>
 </div>
 
@@ -3277,7 +3420,7 @@ Betrag: {amount_label}<br/>
     <img src="/api/qr/{bip353_address}" width="220" height="220" alt="BIP353 QR">
   </div>
   <div class="row">
-    <button onclick="navigator.clipboard.writeText('{bip353_address}')">Adresse kopieren</button>
+    <button onclick="navigator.clipboard.writeText('{bip353_address}')">Copy address</button>
     <button class="secondary" onclick="window.location.href='lightning:{bip353_address}'">Mit Wallet öffnen</button>
   </div>
   <div class="hint">

@@ -1084,7 +1084,39 @@ async function saveSetup() {
 
 function renderAliasList(items) {
   if (!items || items.length === 0) {
-    aliasList.innerHTML = `<div class="hint">${window.__t('state.no_aliases')}</div>`;
+    const noAliasesText =
+      (typeof window.__t === 'function' && window.__t('state.no_aliases') !== 'state.no_aliases')
+        ? window.__t('state.no_aliases')
+        : ((localStorage.getItem('app_lang') || 'de') === 'en'
+            ? 'No aliases created yet.'
+            : 'Noch keine Aliase angelegt.');
+
+    aliasList.innerHTML = `<div class="hint">${noAliasesText}</div>`;
+
+    window.__rerenderAliasEmptyState = function () {
+      const aliasList = document.getElementById('aliasList');
+      if (!aliasList) return;
+
+      const hasRealAlias =
+        !!aliasList.querySelector('.aliasCard, .aliasItem, .alias-entry, [data-alias-name]');
+
+      const onlyHint =
+        aliasList.children.length === 1 &&
+        aliasList.firstElementChild &&
+        aliasList.firstElementChild.classList.contains('hint');
+
+      if (!onlyHint && hasRealAlias) return;
+
+      const noAliasesText =
+        (typeof window.__t === 'function' && window.__t('state.no_aliases') !== 'state.no_aliases')
+          ? window.__t('state.no_aliases')
+          : ((localStorage.getItem('app_lang') || 'de') === 'en'
+              ? 'No aliases created yet.'
+              : 'Noch keine Aliase angelegt.');
+
+      aliasList.innerHTML = `<div class="hint">${noAliasesText}</div>`;
+    };
+
     return;
   }
 
@@ -3327,6 +3359,43 @@ installBtn.addEventListener('click', async () => {
     schedule();
   }, 0);
 
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__aliasEmptyStateLangBindInstalled) return;
+  window.__aliasEmptyStateLangBindInstalled = true;
+
+  function rerenderLater() {
+    if (typeof window.__rerenderAliasEmptyState !== "function") return;
+    setTimeout(window.__rerenderAliasEmptyState, 0);
+    setTimeout(window.__rerenderAliasEmptyState, 50);
+    setTimeout(window.__rerenderAliasEmptyState, 150);
+  }
+
+  function bind() {
+    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay", "langBtnDe", "langBtnEn"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.aliasEmptyBound === "1") return;
+      btn.dataset.aliasEmptyBound = "1";
+      btn.addEventListener("click", rerenderLater);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bind();
+    rerenderLater();
+  });
+  window.addEventListener("load", () => {
+    bind();
+    rerenderLater();
+  });
+  setTimeout(() => {
+    bind();
+    rerenderLater();
+  }, 0);
 })();
 </script>
 

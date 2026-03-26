@@ -1,0 +1,2686 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="manifest" href="/pay.webmanifest" />
+
+  <link rel="icon" href="/assets/icon.png" sizes="32x32" />
+  <link rel="icon" href="/assets/icon.png" sizes="192x192" />
+  <link rel="icon" href="/assets/icon.png" sizes="512x512" />
+
+  <link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
+
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="BOLT12 Pay" />
+  <meta name="application-name" content="BOLT12 Pay" />
+  <title>BOLT12 Pay</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #121a2b;
+      --text: #eef2ff;
+      --muted: #a7b0c3;
+      --accent: #f7931a;
+      --border: #26324a;
+      --danger: #ff7b72;
+      --ok: #8fe388;
+      --warn: #ffd166;
+      --panel: rgba(255,255,255,0.02);
+      --panel2: #0c1322;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1220, #0f172a);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+
+    .toastWrap {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(980px, calc(100vw - 20px));
+      z-index: 3000;
+      pointer-events: none;
+    }
+
+    .statusBar {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #0c1322;
+      font-size: .95rem;
+      line-height: 1.4;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+      pointer-events: auto;
+      text-align: center;
+    }
+
+    .statusBar.show { display: block; }
+
+    .statusBar.ok {
+      border-color: rgba(143,227,136,.35);
+      background: rgba(143,227,136,.10);
+      color: var(--ok);
+    }
+
+    .statusBar.error {
+      border-color: rgba(255,123,114,.35);
+      background: rgba(255,123,114,.10);
+      color: var(--danger);
+    }
+
+    .statusBar.warn {
+      border-color: rgba(255,209,102,.35);
+      background: rgba(255,209,102,.10);
+      color: var(--warn);
+    }
+
+    .card {
+      width: 100%;
+      max-width: 1180px;
+      background: rgba(18, 26, 43, 0.96);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+      padding: 28px;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(247,147,26,0.12);
+      border: 1px solid rgba(247,147,26,0.28);
+      color: #ffd9a3;
+      font-size: .95rem;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 2.1rem;
+      line-height: 1.1;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1.15rem;
+      line-height: 1.2;
+    }
+
+    .sub {
+      color: var(--muted);
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+
+    .topActions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .heroGrid {
+      display: grid;
+      grid-template-columns: 1.12fr 0.88fr;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 18px;
+    }
+
+    .midGrid {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 18px;
+    }
+
+    .section {
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--panel);
+    }
+
+    .payHero {
+      border-color: rgba(247,147,26,0.38);
+      background: linear-gradient(180deg, rgba(247,147,26,0.08), rgba(255,255,255,0.02));
+    }
+
+    .payHero h2 {
+      color: #ffd9a3;
+    }
+
+    .label {
+      font-size: .92rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      word-break: break-all;
+      font-size: .92rem;
+      line-height: 1.45;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #091120;
+      font-weight: 700;
+      padding: 12px 16px;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: transform .12s ease, opacity .12s ease, box-shadow .12s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(0,0,0,.22);
+    }
+
+    button:disabled {
+      opacity: .65;
+      cursor: wait;
+      transform: none;
+      box-shadow: none;
+    }
+
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+    }
+
+    button.danger {
+      background: transparent;
+      color: var(--danger);
+      border-color: rgba(255,123,114,.35);
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--text);
+      font-size: 1rem;
+    }
+
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+    }
+
+    .hint {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: .92rem;
+      line-height: 1.5;
+    }
+
+    .modeBadge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(247,147,26,0.12);
+      border: 1px solid rgba(247,147,26,0.28);
+      color: #ffd9a3;
+      font-size: .82rem;
+    }
+
+    .qrPanel {
+      display: grid;
+      gap: 12px;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .qrBox {
+      background: white;
+      padding: 16px;
+      border-radius: 20px;
+      min-height: 260px;
+      min-width: 260px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .qrBox img,
+    .qrBox canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .valueBox {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--text);
+      min-height: 52px;
+    }
+
+    .copyable {
+      cursor: pointer;
+      user-select: all;
+    }
+
+    .copyable:hover {
+      opacity: .94;
+    }
+
+    .offerPreview {
+      max-height: 82px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    details.section {
+      padding-top: 14px;
+    }
+
+    details.section summary {
+      cursor: pointer;
+      list-style: none;
+      font-weight: 700;
+      margin: -2px 0 0;
+    }
+
+    details.section summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .historyList {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .historyItem {
+      border: 1px solid var(--border);
+      background: #0c1322;
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .historyMeta {
+      color: var(--muted);
+      font-size: .86rem;
+      margin-bottom: 8px;
+    }
+
+    .historyActions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .historyActions button {
+      padding: 9px 12px;
+      font-size: .92rem;
+    }
+
+    .emptyState {
+      color: var(--muted);
+      font-size: .95rem;
+    }
+
+    .scannerModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 8, 20, .88);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 1000;
+    }
+
+    .scannerModal.show {
+      display: flex;
+    }
+
+    .scannerCard {
+      width: 100%;
+      max-width: 720px;
+      background: #121a2b;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.45);
+    }
+
+    .scannerViewport {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #000;
+      border-radius: 16px;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      margin-top: 12px;
+      position: relative;
+      max-height: 72vh;
+    }
+
+    #scannerVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    .scannerHint {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    @media (max-width: 940px) {
+      .heroGrid,
+      .midGrid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      body {
+        padding: 10px;
+      }
+
+      .card {
+        padding: 18px;
+        border-radius: 18px;
+      }
+
+      h1 {
+        font-size: 1.7rem;
+      }
+
+      .qrBox {
+        min-height: 220px;
+        min-width: 220px;
+      }
+
+      .row button {
+        width: 100%;
+      }
+
+main.card .titleBlock {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+main.card .headerRow {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+  margin-top: 8px !important;
+  margin-bottom: 10px !important;
+}
+
+}
+  
+.langSwitch {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  z-index: 20;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.langSwitch button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,0.58);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .15s ease;
+  letter-spacing: 0.02em;
+}
+.langSwitch button:hover {
+  color: rgba(255,255,255,0.88);
+}
+.langSwitch button.active {
+  color: rgba(255,255,255,0.98);
+  background: rgba(255,255,255,0.12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+</style>
+</head>
+<body>
+  <div class="toastWrap">
+    <div class="statusBar" id="statusBar"></div>
+  </div>
+
+<main class="card" style="position:relative;">
+  <div class="titleBlock">
+
+<div class="langSwitch" aria-label="Language switch">
+  <button id="langBtnDe" type="button">DE</button>
+  <button id="langBtnEn" type="button">EN</button>
+</div>
+
+    <div class="pill">BOLT12 Pay Server</div>
+<div class="headerRow" style="display:flex;align-items:center;gap:16px;margin-top:8px;margin-bottom:10px;">
+  <a href="/" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+    <img
+      src="/assets/icon.png"
+      alt="BOLT12 Pay Server Logo"
+      style="
+  display:block;
+    width:110px;
+    height:110px;
+    min-width:110px;
+    max-width:110px;
+    cursor:pointer;
+    object-fit:contain;
+    flex:0 0 110px;
+    filter:drop-shadow(0 0 3px rgba(255,200,0,0.45));
+      "
+    >
+  </a>
+      <h1 style="margin:0;line-height:1.1;">⚡ Lightning BOLT12 Pay</h1>
+    </div>
+  </div>
+<div class="sub">
+  <span data-i18n="hint.top_intro">LNDK kann Offers nicht nur erzeugen, sondern auch direkt bezahlen. Deshalb steht der Pay-Bereich bewusst ganz oben im Fokus.</span>
+</div>
+<div class="topActions">
+  <button class="secondary" id="installBtn" type="button"><span data-i18n="nav.install">Pay-App installieren</span></button>
+  <button class="secondary" type="button" onclick="window.location.href='/app'"><span data-i18n="nav.console">Zur Console</span></button>
+  <button class="secondary" id="scanToDecodeBtn" type="button"><span data-i18n="nav.qr_decode">QR → Decode</span></button>
+  <button class="secondary" id="scanToPayBtn" type="button"><span data-i18n="nav.qr_pay">QR → Pay</span></button>
+  <button class="danger" id="logoutBtn" type="button"><span data-i18n="nav.logout">Logout</span></button>
+</div>
+    <div class="heroGrid">
+      <section class="section payHero">
+        <h2><span data-i18n="title.pay">Offer bezahlen</span></h2>
+
+        <label class="label" for="payOfferInput"><span data-i18n="label.target">Offer, Invoice oder Lightning Address</span></label>
+        <input id="payOfferInput" type="text" placeholder="lno... oder lnbc... oder name@domain" />
+
+        <div id="payLivePreview" class="section" style="margin-top:12px;padding:14px 16px;display:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,0.18);">
+          <div style="display:flex;gap:14px;align-items:center;">
+            <img id="payPreviewImage" alt="Preview" style="display:none;width:64px;height:64px;border-radius:16px;object-fit:cover;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);box-shadow:0 4px 12px rgba(0,0,0,0.18);" />
+            <div style="flex:1;min-width:0;">
+              <div id="payPreviewTitle" style="font-weight:800;font-size:16px;line-height:1.25;"></div>
+              <div id="payPreviewDesc" class="sub" style="margin-top:5px;font-size:14px;line-height:1.45;word-break:break-word;"></div>
+              <div id="payPreviewMeta" class="hint" style="margin-top:8px;font-size:13px;line-height:1.4;word-break:break-word;"></div>
+            </div>
+          </div>
+        </div>
+
+        <label class="label" for="payAmountInput" style="margin-top:14px;"><span data-i18n="label.amount">Zahlbetrag in sats</span></label>
+        <input id="payAmountInput" type="number" min="1" step="1" data-i18n-placeholder="ph.amount" placeholder="z. B. 1000" />
+
+        <label class="label" for="payerNoteInput" style="margin-top:14px;"><span data-i18n="label.payer_note">Payer Note (optional)</span></label>
+        <input id="payerNoteInput" type="text" data-i18n-placeholder="ph.payer_note" placeholder="z. B. test" />
+
+        <div class="row">
+          <button id="payOfferBtn" type="button"><span data-i18n="btn.pay">⚡ Zahlung starten</span></button>
+          <button class="secondary" id="useCurrentOfferBtn" type="button"><span data-i18n="btn.use_current_offer">Aktuelles Offer übernehmen</span></button>
+        </div>
+
+        <div class="hint">
+          <span data-i18n="hint.top">Hauptfokus: BOLT12 Offer Pay. Automatische Erkennung für BOLT12, BOLT11 und LNURL / Lightning Address.</span>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2><span data-i18n="title.create">Offer erzeugen</span></h2>
+
+        <label class="label" for="amountInput"><span data-i18n="label.min">Mindestbetrag in sats</span></label>
+        <input id="amountInput" type="number" min="1" step="1" data-i18n-placeholder="ph.min_amount" placeholder="Leer = Backend nutzt 1 sat" />
+
+        <label class="label" for="messageInput" style="margin-top:14px;"><span data-i18n="label.desc">Beschreibung / Label</span></label>
+        <input id="messageInput" type="text" data-i18n-placeholder="ph.description" placeholder="z. B. coffee, tip, donation" />
+
+        <div class="row">
+          <button id="createOfferBtn" type="button"><span data-i18n="btn.create">Offer erzeugen</span></button>
+        </div>
+
+        <div class="hint">
+          <span data-i18n="hint.offer_string">Der erzeugte Offer-String kann direkt als QR angezeigt oder in Pay / Decode übernommen werden.</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="midGrid">
+      <section class="section">
+        <h2><span data-i18n="label.current_offer_qr">Aktuelles Offer / QR</span></h2>
+
+        <div class="qrPanel">
+        <div id="qrModeBadge" class="modeBadge" data-i18n="badge.qr_default">QR: Standardadresse</div>
+          <div id="offerQrBox" class="qrBox" title="Antippen = aktiven Inhalt kopieren"></div>
+          <div class="hint">
+            <span data-i18n="hint.no_offer_qr">Solange noch kein Offer erzeugt wurde, zeigt der QR standardmäßig</span>
+            <span class="mono" style="white-space:nowrap;">bolt12@alex71btc.com</span>.
+          </div>
+        </div>
+
+        <label class="label" for="offerPreviewBox" style="margin-top:14px;"><span data-i18n="label.active_content">Aktiver Inhalt</span></label>
+        <div id="offerPreviewBox" class="valueBox mono copyable offerPreview" title="Zum Kopieren antippen">
+          bolt12@alex71btc.com
+        </div>
+
+        <input id="offerInput" type="hidden" />
+
+        <div class="row">
+          <button class="secondary" id="copyOfferBtn" type="button"><span data-i18n="btn.copy_active">Aktiven Inhalt kopieren</span></button>
+          <button class="secondary" id="makeOfferQrBtn" type="button"><span data-i18n="btn.refresh_qr">QR aktualisieren</span></button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2><span data-i18n="title.decode">Offer decoden</span></h2>
+
+        <label class="label" for="decodeInput"><span data-i18n="label.decode_target">Offer oder BIP353-Adresse</span></label>
+        <input id="decodeInput" type="text" data-i18n-placeholder="ph.decode_target" placeholder="lno... oder user@domain" />
+
+        <div class="row">
+          <button id="decodeBtn" type="button">Decode</button>
+        </div>
+
+        <label class="label" for="decodeOutput" style="margin-top:14px;"><span data-i18n="label.decode_output">Decode-Ausgabe</span></label>
+        <textarea id="decodeOutput" class="mono copyable" readonly data-i18n-placeholder="ph.decode_output" placeholder="Hier erscheint die Decode-Ausgabe..." title="Zum Kopieren antippen"></textarea>
+      </section>
+
+      <section class="section">
+        <h2><span data-i18n="title.last_payment">Letztes Zahlungsergebnis</span></h2>
+
+        <label class="label" for="paymentResultOutput"><span data-i18n="label.payment_output">Payment-Ausgabe</span></label>
+        <textarea id="paymentResultOutput" class="mono copyable" readonly data-i18n-placeholder="ph.payment_output" placeholder="Hier erscheint das letzte Zahlungsergebnis..." title="Zum Kopieren antippen"></textarea>
+      </section>
+
+    </div>
+
+    <details class="section">
+      <summary><span data-i18n="title.offer_history">Offer History</span></summary>
+      <div class="row">
+        <button class="secondary" id="clearHistoryBtn" type="button"><span data-i18n="btn.clear_history">History löschen</span></button>
+      </div>
+      <div id="historyList" class="historyList"></div>
+    </details>
+
+    <section class="section">
+      <h2><span data-i18n="title.nostr_identity">Nostr / Identity</span></h2>
+
+      <label class="label" for="identityAliasInput"><span data-i18n="label.identity_alias">Lightning Address Alias</span></label>
+      <input id="identityAliasInput" type="text" data-i18n-placeholder="ph.identity_alias" placeholder="z. B. alex" />
+
+      <label class="label" for="identityPubkeyInput" style="margin-top:14px;"><span data-i18n="label.nostr_pubkey">Nostr Pubkey (hex oder npub)</span></label>
+      <input id="identityPubkeyInput" type="text" data-i18n-placeholder="ph.nostr_pubkey" placeholder="hex... oder npub1..." />
+
+      <label class="label" for="identityRelaysInput" style="margin-top:14px;"><span data-i18n="label.relays">Relays (optional, kommagetrennt)</span></label>
+      <input id="identityRelaysInput" type="text" data-i18n-placeholder="ph.relays" placeholder="wss://relay.damus.io,wss://nos.lol" />
+
+      <div class="row">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input id="identityNip05EnabledInput" type="checkbox" checked />
+          <span><span data-i18n="label.nip05_enabled">NIP-05 aktiv</span></span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input id="identityZapEnabledInput" type="checkbox" checked />
+          <span><span data-i18n="label.zap_enabled">Zap / Nostr aktiv</span></span>
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="loadIdentityBtn" class="secondary" type="button"><span data-i18n="btn.identity_load">Identity laden</span></button>
+        <button id="saveIdentityBtn" type="button"><span data-i18n="btn.identity_save">Identity speichern</span></button>
+      </div>
+
+      <div class="hint">
+        <span data-i18n="hint.identity">Ordnet einer Lightning Address wie <span class="mono">name@domain</span> einen Nostr Pubkey zu. Diese Zuordnung wird für NIP-05 und LNURL Zaps verwendet.</span>
+        Diese Zuordnung wird für NIP-05 und LNURL Zaps verwendet.
+      </div>
+
+      <label class="label" for="identityResultOutput" style="margin-top:14px;"><span data-i18n="label.identity_result">Identity Ergebnis</span></label>
+      <textarea id="identityResultOutput" class="mono copyable" readonly data-i18n-placeholder="ph.identity_result" placeholder="Hier erscheint die Identity-Konfiguration..." title="Zum Kopieren antippen"></textarea>
+    </section>
+
+    <section class="section">
+      <h2><span data-i18n="title.nostr_notification_keys">Nostr Notification Keys</span></h2>
+
+      <label class="label"><span data-i18n="label.server_signer">Server signer</span></label>
+      <div id="nostrServerStatus" class="valueBox" data-i18n="label.loading">Loading...</div>
+      <div id="nostrServerPubkey" class="hint mono" style="margin-top:8px;"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="generateNostrServerKeyBtn" type="button"><span data-i18n="btn.generate_server_key">Neuen Server-Key generieren</span></button>
+      </div>
+
+      <label class="label" for="nostrNotifyNsecInput" style="margin-top:18px;"><span data-i18n="label.notification_nsec">Notification NSEC</span></label>
+      <input id="nostrNotifyNsecInput" type="password" data-i18n-placeholder="ph.notification_nsec" placeholder="nsec1..." />
+
+      <div id="nostrNotifyStatus" class="hint" style="margin-top:8px;"></div>
+      <div id="nostrNotifyPubkey" class="hint mono" style="margin-top:6px;"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="saveNostrNotifyKeyBtn" type="button"><span data-i18n="btn.save_notification_nsec">Notification NSEC speichern</span></button>
+      </div>
+
+      <div class="hint" style="margin-top:12px;">
+        <span data-i18n="hint.notification_keys">Der Server-Key signiert App-interne Nostr-Events. Der Notification-NSEC wird für DM-/Push-kompatible Zap-Benachrichtigungen verwendet.</span>
+      </div>
+    </section>
+
+    <details class="section">
+      <summary><span data-i18n="title.cloudflare">Alias / Cloudflare BIP353</span></summary>
+
+      <label class="label" for="cfRecordNameInput" style="margin-top:14px;"><span data-i18n="label.record_name">Record Name</span></label>
+      <input id="cfRecordNameInput" type="text" data-i18n-placeholder="ph.record_name" placeholder="z. B. phoenixd" />
+
+      <label class="label" for="cfOfferInput" style="margin-top:14px;"><span data-i18n="label.offer_lno">Offer (lno...)</span></label>
+      <input id="cfOfferInput" class="copyable" type="text" data-i18n-placeholder="ph.offer_lno" placeholder="Hier das lno... Offer einfügen oder übernehmen" />
+
+      <div class="row">
+        <button class="secondary" id="cfUseCurrentOfferBtn" type="button"><span data-i18n="btn.use_current_offer_cf">Aktuelles Offer übernehmen</span></button>
+        <button id="cfCreateAliasBtn" type="button"><span data-i18n="btn.save_cloudflare_alias">Alias bei Cloudflare speichern</span></button>
+      </div>
+
+<div class="hint">
+  <span data-i18n="hint.cloudflare_prefix">Erstellt einen TXT-Record wie</span>
+  <span class="mono">name.user._bitcoin-payment.alex71btc.com</span>.
+</div>
+
+      <label class="label" for="cfHumanAddressOutput" style="margin-top:14px;"><span data-i18n="label.generated_address">Erzeugte Adresse</span></label>
+      <input id="cfHumanAddressOutput" class="mono copyable" type="text" readonly data-i18n-placeholder="ph.generated_address" placeholder="Hier erscheint die neue Adresse..." title="Zum Kopieren antippen" />
+
+      <div class="row">
+        <button class="secondary" id="cfCopyHumanAddressBtn" type="button"><span data-i18n="btn.copy_address">Adresse kopieren</span></button>
+      </div>
+
+      <label class="label" for="cfResultOutput" style="margin-top:14px;"><span data-i18n="label.result">Ergebnis</span></label>
+      <textarea id="cfResultOutput" class="mono copyable" readonly placeholder="Hier erscheint die Cloudflare-Antwort..." title="Zum Kopieren antippen"></textarea>
+    </details>
+  </main>
+
+  <div class="scannerModal" id="scannerModal" aria-hidden="true">
+    <div class="scannerCard">
+      <h2>QR-Scanner</h2>
+      <div class="scannerHint" id="scannerTitle">Scanne ein Offer oder eine BIP353-Adresse.</div>
+
+      <div class="scannerViewport">
+        <video id="scannerVideo" autoplay playsinline muted></video>
+        <div id="scannerReader" style="width:100%; height:100%; display:none;"></div>
+      </div>
+
+      <div class="row">
+        <button class="secondary" id="closeScannerBtn" type="button">Scanner schließen</button>
+      </div>
+
+      <div class="scannerHint">
+        Scannt <span class="mono">lno...</span>, <span class="mono">lightning:...</span>,
+        <span class="mono">bitcoin:...</span> oder <span class="mono">user@domain</span>.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const HISTORY_KEY = 'bolt12_admin_history_v1';
+    const DEFAULT_ADDRESS = 'bolt12@alex71btc.com';
+
+    const statusBar = document.getElementById('statusBar');
+
+    const amountInput = document.getElementById('amountInput');
+    const messageInput = document.getElementById('messageInput');
+
+    const offerInput = document.getElementById('offerInput');
+    const offerPreviewBox = document.getElementById('offerPreviewBox');
+    const qrModeBadge = document.getElementById('qrModeBadge');
+    const offerQrBox = document.getElementById('offerQrBox');
+
+    const payOfferInput = document.getElementById('payOfferInput');
+    const payAmountInput = document.getElementById('payAmountInput');
+    const payerNoteInput = document.getElementById('payerNoteInput');
+    const payLivePreview = document.getElementById('payLivePreview');
+    const payPreviewImage = document.getElementById('payPreviewImage');
+    const payPreviewTitle = document.getElementById('payPreviewTitle');
+    const payPreviewDesc = document.getElementById('payPreviewDesc');
+    const payPreviewMeta = document.getElementById('payPreviewMeta');
+
+    const decodeInput = document.getElementById('decodeInput');
+    const decodeOutput = document.getElementById('decodeOutput');
+    const paymentResultOutput = document.getElementById('paymentResultOutput');
+
+    const historyList = document.getElementById('historyList');
+
+    const identityAliasInput = document.getElementById('identityAliasInput');
+    const identityPubkeyInput = document.getElementById('identityPubkeyInput');
+    const identityRelaysInput = document.getElementById('identityRelaysInput');
+    const identityNip05EnabledInput = document.getElementById('identityNip05EnabledInput');
+    const identityZapEnabledInput = document.getElementById('identityZapEnabledInput');
+    const identityResultOutput = document.getElementById('identityResultOutput');
+
+    const nostrServerStatus = document.getElementById('nostrServerStatus');
+    const nostrServerPubkey = document.getElementById('nostrServerPubkey');
+    const nostrNotifyNsecInput = document.getElementById('nostrNotifyNsecInput');
+    const nostrNotifyStatus = document.getElementById('nostrNotifyStatus');
+    const nostrNotifyPubkey = document.getElementById('nostrNotifyPubkey');
+
+
+    const cfRecordNameInput = document.getElementById('cfRecordNameInput');
+    const cfOfferInput = document.getElementById('cfOfferInput');
+    const cfHumanAddressOutput = document.getElementById('cfHumanAddressOutput');
+    const cfResultOutput = document.getElementById('cfResultOutput');
+
+    const scannerModal = document.getElementById('scannerModal');
+    const scannerVideo = document.getElementById('scannerVideo');
+    const scannerReader = document.getElementById('scannerReader');
+    const scannerTitle = document.getElementById('scannerTitle');
+
+    let statusTimer = null;
+    let deferredPrompt = null;
+    let html5Qr = null;
+    let scanTarget = 'decode';
+
+    function setStatus(message, type = 'ok', persist = false) {
+      statusBar.textContent = message;
+      statusBar.className = `statusBar show ${type}`;
+
+      if (statusTimer) {
+        clearTimeout(statusTimer);
+        statusTimer = null;
+      }
+
+      if (!persist) {
+        statusTimer = setTimeout(() => {
+          statusBar.className = 'statusBar';
+          statusBar.textContent = '';
+        }, 4200);
+      }
+    }
+
+    async function copyText(value, successMessage) {
+      const text = String(value || '').trim();
+      if (!text) {
+        setStatus(window.__t('toast.nothing_to_copy'), 'error');
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus(successMessage || 'Kopiert.');
+      } catch (error) {
+        setStatus(window.__t('toast.copy_failed'), 'error');
+      }
+    }
+
+    function normalizeScannedText(raw) {
+      let value = String(raw || '').trim();
+
+      value = value.replace(/^lightning:/i, '');
+      value = value.replace(/^bitcoin:\??/i, '');
+
+      const lnoParamMatch = value.match(/(?:^|\?|&)lno=([^&]+)/i);
+      if (lnoParamMatch && lnoParamMatch[1]) {
+        try {
+          value = decodeURIComponent(lnoParamMatch[1]).trim();
+        } catch {
+          value = lnoParamMatch[1].trim();
+        }
+      }
+
+      if (value.includes('?')) {
+        value = value.split('?')[0];
+      }
+      if (value.includes('&')) {
+        value = value.split('&')[0];
+      }
+
+      return value.trim();
+    }
+
+    function getCurrentOffer() {
+      return offerInput.value.trim();
+    }
+
+function updatePayUiForInput() {
+  const rawInput = payOfferInput.value.trim();
+  const kind = detectPaymentType(rawInput);
+
+  // Default-Zustand
+  payAmountInput.disabled = false;
+  payAmountInput.placeholder = window.__t('ph.amount');
+  payerNoteInput.disabled = false;
+  payerNoteInput.placeholder = window.__t('ph.payer_note');
+
+  if (kind === 'bolt11') {
+    payAmountInput.value = '';
+    payAmountInput.disabled = true;
+    payAmountInput.placeholder = window.__t('ph.amount_from_invoice');
+
+    payerNoteInput.value = '';
+    payerNoteInput.disabled = true;
+    payerNoteInput.placeholder = window.__t('ph.comment_not_for_bolt11');
+  }
+}
+
+function normalizePaymentInput(raw) {
+  return normalizeScannedText(raw);
+}
+
+function getDefaultAddressDomain() {
+  const parts = String(DEFAULT_ADDRESS || '').trim().toLowerCase().split('@');
+  return parts.length === 2 ? parts[1] : '';
+}
+
+function detectPaymentType(raw) {
+  const value = normalizePaymentInput(raw).toLowerCase();
+
+  if (!value) return 'empty';
+  if (value.startsWith('lno')) return 'bolt12';
+  if (value.startsWith('lnbc') || value.startsWith('lntb') || value.startsWith('lnbcrt')) return 'bolt11';
+
+  if (value.includes('@') && !value.includes(' ')) return 'ambiguous_address';
+
+  if (value.startsWith('lnurl1')) return 'lnurl';
+
+  return 'unknown';
+}
+    function getActiveValue() {
+      return getCurrentOffer() || DEFAULT_ADDRESS;
+    }
+
+    function setCurrentOffer(value) {
+      const offer = String(value || '').trim();
+      offerInput.value = offer;
+
+      if (offer) {
+        offerPreviewBox.textContent = offer;
+        qrModeBadge.textContent = 'QR: BOLT12 Offer';
+      } else {
+        offerPreviewBox.textContent = DEFAULT_ADDRESS;
+        qrModeBadge.textContent = window.__t ? window.__t('badge.qr_default') : 'QR: Standardadresse';
+      }
+    }
+
+function renderOfferQr(value) {
+  const qrValue = String(value || '').trim() || DEFAULT_ADDRESS;
+
+  if (typeof QRCode === 'undefined') {
+    console.warn('QRCode not ready yet, retrying...');
+    setTimeout(() => renderOfferQr(value), 100);
+    return;
+  }
+
+  offerQrBox.innerHTML = '';
+  new QRCode(offerQrBox, {
+    text: qrValue,
+    width: 220,
+    height: 220,
+    correctLevel: QRCode.CorrectLevel.M,
+    colorDark: '#000000',
+    colorLight: '#ffffff'
+  });
+}
+
+    function loadHistory() {
+      try {
+        return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      } catch {
+        return [];
+      }
+    }
+
+    function saveHistory(items) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 50)));
+    }
+
+    function addHistoryItem(item) {
+      const items = loadHistory();
+      items.unshift(item);
+      saveHistory(items);
+      renderHistory();
+
+
+    }
+
+    function clearHistory() {
+      localStorage.removeItem(HISTORY_KEY);
+      renderHistory();
+
+
+      setStatus(window.__t('toast.history_cleared'));
+    }
+
+    window.renderHistory = function renderHistory() {
+      const items = loadHistory();
+      historyList.innerHTML = '';
+
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'emptyState';
+        empty.textContent = (window.__t ? window.__t('history.empty') : 'Noch keine Offers in der lokalen History.');
+        historyList.appendChild(empty);
+        return;
+      }
+
+      for (const item of items) {
+        const wrap = document.createElement('div');
+        wrap.className = 'historyItem';
+
+        const meta = document.createElement('div');
+        meta.className = 'historyMeta';
+        meta.textContent = `${(item.createdAt ? formatHistoryDate(item.createdAt) : (item.timeText || ''))} · ${item.amountText || ''}${item.label ? ' · ' + item.label : ''}`;
+
+        const offer = document.createElement('div');
+        offer.className = 'mono copyable';
+        offer.title = 'Zum Kopieren antippen';
+        offer.textContent = item.offer || '';
+
+        offer.addEventListener('click', async () => {
+          await copyText(item.offer, window.__t('toast.offer_copied'));
+        });
+
+        const actions = document.createElement('div');
+        actions.className = 'historyActions';
+
+        const usePayBtn = document.createElement('button');
+        usePayBtn.className = 'secondary';
+        usePayBtn.type = 'button';
+        usePayBtn.textContent = (window.__t ? window.__t('history.in_pay') : 'In Pay');
+        usePayBtn.addEventListener('click', () => {
+          payOfferInput.value = item.offer || '';
+          setStatus(window.__t('toast.history_to_pay'));
+        });
+
+        const useQrBtn = document.createElement('button');
+        useQrBtn.className = 'secondary';
+        useQrBtn.type = 'button';
+        useQrBtn.textContent = (window.__t ? window.__t('history.as_qr') : 'Als QR');
+        useQrBtn.addEventListener('click', () => {
+          setCurrentOffer(item.offer || '');
+          renderOfferQr(getActiveValue());
+          setStatus(window.__t('toast.history_to_qr'));
+        });
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'secondary';
+        copyBtn.type = 'button';
+        copyBtn.textContent = (window.__t ? window.__t('history.copy') : 'Kopieren');
+        copyBtn.addEventListener('click', async () => {
+          await copyText(item.offer, window.__t('toast.offer_copied'));
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'danger';
+        delBtn.type = 'button';
+        delBtn.textContent = (window.__t ? window.__t('history.delete') : 'Löschen');
+        delBtn.addEventListener('click', () => {
+          const next = loadHistory().filter(entry => entry.id !== item.id);
+          saveHistory(next);
+          renderHistory();
+
+
+          setStatus(window.__t('toast.history_deleted'));
+        });
+
+        actions.append(usePayBtn, useQrBtn, copyBtn, delBtn);
+        wrap.append(meta, offer, actions);
+        historyList.appendChild(wrap);
+      }
+    }
+async function readJsonOrThrow(response) {
+  const rawText = await response.text();
+  let data = null;
+
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    throw new Error(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
+  }
+
+  if (!response.ok) {
+    let message = 'Serverfehler';
+
+    if (data?.detail) {
+      if (typeof data.detail === 'string') {
+        message = data.detail;
+      } else {
+        try {
+          message = JSON.stringify(data.detail);
+        } catch {
+          message = String(data.detail);
+        }
+      }
+    } else if (typeof data?.raw_output === 'string') {
+      message = data.raw_output;
+    } else if (typeof data?.message === 'string') {
+      message = data.message;
+    } else if (data) {
+      try {
+        message = JSON.stringify(data);
+      } catch {
+        message = String(data);
+      }
+    }
+
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+
+function safeJsonParse(text) {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatHistoryDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || '');
+  return date.toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'de-DE');
+}
+
+function formatSats(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return `${n.toLocaleString('de-DE')} sats`;
+}
+
+function renderSuccessOutput(title, lines, detailsObj = null) {
+  const summary = [title, ...lines.filter(Boolean)].join('\n');
+
+  if (paymentResultOutput) {
+    if (detailsObj) {
+      paymentResultOutput.value = `${summary}\n\n--- Details ---\n${JSON.stringify(detailsObj, null, 2)}`;
+    } else {
+      paymentResultOutput.value = summary;
+    }
+
+    if (typeof paymentResultOutput.scrollIntoView === 'function') {
+      paymentResultOutput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+}
+
+
+
+let payPreviewTimer = null;
+
+function resetPayUiState() {
+  payAmountInput.disabled = false;
+  payAmountInput.placeholder = window.__t('ph.amount');
+
+  payerNoteInput.disabled = false;
+  payerNoteInput.placeholder = window.__t('ph.payer_note');
+
+  if (payLivePreview) payLivePreview.style.display = 'none';
+  if (payPreviewImage) {
+    payPreviewImage.style.display = 'none';
+    payPreviewImage.src = '';
+  }
+  if (payPreviewTitle) payPreviewTitle.textContent = '';
+  if (payPreviewDesc) payPreviewDesc.textContent = '';
+  if (payPreviewMeta) payPreviewMeta.textContent = '';
+}
+
+function renderPayPreview(data) {
+  if (!payLivePreview) return;
+
+  payLivePreview.style.display = 'block';
+
+  const title = data?.title || '';
+  const desc = data?.description || '';
+  payPreviewTitle.textContent = title;
+  payPreviewDesc.textContent = desc;
+
+  const metaParts = [];
+  if (data?.kind) {
+    if (data.kind === 'lightning_address') metaParts.push('Lightning Address');
+    if (data.kind === 'lnurl') metaParts.push('LNURL Pay');
+    if (data.kind === 'bolt11') metaParts.push('BOLT11 Invoice');
+    if (data.kind === 'bolt12') metaParts.push('BOLT12 Offer');
+  }
+  if (data?.amount_sat) metaParts.push(`${formatSats(data.amount_sat)}`);
+  if (data?.min_sat || data?.max_sat) metaParts.push(`${data.min_sat || 0} - ${data.max_sat || 0} sats`);
+  if (data?.comment_allowed) metaParts.push(`Kommentar bis ${data.comment_allowed} Zeichen`);
+  if (data?.allows_nostr === true || data?.allowsNostr === true) metaParts.push('Zap möglich');
+  if (data?.nip05_active === true) metaParts.push('NIP-05 aktiv');
+  if (data?.nostr_pubkey) metaParts.push(`Nostr: ${String(data.nostr_pubkey).slice(0, 16)}…`);
+
+  payPreviewMeta.textContent = metaParts.join(' • ');
+
+  if (data?.image_data_url) {
+    payPreviewImage.src = data.image_data_url;
+    payPreviewImage.style.display = 'block';
+  } else {
+    payPreviewImage.src = '';
+    payPreviewImage.style.display = 'none';
+  }
+}
+
+async function loadPayPreview() {
+  const rawInput = payOfferInput.value.trim();
+  const kind = detectPaymentType(rawInput);
+
+  resetPayUiState();
+
+  if (!rawInput) return;
+
+  // Nur sinnvolle Preview-Requests feuern
+  if (kind === 'bolt11' && rawInput.length < 20) return;
+  if (kind === 'lnurl' && rawInput.length < 20) return;
+  if (kind === 'ambiguous_address' && (!rawInput.includes('@') || rawInput.endsWith('@'))) return;
+  if (!['bolt11', 'ambiguous_address', 'lnurl'].includes(kind)) return;
+
+  if (kind === 'bolt11') {
+    payAmountInput.value = '';
+    payAmountInput.disabled = true;
+    payAmountInput.placeholder = window.__t('ph.amount_from_invoice');
+
+    payerNoteInput.value = '';
+    payerNoteInput.disabled = true;
+    payerNoteInput.placeholder = window.__t('ph.comment_from_invoice');
+
+    try {
+      const response = await fetch('/api/preview-pay-target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: rawInput })
+      });
+
+      const data = await readJsonOrThrow(response);
+      renderPayPreview(data);
+    } catch {}
+    return;
+  }
+
+  if (kind === 'ambiguous_address' || kind === 'lnurl') {
+    try {
+      const response = await fetch('/api/preview-pay-target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: rawInput })
+      });
+
+      const data = await readJsonOrThrow(response);
+      renderPayPreview(data);
+    } catch {}
+    return;
+  }
+}
+
+function getLnurlSuccessActionText(obj) {
+  const action = obj?.invoice_data?.successAction;
+  if (!action || typeof action !== 'object') return '';
+
+  if (action.tag === 'message' && action.message) {
+    return `💬 ${action.message}`;
+  }
+
+  if (action.tag === 'url' && action.url) {
+    return `🔗 ${action.description || 'Link verfügbar'}: ${action.url}`;
+  }
+
+  if (action.tag === 'aes' && action.description) {
+    return `🔐 ${action.description}`;
+  }
+
+  return '';
+}
+
+function errorToMessage(error) {
+  if (!error) return 'Unbekannter Fehler';
+
+  if (typeof error === 'string') return error;
+
+  if (error instanceof Error) return error.message || 'Unbekannter Fehler';
+
+  if (typeof error === 'object') {
+    if (typeof error.detail === 'string') return error.detail;
+    if (typeof error.error === 'string') return error.error;
+    if (typeof error.message === 'string') return error.message;
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+}
+
+
+async function loadNostrStatus() {
+  try {
+    const res = await fetch('/api/admin/nostr-status', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (nostrServerStatus) {
+      nostrServerStatus.textContent = data.server_key_configured ? window.__t('label.configured') : window.__t('label.missing');
+    }
+    if (nostrServerPubkey) {
+      nostrServerPubkey.textContent = data.server_npub || data.server_pubkey_hex || '';
+    }
+    if (nostrNotifyStatus) {
+      nostrNotifyStatus.textContent = data.notify_key_configured
+        ? `${window.__t('label.configured_prefix')} ${data.notify_nsec_masked || ''}`
+        : 'Missing';
+    }
+    if (nostrNotifyPubkey) {
+      nostrNotifyPubkey.textContent = data.notify_npub || data.notify_pubkey_hex || '';
+    }
+  } catch (err) {
+    console.error('loadNostrStatus failed', err);
+  }
+}
+
+async function saveNostrNotifyKey() {
+  const notify_nsec = (nostrNotifyNsecInput?.value || '').trim();
+  if (!notify_nsec) {
+    setStatus(window.__t('toast.nostr_nsec_required'), 'warn');
+    return;
+  }
+
+  const res = await fetch('/api/admin/nostr-notify-key', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ notify_nsec })
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    setStatus(data.detail || 'Notification NSEC konnte nicht gespeichert werden.', 'error', true);
+    return;
+  }
+
+  if (nostrNotifyNsecInput) nostrNotifyNsecInput.value = '';
+  await loadNostrStatus();
+  setStatus(window.__t('toast.nostr_nsec_saved'), 'ok');
+}
+
+async function generateNostrServerKey() {
+  const res = await fetch('/api/admin/nostr-server-key/generate', {
+    method: 'POST',
+    credentials: 'same-origin'
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    setStatus(data.detail || 'Server-Key konnte nicht generiert werden.', 'error', true);
+    return;
+  }
+
+  await loadNostrStatus();
+  setStatus(window.__t('toast.server_key_generated'), 'ok');
+}
+
+async function loadIdentityConfig(alias = '') {
+  const resolvedAlias = (alias || identityAliasInput.value || '').trim().toLowerCase();
+
+  if (!resolvedAlias) {
+    setStatus(window.__t('toast.alias_required_first'), 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/identity-config?alias=${encodeURIComponent(resolvedAlias)}`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+
+    const data = await readJsonOrThrow(response);
+
+    identityAliasInput.value = data.alias || resolvedAlias;
+    identityPubkeyInput.value = data.nostr_pubkey || '';
+    identityRelaysInput.value = Array.isArray(data.relays) ? data.relays.join(',') : '';
+    identityNip05EnabledInput.checked = data.nip05_enabled !== false;
+    identityZapEnabledInput.checked = data.zap_enabled !== false;
+    identityResultOutput.value = JSON.stringify(data, null, 2);
+
+    setStatus(`${window.__t('toast.identity_loaded')} ${resolvedAlias}`);
+  } catch (error) {
+    const message = errorToMessage(error);
+    identityResultOutput.value = String(message);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  }
+}
+
+async function saveIdentityConfig() {
+  const alias = identityAliasInput.value.trim().toLowerCase();
+  const nostrPubkey = identityPubkeyInput.value.trim();
+  const relays = identityRelaysInput.value
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+
+  if (!alias) {
+    setStatus(window.__t('toast.identity_alias_required'), 'error');
+    return;
+  }
+
+  if (!nostrPubkey) {
+    setStatus(window.__t('toast.identity_pubkey_required'), 'error');
+    return;
+  }
+
+  const btn = document.getElementById('saveIdentityBtn');
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = 'Speichere...';
+
+  try {
+    const response = await fetch('/api/identity-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        alias,
+        nostr_pubkey: nostrPubkey,
+        relays,
+        nip05_enabled: !!identityNip05EnabledInput.checked,
+        zap_enabled: !!identityZapEnabledInput.checked
+      })
+    });
+
+    const data = await readJsonOrThrow(response);
+    identityResultOutput.value = JSON.stringify(data, null, 2);
+    setStatus(`${window.__t('toast.identity_saved')} ${alias}`);
+  } catch (error) {
+    const message = errorToMessage(error);
+    identityResultOutput.value = String(message);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+    function applyScanResult(rawValue) {
+      const value = normalizeScannedText(rawValue);
+      if (!value) {
+        setStatus(window.__t('toast.qr_content_unreadable'), 'error', true);
+        return;
+      }
+
+      if (scanTarget === 'pay') {
+        payOfferInput.value = value;
+        setStatus(window.__t('toast.qr_to_pay'));
+      } else {
+        decodeInput.value = value;
+        setStatus(window.__t('toast.qr_to_decode'));
+      }
+
+      closeScanner();
+    }
+
+    async function openScanner(target) {
+      scanTarget = target;
+      scannerTitle.textContent =
+        target === 'pay'
+          ? 'Scanne ein Offer oder eine BIP353-Adresse für Pay.'
+          : 'Scanne ein Offer oder eine BIP353-Adresse für Decode.';
+
+      if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        setStatus(window.__t('toast.qr_https_required'), 'error', true);
+        return;
+      }
+
+      scannerModal.classList.add('show');
+      scannerModal.setAttribute('aria-hidden', 'false');
+
+      if (typeof Html5Qrcode === 'undefined') {
+        setStatus(window.__t('toast.qr_lib_missing'), 'error', true);
+        return;
+      }
+
+      try {
+        scannerReader.style.display = 'block';
+        scannerVideo.style.display = 'none';
+
+        if (!html5Qr) {
+          html5Qr = new Html5Qrcode('scannerReader');
+        }
+
+        await html5Qr.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 260, height: 260 }
+          },
+          decodedText => {
+            applyScanResult(decodedText);
+          },
+          () => {}
+        );
+      } catch (error) {
+        const message = errorToMessage(error);
+        closeScanner(false);
+        if (/permission|NotAllowedError/i.test(message)) {
+          setStatus(window.__t('toast.camera_denied'), 'error', true);
+        } else if (/https|secure/i.test(message)) {
+          setStatus(window.__t('toast.qr_https_required'), 'error', true);
+        } else {
+          setStatus(`Scanner-Start fehlgeschlagen: ${message}`, 'error', true);
+        }
+      }
+    }
+
+    async function closeScanner(showMessage = false) {
+      scannerModal.classList.remove('show');
+      scannerModal.setAttribute('aria-hidden', 'true');
+
+      if (html5Qr) {
+        try {
+          if (html5Qr.isScanning) {
+            await html5Qr.stop();
+          }
+        } catch {}
+        try {
+          await html5Qr.clear();
+        } catch {}
+      }
+
+      scannerReader.style.display = 'none';
+      scannerVideo.style.display = 'none';
+
+      if (showMessage) {
+        setStatus(window.__t('toast.scanner_closed'), 'warn');
+      }
+    }
+
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      deferredPrompt = event;
+      const installBtn = document.getElementById('installBtn');
+      installBtn.hidden = false;
+    });
+
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (!deferredPrompt) {
+        alert('Install-Prompt nicht verfügbar (Service Worker / Browser prüfen)');
+        return;
+      }
+
+      deferredPrompt.prompt();
+
+      try {
+        await deferredPrompt.userChoice;
+      } catch {}
+
+      deferredPrompt = null;
+    });
+
+    document.getElementById('createOfferBtn').addEventListener('click', async () => {
+      const amountValue = amountInput.value.trim();
+      const descriptionValue = messageInput.value.trim() || DEFAULT_ADDRESS;
+      const payload = { description: descriptionValue };
+
+      if (amountValue) payload.amount = Number(amountValue);
+
+      const btn = document.getElementById('createOfferBtn');
+      btn.disabled = true;
+      btn.textContent = 'Erzeuge...';
+      setStatus(window.__t('toast.create_start'), 'warn');
+
+      try {
+        const response = await fetch('/api/create-offer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await readJsonOrThrow(response);
+
+        setCurrentOffer(data.offer);
+        renderOfferQr(data.offer);
+
+        const amountText = amountValue ? `${amountValue} sats min` : '1 sat default';
+        addHistoryItem({
+          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          offer: data.offer,
+          label: descriptionValue,
+          amountText,
+          createdAt: new Date().toISOString()
+        });
+
+        setStatus(window.__t('toast.create_success'));
+      } catch (error) {
+        const message = errorToMessage(error);
+        setStatus(`Fehler: ${message}`, 'error', true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Offer erzeugen';
+      }
+    });
+
+    document.getElementById('copyOfferBtn').addEventListener('click', async () => {
+      await copyText(getActiveValue(), window.__t('toast.active_content_copied'));
+    });
+
+    document.getElementById('makeOfferQrBtn').addEventListener('click', () => {
+      renderOfferQr(getActiveValue());
+      setStatus(window.__t('toast.qr_refreshed'));
+    });
+
+    offerPreviewBox.addEventListener('click', async () => {
+      await copyText(getActiveValue(), window.__t('toast.active_content_copied'));
+    });
+
+    offerQrBox.addEventListener('click', async () => {
+      await copyText(getActiveValue(), window.__t('toast.active_content_copied'));
+    });
+
+    document.getElementById('useCurrentOfferBtn').addEventListener('click', () => {
+      const currentOffer = getCurrentOffer();
+      if (!currentOffer) {
+        payOfferInput.value = DEFAULT_ADDRESS;
+        setStatus(window.__t('toast.no_offer_default_used'));
+        return;
+      }
+
+      payOfferInput.value = currentOffer;
+      setStatus(window.__t('toast.use_current_offer'));
+    });
+
+async function payBolt12Flow() {
+  const offer = normalizePaymentInput(payOfferInput.value);
+  const amountSat = payAmountInput.value.trim();
+  const payerNote = payerNoteInput.value.trim();
+
+  if (!offer) {
+    setStatus(window.__t('toast.enter_offer_or_bip353'), 'error');
+    return;
+  }
+
+  if (!amountSat) {
+    setStatus(window.__t('toast.enter_amount'), 'error');
+    return;
+  }
+
+  const payload = {
+    offer,
+    amount_sat: Number(amountSat)
+  };
+  if (payerNote) payload.payer_note = payerNote;
+
+  const btn = document.getElementById('payOfferBtn');
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = 'Bezahle...';
+  setStatus(`${window.__t('toast.paying')} ${offer.slice(0, 48)}${offer.length > 48 ? '…' : ''}`, 'warn');
+
+  try {
+    const response = await fetch('/api/pay-offer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await readJsonOrThrow(response);
+    const parsed = safeJsonParse(data?.raw_output);
+
+    renderSuccessOutput(
+      window.__t('pay.summary.success'),
+      [
+        amountSat ? `⚡ ${formatSats(amountSat)}` : '',
+        offer.includes('@') ? `👤 ${offer}` : window.__t('pay.summary.direct_offer'),
+        payerNote ? `${window.__t('pay.summary.comment')} ${payerNote}` : ''
+      ],
+      parsed || { raw_output: data?.raw_output || '' }
+    );
+
+    setStatus(data?.raw_output || window.__t('pay.raw.success'));
+  } catch (error) {
+    const message = errorToMessage(error);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
+async function payLnurlFlow() {
+  const lnurl = normalizePaymentInput(payOfferInput.value);
+  const amountSat = payAmountInput.value.trim();
+  const payerNote = payerNoteInput.value.trim();
+  const btn = document.getElementById('payOfferBtn');
+
+  if (!lnurl) {
+    setStatus(window.__t('toast.enter_lnurl'), 'error');
+    return;
+  }
+
+  if (!amountSat) {
+    setStatus(window.__t('toast.enter_amount'), 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = 'Bezahle LNURL...';
+  setStatus(`${window.__t('toast.paying_lnurl')} ${lnurl.slice(0, 64)}${lnurl.length > 64 ? '…' : ''}`, 'warn');
+
+  try {
+    const response = await fetch('/api/pay-lnurl', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lnurl,
+        amount_sat: Number(amountSat),
+        comment: payerNote || null
+      })
+    });
+
+    const data = await readJsonOrThrow(response);
+    const parsed = safeJsonParse(data?.raw_output);
+    const successActionText = getLnurlSuccessActionText(parsed);
+
+    renderSuccessOutput(
+      '✅ LNURL-Zahlung erfolgreich bezahlt',
+      [
+        amountSat ? `⚡ ${formatSats(amountSat)}` : '',
+        payerNote ? `${window.__t('pay.summary.comment')} ${payerNote}` : '',
+        successActionText
+      ],
+      parsed || { raw_output: data?.raw_output || '' }
+    );
+
+    setStatus(window.__t('toast.lnurl_paid'));
+  } catch (error) {
+    const message = errorToMessage(error);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
+async function payBolt11Flow() {
+  const invoice = normalizePaymentInput(payOfferInput.value);
+  const btn = document.getElementById('payOfferBtn');
+
+  if (!invoice) {
+    setStatus(window.__t('toast.enter_invoice'), 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = 'Bezahle Invoice...';
+  setStatus(`${window.__t('toast.paying_invoice')} ${invoice.slice(0, 64)}${invoice.length > 64 ? '…' : ''}`, 'warn');
+
+  try {
+    const response = await fetch('/api/pay-bolt11', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invoice })
+    });
+const data = await readJsonOrThrow(response);
+const parsed = safeJsonParse(data?.raw_output);
+
+renderSuccessOutput(
+  window.__t('pay.summary.invoice_paid'),
+  [
+    window.__t('pay.summary.invoice_processed'),
+    window.__t('pay.summary.invoice_amount_from_invoice')
+  ],
+  parsed || { raw_output: data?.raw_output || '' }
+);
+
+setStatus(window.__t('toast.invoice_paid'));
+  } catch (error) {
+    const message = errorToMessage(error);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
+async function startSmartPayment() {
+  updatePayUiForInput();
+
+  const rawInput = payOfferInput.value.trim();
+  const kind = detectPaymentType(rawInput);
+
+// BOLT11 → Betrag kommt aus Invoice
+// Default (immer zuerst!)
+payAmountInput.disabled = false;
+payAmountInput.placeholder = window.__t('ph.amount');
+
+// BOLT11 Sonderfall
+if (kind === 'bolt11') {
+  payAmountInput.disabled = true;
+  payAmountInput.placeholder = window.__t('ph.amount_from_invoice');
+
+  setStatus(window.__t('toast.invoice_amount_info'));
+}
+payerNoteInput.disabled = false;
+
+if (kind === 'bolt11') {
+  payAmountInput.disabled = true;
+  payerNoteInput.disabled = true;
+}
+
+  if (kind === 'empty') {
+    setStatus(window.__t('toast.enter_target'), 'error');
+    return;
+  }
+
+  if (kind === 'bolt12') {
+    return payBolt12Flow();
+  }
+
+  if (kind === 'bolt11') {
+    return payBolt11Flow();
+  }
+
+if (kind === 'lnurl') {
+  return payLnurlFlow();
+}
+  if (kind === 'ambiguous_address') {
+    return payAddressFlow();
+  }
+
+  setStatus(window.__t('toast.unknown_payment_format'), 'error', true);
+}
+
+document.getElementById('payOfferBtn').addEventListener('click', startSmartPayment);
+
+async function payAddressFlow() {
+  const target = normalizePaymentInput(payOfferInput.value);
+  const amountSat = payAmountInput.value.trim();
+  const payerNote = payerNoteInput.value.trim();
+
+  if (!target) {
+    setStatus(window.__t('toast.enter_lightning_or_bip353'), 'error');
+    return;
+  }
+
+  if (!amountSat) {
+    setStatus(window.__t('toast.enter_amount'), 'error');
+    return;
+  }
+
+const btn = document.getElementById('payOfferBtn');
+btn.disabled = true;
+const oldText = btn.textContent;
+btn.textContent = 'Prüfe / bezahle...';
+setStatus(`${window.__t('toast.checking_and_paying')} ${target.slice(0, 64)}${target.length > 64 ? '…' : ''}`, 'warn');
+
+  try {
+    const response = await fetch('/api/pay-address', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target,
+        amount_sat: Number(amountSat),
+        payer_note: payerNote || null
+      })
+    });
+const data = await readJsonOrThrow(response);
+const parsed = safeJsonParse(data?.raw_output);
+const successActionText = getLnurlSuccessActionText(parsed);
+
+const isBip353 = parsed?.mode === 'bip353';
+const title = isBip353
+  ? window.__t('pay.summary.success')
+  : window.__t('pay.summary.lnaddr_paid');
+
+const statusText = isBip353
+  ? (parsed?.raw_output || window.__t('pay.raw.success'))
+  : window.__t('toast.lnaddr_paid');
+
+renderSuccessOutput(
+  title,
+  [
+    `👤 ${target}`,
+    amountSat ? `⚡ ${formatSats(amountSat)}` : '',
+    payerNote ? `${window.__t('pay.summary.comment')} ${payerNote}` : '',
+    !isBip353 ? successActionText : ''
+  ],
+  parsed || { raw_output: data?.raw_output || '' }
+);
+
+setStatus(statusText);
+
+  } catch (error) {
+    const message = errorToMessage(error);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+    document.getElementById('decodeBtn').addEventListener('click', async () => {
+      const offer = normalizeScannedText(decodeInput.value);
+      if (!offer) {
+        setStatus(window.__t('toast.enter_decode_target'), 'error');
+        return;
+      }
+
+      const btn = document.getElementById('decodeBtn');
+      btn.disabled = true;
+      btn.textContent = 'Decodiere...';
+      setStatus(window.__t('toast.decoding'), 'warn');
+
+      try {
+        const response = await fetch('/api/decode-offer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ offer })
+        });
+
+        const data = await readJsonOrThrow(response);
+        decodeOutput.value = data.raw_output || '';
+        setStatus(window.__t('toast.decode_success'));
+      } catch (error) {
+        const message = errorToMessage(error);
+        setStatus(`Fehler: ${message}`, 'error', true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Decode';
+      }
+    });
+    
+    payOfferInput.addEventListener('input', () => {
+      if (payPreviewTimer) clearTimeout(payPreviewTimer);
+      payPreviewTimer = setTimeout(() => {
+        loadPayPreview();
+      }, 450);
+    });
+    
+    decodeOutput.addEventListener('click', async () => {
+      const value = decodeOutput.value.trim();
+      if (!value) {
+        setStatus(window.__t('toast.no_decode_output'), 'error');
+        return;
+      }
+      await copyText(value, window.__t('toast.decode_copied'));
+    });
+
+    document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
+
+    document.getElementById('cfUseCurrentOfferBtn').addEventListener('click', () => {
+      const currentOffer = getCurrentOffer();
+      if (!currentOffer || !currentOffer.startsWith('lno')) {
+        setStatus(window.__t('toast.no_current_offer_cf'), 'error');
+        return;
+      }
+
+      cfOfferInput.value = currentOffer;
+      setStatus(window.__t('toast.cf_offer_used'));
+    });
+
+
+document.getElementById('cfCreateAliasBtn').addEventListener('click', async () => {
+  const recordName = cfRecordNameInput.value.trim().toLowerCase();
+  const offer = normalizeScannedText(cfOfferInput.value);
+
+  if (!recordName) {
+    setStatus(window.__t('toast.record_name_required'), 'error');
+    return;
+  }
+
+  if (!offer || !offer.startsWith('lno')) {
+    setStatus(window.__t('toast.invalid_lno'), 'error');
+    return;
+  }
+
+  const btn = document.getElementById('cfCreateAliasBtn');
+  btn.disabled = true;
+  btn.textContent = 'Speichere...';
+  setStatus(`${window.__t('toast.saving_cf_alias')} ${recordName}`, 'warn');
+
+  try {
+    const response = await fetch('/api/cloudflare/create-bip353', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        record_name: recordName,
+        offer: offer
+      })
+    });
+
+    const data = await readJsonOrThrow(response);
+
+  const humanAddress =
+    data?.human_readable_address ||
+    data?.address ||
+    data?.bip353_address ||
+    '';
+
+    cfHumanAddressOutput.value = humanAddress;
+    cfResultOutput.value = JSON.stringify(data, null, 2);
+    setStatus(humanAddress ? `${window.__t('toast.cf_saved')}: ${humanAddress}` : window.__t('toast.cf_saved'));
+  } catch (error) {
+    const message = errorToMessage(error);
+    cfResultOutput.value = String(message);
+    setStatus(`Fehler: ${message}`, 'error', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Alias bei Cloudflare speichern';
+  }
+});
+    cfHumanAddressOutput.addEventListener('click', async () => {
+      await copyText(cfHumanAddressOutput.value, window.__t('toast.address_copied'));
+    });
+
+    cfResultOutput.addEventListener('click', async () => {
+      await copyText(cfResultOutput.value, window.__t('toast.cf_result_copied'));
+    });
+
+    document.getElementById('cfCopyHumanAddressBtn').addEventListener('click', async () => {
+      await copyText(cfHumanAddressOutput.value, window.__t('toast.address_copied'));
+    });
+
+    document.getElementById('scanToDecodeBtn').addEventListener('click', async () => {
+      await openScanner('decode');
+    });
+
+    document.getElementById('scanToPayBtn').addEventListener('click', async () => {
+      await openScanner('pay');
+    });
+
+    document.getElementById('closeScannerBtn').addEventListener('click', async () => {
+      await closeScanner(true);
+    });
+
+    scannerModal.addEventListener('click', async event => {
+      if (event.target === scannerModal) {
+        await closeScanner(false);
+      }
+    });
+
+    document.addEventListener('keydown', async event => {
+      if (event.key === 'Escape' && scannerModal.classList.contains('show')) {
+        await closeScanner(false);
+      }
+    });
+    
+checkPaySession();
+setCurrentOffer('');
+renderHistory();
+
+requestAnimationFrame(() => {
+  renderOfferQr(getActiveValue());
+});
+
+async function checkPaySession() {
+  try {
+    const res = await fetch('/api/auth/session', {
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+    const data = await res.json();
+    if (data.enabled && !data.ok) {
+      window.location.href = '/pay-login';
+    }
+  } catch {
+    window.location.href = '/pay-login';
+  }
+}
+
+document.getElementById('loadIdentityBtn')?.addEventListener('click', async () => {
+  await loadIdentityConfig();
+});
+
+document.getElementById('saveIdentityBtn')?.addEventListener('click', async () => {
+  await saveIdentityConfig();
+});
+
+document.getElementById('saveNostrNotifyKeyBtn')?.addEventListener('click', async () => {
+  await saveNostrNotifyKey();
+});
+
+document.getElementById('generateNostrServerKeyBtn')?.addEventListener('click', async () => {
+  await generateNostrServerKey();
+});
+
+identityResultOutput?.addEventListener('click', async () => {
+  await copyText(identityResultOutput.value, window.__t('toast.identity_result_copied'));
+});
+
+document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+  } catch {}
+  window.location.href = '/pay-login';
+});
+
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/service-worker.js');
+      console.log('Service Worker registered');
+    } catch (err) {
+      console.error('Service Worker registration failed', err);
+    }
+  });
+}
+
+window.addEventListener('load', async () => {
+  await loadNostrStatus();
+});
+
+</script>
+
+<script>
+(function () {
+  const KEY = "app_lang";
+
+  function getLang() {
+    return localStorage.getItem(KEY) || "de";
+  }
+
+  function updateButtons(lang) {
+    const deBtn = document.getElementById("langBtnDe");
+    const enBtn = document.getElementById("langBtnEn");
+    if (deBtn) deBtn.classList.toggle("active", lang === "de");
+    if (enBtn) enBtn.classList.toggle("active", lang === "en");
+  }
+
+  function applyLangUI() {
+    const lang = getLang();
+    document.documentElement.setAttribute("lang", lang);
+    updateButtons(lang);
+  }
+
+  function setLang(lang) {
+    localStorage.setItem(KEY, lang);
+    applyLangUI(); if (window.applyTranslations) window.applyTranslations();
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const deBtn = document.getElementById("langBtnDe");
+    const enBtn = document.getElementById("langBtnEn");
+    if (deBtn) deBtn.onclick = () => { setLang("de"); if (window.applyTranslations) window.applyTranslations(); };
+    if (enBtn) enBtn.onclick = () => { setLang("en"); if (window.applyTranslations) window.applyTranslations(); };
+    applyLangUI(); if (window.applyTranslations) window.applyTranslations();
+  });
+})();
+</script>
+
+
+<script>
+(function () {
+  const I18N = {
+    de: {
+      "title.pay": "Offer bezahlen",
+      "title.create": "Offer erzeugen",
+      "btn.pay": "⚡ Zahlung starten",
+      "btn.create": "Offer erzeugen",
+      "label.amount": "Zahlbetrag in sats",
+      "label.min": "Mindestbetrag in sats",
+      "label.desc": "Beschreibung / Label",
+      "label.target": "Offer, Invoice oder Lightning Address",
+      "label.payer_note": "Payer Note (optional)",
+      "btn.use_current_offer": "Aktuelles Offer übernehmen",
+      "hint.top": "Hauptfokus: BOLT12 Offer Pay. Automatische Erkennung für BOLT12, BOLT11 und LNURL / Lightning Address.",
+      "hint.offer_string": "Der erzeugte Offer-String kann direkt als QR angezeigt oder in Pay / Decode übernommen werden.",
+      "label.current_offer_qr": "Aktuelles Offer / QR",
+      "hint.no_offer_qr": "Solange noch kein Offer erzeugt wurde, zeigt der QR standardmäßig",
+      "label.active_content": "Aktiver Inhalt",
+      "btn.copy_active": "Aktiven Inhalt kopieren",
+      "btn.refresh_qr": "QR aktualisieren",
+      "badge.qr_default": "QR: Standardadresse",
+      "hint.top_intro": "LNDK kann Offers nicht nur erzeugen, sondern auch direkt bezahlen. Deshalb steht der Pay-Bereich bewusst ganz oben im Fokus.",
+      "title.decode": "Offer decoden",
+      "label.decode_target": "Offer oder BIP353-Adresse",
+      "ph.decode_target": "lno... oder user@domain",
+      "ph.amount": "z. B. 1000",
+      "ph.payer_note": "z. B. test",
+      "ph.min_amount": "Leer = Backend nutzt 1 sat",
+      "ph.description": "z. B. coffee, tip, donation",
+      "ph.amount_from_invoice": "Betrag kommt aus Invoice",
+      "ph.comment_not_for_bolt11": "Kommentar nicht für BOLT11",
+      "ph.comment_from_invoice": "Kommentar kommt aus Invoice",
+      "nav.install": "Pay-App installieren",
+      "nav.console": "Zur Console",
+      "nav.qr_decode": "QR → Decode",
+      "nav.qr_pay": "QR → Pay",
+      "nav.logout": "Logout",
+      "label.decode_output": "Decode-Ausgabe",
+      "ph.decode_output": "Hier erscheint die Decode-Ausgabe...",
+      "toast.create_start": "Erzeuge Offer...",
+      "toast.create_success": "Offer erfolgreich erzeugt.",
+      "toast.qr_refreshed": "QR aktualisiert.",
+      "toast.no_offer_default_used": "Noch kein Offer vorhanden — Standardadresse in Pay übernommen.",
+      "toast.use_current_offer": "Aktuelles Offer in Pay übernommen.",
+      "toast.enter_offer_or_bip353": "Bitte ein BOLT12-Offer oder eine BIP353-Adresse eingeben.",
+      "toast.enter_amount": "Bitte einen Zahlbetrag in sats eingeben.",
+      "toast.paying": "Bezahle:",
+      "toast.enter_lnurl": "Bitte LNURL eingeben.",
+      "toast.paying_lnurl": "Bezahle LNURL:",
+      "toast.lnurl_paid": "LNURL-Zahlung erfolgreich bezahlt.",
+      "toast.enter_invoice": "Bitte eine BOLT11-Invoice eingeben.",
+      "toast.paying_invoice": "Bezahle Invoice:",
+      "toast.invoice_paid": "BOLT11-Rechnung erfolgreich bezahlt.",
+      "toast.invoice_amount_info": "Hinweis: Betrag wird aus der Rechnung übernommen.",
+      "toast.enter_target": "Bitte Offer, Invoice oder Lightning Address eingeben.",
+      "toast.unknown_payment_format": "Unbekanntes Zahlungsformat. Erwartet: BOLT12, BOLT11 oder LNURL.",
+      "toast.enter_lightning_or_bip353": "Bitte eine Lightning Address oder BIP353-Adresse eingeben.",
+      "toast.checking_and_paying": "Prüfe und bezahle:",
+      "toast.enter_decode_target": "Bitte ein Offer oder eine BIP353-Adresse eingeben.",
+      "toast.decoding": "Decodiere...",
+      "toast.decode_success": "Decode erfolgreich.",
+      "toast.active_content_copied": "Aktiver Inhalt kopiert.",
+      "toast.decode_copied": "Decode-Ausgabe kopiert.",
+      "toast.nothing_to_copy": "Kein Inhalt zum Kopieren vorhanden.",
+      "toast.copy_failed": "Kopieren fehlgeschlagen.",
+      "toast.history_cleared": "Offer-History gelöscht.",
+      "toast.history_to_pay": "Offer in Pay übernommen.",
+      "toast.history_to_qr": "Offer als aktueller QR übernommen.",
+      "toast.history_deleted": "History-Eintrag gelöscht.",
+      "toast.no_decode_output": "Noch keine Decode-Ausgabe vorhanden.",
+      "toast.no_current_offer_cf": "Kein gültiges aktuelles Offer zum Übernehmen vorhanden.",
+      "toast.cf_offer_used": "Aktuelles Offer in Cloudflare-Formular übernommen.",
+      "toast.record_name_required": "Bitte einen Record Name eingeben.",
+      "toast.invalid_lno": "Bitte ein gültiges lno... Offer eingeben.",
+      "toast.saving_cf_alias": "Speichere Cloudflare Alias:",
+      "toast.cf_saved": "Cloudflare Alias gespeichert.",
+      "toast.cf_result_copied": "Cloudflare-Ergebnis kopiert.",
+      "toast.identity_result_copied": "Identity-Ergebnis kopiert.",
+      "toast.offer_copied": "Offer kopiert.",
+      "toast.nostr_nsec_required": "Bitte Notification NSEC eingeben.",
+      "toast.nostr_nsec_saved": "Notification NSEC gespeichert.",
+      "toast.server_key_generated": "Neuer Nostr Server-Key generiert.",
+      "toast.alias_required_first": "Bitte zuerst einen Alias eingeben.",
+      "toast.identity_alias_required": "Bitte einen Lightning Address Alias eingeben.",
+      "toast.identity_pubkey_required": "Bitte einen Nostr Pubkey eingeben.",
+      "toast.qr_content_unreadable": "QR-Inhalt konnte nicht gelesen werden.",
+      "toast.qr_to_pay": "QR-Inhalt in Pay übernommen.",
+      "toast.qr_to_decode": "QR-Inhalt in Decode übernommen.",
+      "toast.qr_https_required": "QR-Scan benötigt HTTPS oder localhost.",
+      "toast.qr_lib_missing": "html5-qrcode konnte nicht geladen werden.",
+      "toast.camera_denied": "Kein Kamera-Zugriff erlaubt.",
+      "toast.scanner_closed": "Scanner geschlossen.",
+      "toast.identity_loaded": "Identity geladen:",
+      "toast.identity_saved": "Identity gespeichert:",
+      "toast.address_copied": "Adresse kopiert.",
+      "title.last_payment": "Letztes Zahlungsergebnis",
+      "label.payment_output": "Payment-Ausgabe",
+      "ph.payment_output": "Hier erscheint das letzte Zahlungsergebnis...",
+      "title.offer_history": "Offer History",
+      "btn.clear_history": "History löschen",
+      "history.empty": "Noch keine Offers in der lokalen History.",
+      "history.in_pay": "In Pay",
+      "history.as_qr": "Als QR",
+      "history.copy": "Kopieren",
+      "history.delete": "Löschen",
+      "title.nostr_identity": "Nostr / Identity",
+      "label.identity_alias": "Lightning Address Alias",
+      "label.nostr_pubkey": "Nostr Pubkey (hex oder npub)",
+      "label.relays": "Relays (optional, kommagetrennt)",
+      "ph.identity_alias": "z. B. alex",
+      "ph.nostr_pubkey": "hex... oder npub1...",
+      "ph.relays": "wss://relay.damus.io,wss://nos.lol",
+      "label.nip05_enabled": "NIP-05 aktiv",
+      "label.zap_enabled": "Zap / Nostr aktiv",
+      "btn.identity_load": "Identity laden",
+      "btn.identity_save": "Identity speichern",
+      "hint.identity": "Ordnet einer Lightning Address wie name@domain einen Nostr Pubkey zu. Diese Zuordnung wird für NIP-05 und LNURL Zaps verwendet.",
+      "label.identity_result": "Identity Ergebnis",
+      "ph.identity_result": "Hier erscheint die Identity-Konfiguration...",
+      "title.nostr_notification_keys": "Nostr Notification Keys",
+      "label.server_signer": "Server signer",
+      "label.configured": "Configured",
+      "label.missing": "Fehlt",
+      "label.loading": "Loading...",
+      "label.configured_prefix": "Configured:",
+      "btn.generate_server_key": "Neuen Server-Key generieren",
+      "label.notification_nsec": "Notification NSEC",
+      "btn.save_notification_nsec": "Notification NSEC speichern",
+      "hint.notification_keys": "Der Server-Key signiert App-interne Nostr-Events. Der Notification-NSEC wird für DM-/Push-kompatible Zap-Benachrichtigungen verwendet.",
+      "ph.notification_nsec": "nsec1...",
+      "title.cloudflare": "Alias / Cloudflare BIP353",
+      "label.record_name": "Record Name",
+      "label.offer_lno": "Offer (lno...)",
+      "btn.use_current_offer_cf": "Aktuelles Offer übernehmen",
+      "btn.save_cloudflare_alias": "Alias bei Cloudflare speichern",
+      "label.generated_address": "Erzeugte Adresse",
+      "btn.copy_address": "Adresse kopieren",
+      "label.result": "Ergebnis",
+      "ph.record_name": "z. B. phoenixd",
+      "ph.offer_lno": "Hier das lno... Offer einfügen oder übernehmen",
+      "ph.generated_address": "Hier erscheint die neue Adresse...",
+      "hint.cloudflare_prefix": "Erstellt einen TXT-Record wie",
+      "pay.summary.success": "✅ BOLT12-Offer erfolgreich bezahlt",
+      "pay.summary.direct_offer": "🧾 Direktes Offer bezahlt",
+      "pay.details": "--- Details ---",
+      "pay.raw.success": "Offer erfolgreich bezahlt!",
+      "toast.lnaddr_paid": "Lightning Address erfolgreich bezahlt.",
+      "pay.summary.lnaddr_paid": "✅ Lightning Address erfolgreich bezahlt",
+      "pay.summary.invoice_paid": "✅ BOLT11-Rechnung erfolgreich bezahlt",
+      "pay.summary.invoice_processed": "🧾 Rechnung verarbeitet",
+      "pay.summary.invoice_amount_from_invoice": "⚡ Betrag aus Invoice übernommen",
+      "pay.summary.comment": "📝 Kommentar:"
+    },
+    en: {
+      "title.pay": "Pay offer",
+      "title.create": "Create offer",
+      "btn.pay": "⚡ Start payment",
+      "btn.create": "Create offer",
+      "label.amount": "Amount in sats",
+      "label.min": "Minimum amount in sats",
+      "label.desc": "Description / Label",
+      "label.target": "Offer, invoice or Lightning Address",
+      "label.payer_note": "Payer Note (optional)",
+      "btn.use_current_offer": "Use current offer",
+      "hint.top": "Main focus: BOLT12 offer payments. Automatic detection for BOLT12, BOLT11 and LNURL / Lightning Address.",
+      "hint.offer_string": "The generated offer string can be shown as a QR code or used directly in Pay / Decode.",
+      "label.current_offer_qr": "Current offer / QR",
+      "hint.no_offer_qr": "As long as no offer has been created yet, the QR shows by default",
+      "label.active_content": "Active content",
+      "btn.copy_active": "Copy active content",
+      "btn.refresh_qr": "Refresh QR",
+      "badge.qr_default": "QR: Default address",
+      "hint.top_intro": "LNDK can not only create offers, but also pay them directly. That is why the Pay section is intentionally placed front and center.",
+      "title.decode": "Decode offer",
+      "label.decode_target": "Offer or BIP353 address",
+      "ph.decode_target": "lno... or user@domain",
+      "ph.amount": "e.g. 1000",
+      "ph.payer_note": "e.g. test",
+      "ph.min_amount": "Empty = backend uses 1 sat",
+      "ph.description": "e.g. coffee, tip, donation",
+      "ph.amount_from_invoice": "Amount comes from invoice",
+      "ph.comment_not_for_bolt11": "Comment not available for BOLT11",
+      "ph.comment_from_invoice": "Comment comes from invoice",
+      "nav.install": "Install Pay App",
+      "nav.console": "Open Console",
+      "nav.qr_decode": "QR → Decode",
+      "nav.qr_pay": "QR → Pay",
+      "nav.logout": "Logout",
+      "label.decode_output": "Decode output",
+      "ph.decode_output": "Decoded output will appear here...",
+      "toast.create_start": "Creating offer...",
+      "toast.create_success": "Offer created successfully.",
+      "toast.qr_refreshed": "QR refreshed.",
+      "toast.no_offer_default_used": "No offer yet — default address loaded into Pay.",
+      "toast.use_current_offer": "Current offer loaded into Pay.",
+      "toast.enter_offer_or_bip353": "Please enter a BOLT12 offer or a BIP353 address.",
+      "toast.enter_amount": "Please enter an amount in sats.",
+      "toast.paying": "Paying:",
+      "toast.enter_lnurl": "Please enter LNURL.",
+      "toast.paying_lnurl": "Paying LNURL:",
+      "toast.lnurl_paid": "LNURL payment completed successfully.",
+      "toast.enter_invoice": "Please enter a BOLT11 invoice.",
+      "toast.paying_invoice": "Paying invoice:",
+      "toast.invoice_paid": "BOLT11 invoice paid successfully.",
+      "toast.invoice_amount_info": "Note: amount is taken from the invoice.",
+      "toast.enter_target": "Please enter an offer, invoice or Lightning Address.",
+      "toast.unknown_payment_format": "Unknown payment format. Expected: BOLT12, BOLT11 or LNURL.",
+      "toast.enter_lightning_or_bip353": "Please enter a Lightning Address or BIP353 address.",
+      "toast.checking_and_paying": "Checking and paying:",
+      "toast.enter_decode_target": "Please enter an offer or a BIP353 address.",
+      "toast.decoding": "Decoding...",
+      "toast.decode_success": "Decode successful.",
+      "toast.active_content_copied": "Active content copied.",
+      "toast.decode_copied": "Decode output copied.",
+      "toast.nothing_to_copy": "Nothing to copy.",
+      "toast.copy_failed": "Copy failed.",
+      "toast.history_cleared": "Offer history cleared.",
+      "toast.history_to_pay": "Offer loaded into Pay.",
+      "toast.history_to_qr": "Offer loaded as current QR.",
+      "toast.history_deleted": "History entry deleted.",
+      "toast.no_decode_output": "No decode output available yet.",
+      "toast.no_current_offer_cf": "No valid current offer available to use.",
+      "toast.cf_offer_used": "Current offer loaded into Cloudflare form.",
+      "toast.record_name_required": "Please enter a record name.",
+      "toast.invalid_lno": "Please enter a valid lno... offer.",
+      "toast.saving_cf_alias": "Saving Cloudflare alias:",
+      "toast.cf_saved": "Cloudflare alias saved.",
+      "toast.cf_result_copied": "Cloudflare result copied.",
+      "toast.identity_result_copied": "Identity result copied.",
+      "toast.offer_copied": "Offer copied.",
+      "toast.nostr_nsec_required": "Please enter a notification NSEC.",
+      "toast.nostr_nsec_saved": "Notification NSEC saved.",
+      "toast.server_key_generated": "New Nostr server key generated.",
+      "toast.alias_required_first": "Please enter an alias first.",
+      "toast.identity_alias_required": "Please enter a Lightning Address alias.",
+      "toast.identity_pubkey_required": "Please enter a Nostr pubkey.",
+      "toast.qr_content_unreadable": "QR content could not be read.",
+      "toast.qr_to_pay": "QR content loaded into Pay.",
+      "toast.qr_to_decode": "QR content loaded into Decode.",
+      "toast.qr_https_required": "QR scanning requires HTTPS or localhost.",
+      "toast.qr_lib_missing": "html5-qrcode could not be loaded.",
+      "toast.camera_denied": "Camera access was denied.",
+      "toast.scanner_closed": "Scanner closed.",
+      "toast.identity_loaded": "Identity loaded:",
+      "toast.identity_saved": "Identity saved:",
+      "toast.address_copied": "Address copied.",
+      "title.last_payment": "Last payment result",
+      "label.payment_output": "Payment output",
+      "ph.payment_output": "The latest payment result will appear here...",
+      "title.offer_history": "Offer History",
+      "btn.clear_history": "Clear history",
+      "history.empty": "No offers in local history yet.",
+      "history.in_pay": "In Pay",
+      "history.as_qr": "As QR",
+      "history.copy": "Copy",
+      "history.delete": "Delete",
+      "title.nostr_identity": "Nostr / Identity",
+      "label.identity_alias": "Lightning Address Alias",
+      "label.nostr_pubkey": "Nostr pubkey (hex or npub)",
+      "label.relays": "Relays (optional, comma-separated)",
+      "ph.identity_alias": "e.g. alex",
+      "ph.nostr_pubkey": "hex... or npub1...",
+      "ph.relays": "wss://relay.damus.io,wss://nos.lol",
+      "label.nip05_enabled": "Enable NIP-05",
+      "label.zap_enabled": "Enable Zap / Nostr",
+      "btn.identity_load": "Load identity",
+      "btn.identity_save": "Save identity",
+      "hint.identity": "Assigns a Nostr pubkey to a Lightning Address like name@domain. This mapping is used for NIP-05 and LNURL zaps.",
+      "label.identity_result": "Identity result",
+      "ph.identity_result": "The identity configuration will appear here...",
+      "title.nostr_notification_keys": "Nostr Notification Keys",
+      "label.server_signer": "Server signer",
+      "label.configured": "Configured",
+      "label.missing": "Missing",
+      "label.loading": "Loading...",
+      "label.configured_prefix": "Configured:",
+      "btn.generate_server_key": "Generate new server key",
+      "label.notification_nsec": "Notification NSEC",
+      "btn.save_notification_nsec": "Save notification NSEC",
+      "hint.notification_keys": "The server key signs internal app Nostr events. The notification NSEC is used for DM-/push-compatible zap notifications.",
+      "ph.notification_nsec": "nsec1...",
+      "title.cloudflare": "Alias / Cloudflare BIP353",
+      "label.record_name": "Record name",
+      "label.offer_lno": "Offer (lno...)",
+      "btn.use_current_offer_cf": "Use current offer",
+      "btn.save_cloudflare_alias": "Save alias to Cloudflare",
+      "label.generated_address": "Generated address",
+      "btn.copy_address": "Copy address",
+      "label.result": "Result",
+      "ph.record_name": "e.g. phoenixd",
+      "ph.offer_lno": "Paste or use the current lno... offer here",
+      "ph.generated_address": "The new address will appear here...",
+      "hint.cloudflare_prefix": "Creates a TXT record like",
+      "pay.summary.success": "✅ BOLT12 offer paid successfully",
+      "pay.summary.direct_offer": "🧾 Direct offer paid",
+      "pay.details": "--- Details ---",
+      "pay.raw.success": "Offer paid successfully!",
+      "toast.lnaddr_paid": "Lightning Address paid successfully.",
+      "pay.summary.lnaddr_paid": "✅ Lightning Address paid successfully",
+      "pay.summary.invoice_paid": "✅ BOLT11 invoice paid successfully",
+      "pay.summary.invoice_processed": "🧾 Invoice processed",
+      "pay.summary.invoice_amount_from_invoice": "⚡ Amount taken from invoice",
+      "pay.summary.comment": "📝 Comment:"
+    }
+  };
+  function t(key) {
+    const lang = localStorage.getItem("app_lang") || "de";
+    return (I18N[lang] && I18N[lang][key]) || key;
+  }
+
+  window.__t = t;
+
+  window.applyTranslations = function applyTranslations() {
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+      const key = el.getAttribute("data-i18n");
+      el.textContent = t(key);
+    });
+
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+      const key = el.getAttribute("data-i18n-placeholder");
+      el.placeholder = t(key);
+    });
+
+    if (window.renderHistory) window.renderHistory();
+  }
+
+  document.addEventListener("DOMContentLoaded", applyTranslations);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__adminTooltipRuntimeInstalled) return;
+  window.__adminTooltipRuntimeInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  function patchTitles() {
+    const map = {
+      "Zur Startseite": "Back to homepage",
+      "Zum Kopieren antippen": "Tap to copy"
+    };
+
+    document.querySelectorAll("[title]").forEach((el) => {
+      const txt = el.getAttribute("title");
+      if (!txt) return;
+
+      if (lang() === "en" && map[txt]) {
+        el.setAttribute("title", map[txt]);
+      } else if (lang() === "de") {
+        for (const de in map) {
+          const en = map[de];
+          if (txt === en) {
+            el.setAttribute("title", de);
+          }
+        }
+      }
+    });
+  }
+
+  function scheduleTitles() {
+    setTimeout(patchTitles, 0);
+    setTimeout(patchTitles, 50);
+    setTimeout(patchTitles, 150);
+  }
+
+  function bindLangButtons() {
+    ["langBtnDe", "langBtnEn"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.adminTooltipBound === "1") return;
+      btn.dataset.adminTooltipBound = "1";
+      btn.addEventListener("click", scheduleTitles);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindLangButtons();
+    scheduleTitles();
+  });
+  window.addEventListener("load", () => {
+    bindLangButtons();
+    scheduleTitles();
+  });
+  setTimeout(() => {
+    bindLangButtons();
+    scheduleTitles();
+  }, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__adminQrScannerRuntimeInstalled) return;
+  window.__adminQrScannerRuntimeInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      title: "QR-Scanner",
+      pay_subtitle: "Scanne ein Offer oder eine BIP353-Adresse für Pay.",
+      decode_subtitle: "Scanne ein Offer oder eine BIP353-Adresse für Decode.",
+      close: "Scanner schließen",
+      hint: "Scannt lno..., lightning:..., bitcoin:... oder user@domain.",
+      start_failed_prefix: "Scanner-Start fehlgeschlagen:"
+    },
+    en: {
+      title: "QR Scanner",
+      pay_subtitle: "Scan an offer or a BIP353 address for Pay.",
+      decode_subtitle: "Scan an offer or a BIP353 address for Decode.",
+      close: "Close scanner",
+      hint: "Scans lno..., lightning:..., bitcoin:... or user@domain.",
+      start_failed_prefix: "Scanner start failed:"
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function applyAdminQrScannerRuntime() {
+    const title = document.getElementById("qrScannerTitle");
+    const paySubtitle = document.getElementById("qrScannerPaySubtitle");
+    const decodeSubtitle = document.getElementById("qrScannerDecodeSubtitle");
+    const subtitle = document.getElementById("qrScannerSubtitle");
+    const closeBtn = document.getElementById("closeScannerBtn");
+    const hint = document.getElementById("qrScannerHint") || document.getElementById("qrScannerGenericHint");
+
+    if (title) title.textContent = tx("title");
+    if (paySubtitle) paySubtitle.textContent = tx("pay_subtitle");
+    if (decodeSubtitle) decodeSubtitle.textContent = tx("decode_subtitle");
+    if (subtitle && !paySubtitle && !decodeSubtitle) subtitle.textContent = tx("pay_subtitle");
+    if (closeBtn) closeBtn.textContent = tx("close");
+    if (hint) hint.textContent = tx("hint");
+
+    const all = Array.from(document.querySelectorAll("div, span, p, h1, h2, h3, h4, button"));
+    all.forEach((el) => {
+      const t = (el.textContent || "").trim();
+
+      if (t === "QR-Scanner" || t === "QR Scanner") {
+        el.textContent = tx("title");
+      } else if (
+        t === "Scanne ein Offer oder eine BIP353-Adresse für Pay." ||
+        t === "Scan an offer or a BIP353 address for Pay."
+      ) {
+        el.textContent = tx("pay_subtitle");
+      } else if (
+        t === "Scanne ein Offer oder eine BIP353-Adresse für Decode." ||
+        t === "Scan an offer or a BIP353 address for Decode."
+      ) {
+        el.textContent = tx("decode_subtitle");
+      } else if (
+        t === "Scannt lno..., lightning:..., bitcoin:... oder user@domain." ||
+        t === "Scans lno..., lightning:..., bitcoin:... or user@domain."
+      ) {
+        el.textContent = tx("hint");
+      } else if (
+        t === "Scanner schließen" ||
+        t === "Close scanner"
+      ) {
+        el.textContent = tx("close");
+      }
+    });
+  }
+
+  window.__applyAdminQrScannerRuntime = applyAdminQrScannerRuntime;
+
+  if (typeof window.setStatus === "function" && !window.__adminQrScannerErrorWrapped) {
+    window.__adminQrScannerErrorWrapped = true;
+    const oldSetStatus = window.setStatus;
+    window.setStatus = function (message, type, sticky) {
+      if (typeof message === "string") {
+        message = message.replace(
+          /^Scanner-Start fehlgeschlagen:\s*(.*)$/,
+          (_, rest) => `${tx("start_failed_prefix")} ${rest}`
+        );
+        message = message.replace(
+          /^Scanner start failed:\s*(.*)$/,
+          (_, rest) => `${tx("start_failed_prefix")} ${rest}`
+        );
+      }
+      return oldSetStatus(message, type, sticky);
+    };
+  }
+
+  function bindLangButtons() {
+    ["langBtnDe", "langBtnEn"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.adminQrScannerBound === "1") return;
+      btn.dataset.adminQrScannerBound = "1";
+      btn.addEventListener("click", () => {
+        setTimeout(applyAdminQrScannerRuntime, 0);
+        setTimeout(applyAdminQrScannerRuntime, 50);
+        setTimeout(applyAdminQrScannerRuntime, 150);
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindLangButtons();
+    applyAdminQrScannerRuntime();
+  });
+  window.addEventListener("load", () => {
+    bindLangButtons();
+    applyAdminQrScannerRuntime();
+  });
+  setTimeout(() => {
+    bindLangButtons();
+    applyAdminQrScannerRuntime();
+  }, 0);
+})();
+</script>
+
+</body>
+</html>
