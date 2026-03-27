@@ -1420,8 +1420,7 @@ async function saveIdentityConfig() {
 
   const btn = document.getElementById('saveIdentityBtn');
   btn.disabled = true;
-  const oldText = btn.textContent;
-  btn.textContent = 'Speichere...';
+  btn.innerHTML = `<span data-i18n="btn.identity_save_busy">${window.__t('btn.identity_save_busy')}</span>`;
 
   try {
     const response = await fetch('/api/identity-config', {
@@ -1446,7 +1445,7 @@ async function saveIdentityConfig() {
     setStatus(`Fehler: ${message}`, 'error', true);
   } finally {
     btn.disabled = false;
-    btn.textContent = oldText;
+    btn.innerHTML = `<span data-i18n="btn.identity_save">${window.__t('btn.identity_save')}</span>`;
   }
 }
     function applyScanResult(rawValue) {
@@ -1584,7 +1583,7 @@ async function saveIdentityConfig() {
 
       const btn = document.getElementById('createOfferBtn');
       btn.disabled = true;
-      btn.textContent = 'Erzeuge...';
+      btn.innerHTML = `<span data-i18n="btn.create_busy">${window.__t('btn.create_busy')}</span>`;
       setStatus(window.__t('toast.create_start'), 'warn');
 
       try {
@@ -1614,7 +1613,7 @@ async function saveIdentityConfig() {
         setStatus(`Fehler: ${message}`, 'error', true);
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Offer erzeugen';
+        btn.innerHTML = `<span data-i18n="btn.create">${window.__t('btn.create')}</span>`;
       }
     });
 
@@ -2180,6 +2179,7 @@ window.addEventListener('load', async () => {
       "title.create": "Offer erzeugen",
       "btn.pay": "⚡ Zahlung starten",
       "btn.create": "Offer erzeugen",
+      "btn.create_busy": "Erzeuge...",
       "label.amount": "Zahlbetrag in sats",
       "label.min": "Mindestbetrag in sats",
       "label.desc": "Beschreibung / Label",
@@ -2296,6 +2296,7 @@ window.addEventListener('load', async () => {
       "label.zap_enabled": "Zap / Nostr aktiv",
       "btn.identity_load": "Identity laden",
       "btn.identity_save": "Identity speichern",
+      "btn.identity_save_busy": "Speichere...",
       "hint.identity": "Ordnet einer Lightning Address wie name@domain einen Nostr Pubkey zu. Diese Zuordnung wird für NIP-05 und LNURL Zaps verwendet.",
       "label.identity_result": "Identity Ergebnis",
       "ph.identity_result": "Hier erscheint die Identity-Konfiguration...",
@@ -2338,6 +2339,7 @@ window.addEventListener('load', async () => {
       "title.create": "Create offer",
       "btn.pay": "⚡ Start payment",
       "btn.create": "Create offer",
+      "btn.create_busy": "Creating...",
       "label.amount": "Amount in sats",
       "label.min": "Minimum amount in sats",
       "label.desc": "Description / Label",
@@ -2454,6 +2456,7 @@ window.addEventListener('load', async () => {
       "label.zap_enabled": "Enable Zap / Nostr",
       "btn.identity_load": "Load identity",
       "btn.identity_save": "Save identity",
+      "btn.identity_save_busy": "Saving...",
       "hint.identity": "Assigns a Nostr pubkey to a Lightning Address like name@domain. This mapping is used for NIP-05 and LNURL zaps.",
       "label.identity_result": "Identity result",
       "ph.identity_result": "The identity configuration will appear here...",
