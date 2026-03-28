@@ -107,6 +107,10 @@ The Umbrel package lives under:
 
 `umbrel/bolt12-pay`
 
+## License
+
+MIT License
+
 ## Screenshots
 
 ![Home](./umbrel/bolt12-pay/screenshots/1.png)
@@ -134,9 +138,7 @@ This project is a strong candidate for open-source Bitcoin / Lightning grants.
 
 If you would like to support development, feel free to open an issue or reach out.
 
-## License
 
-MIT
 ## Important directories
 
 - `app/` application source
