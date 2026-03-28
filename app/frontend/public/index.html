@@ -437,13 +437,64 @@
     margin: 0;
   }
 }
-  </style>
+  
+.langSwitch {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  z-index: 20;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.langSwitch button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,0.58);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .15s ease;
+  letter-spacing: 0.02em;
+  width: auto;
+  min-width: 0;
+  box-shadow: none;
+}
+
+.langSwitch button:hover {
+  color: rgba(255,255,255,0.88);
+  background: transparent;
+  transform: none;
+}
+
+.langSwitch button.active {
+  color: rgba(255,255,255,0.98);
+  background: rgba(255,255,255,0.12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+</style>
 </head>
 <body>
-<main class="card" id="setupCard" hidden>
+<main class="card" id="setupCard" hidden style="position:relative;">
+  <div class="langSwitch" aria-label="Language switch" style="position:absolute;top:24px;right:24px;display:inline-flex;gap:4px;align-items:center;z-index:20;padding:3px;border-radius:999px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);">
+    <button id="langBtnDeSetup" type="button" style="appearance:none;border:0;background:transparent;color:rgba(255,255,255,0.58);font-weight:600;font-size:12px;line-height:1;padding:7px 10px;border-radius:999px;cursor:pointer;transition:all .15s ease;letter-spacing:.02em;width:auto;min-width:0;box-shadow:none;">DE</button>
+    <button id="langBtnEnSetup" type="button" style="appearance:none;border:0;background:transparent;color:rgba(255,255,255,0.58);font-weight:600;font-size:12px;line-height:1;padding:7px 10px;border-radius:999px;cursor:pointer;transition:all .15s ease;letter-spacing:.02em;width:auto;min-width:0;box-shadow:none;">EN</button>
+  </div>
   <div class="headerRow">
     <div>
-      <div class="pill">Erstkonfiguration</div>
+      <div class="pill" data-i18n="setup.pill">Erstkonfiguration</div>
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
   <a href="/" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
     <img
@@ -452,29 +503,29 @@
       style="width:56px;height:56px;object-fit:contain;display:block;cursor:pointer;"
     >
   </a>
-  <h1 style="margin:0;">⚙️ BOLT12 Pay Setup</h1>
+  <h1 style="margin:0;" data-i18n="setup.title">⚙️ BOLT12 Pay Setup</h1>
 </div>
-   <div class="sub">Grundkonfiguration für Public URL, Lightning-Adressen und DNS-Modus.</div>
+   <div class="sub" data-i18n="setup.subtitle">Grundkonfiguration für Public URL, Lightning-Adressen und DNS-Modus.</div>
 
     <section class="section">
-      <label class="label" for="setupBolt12Address">Public BOLT12 Address</label>
-      <input id="setupBolt12Address" type="text" placeholder="z. B. bolt12@pay.example.com" />
+      <label class="label" for="setupBolt12Address" data-i18n="setup.label.bolt12_address">Public BOLT12 Address</label>
+      <input id="setupBolt12Address" type="text" data-i18n-placeholder="setup.ph.bolt12_address" placeholder="z. B. bolt12@pay.example.com" />
 
-      <label class="label" for="setupLnurlAddress" style="margin-top:14px;">Public LNURL Address</label>
-      <input id="setupLnurlAddress" type="text" placeholder="z. B. lnurl@pay.example.com" />
+      <label class="label" for="setupLnurlAddress" style="margin-top:14px;" data-i18n="setup.label.lnurl_address">Public LNURL Address</label>
+      <input id="setupLnurlAddress" type="text" data-i18n-placeholder="setup.ph.lnurl_address" placeholder="z. B. lnurl@pay.example.com" />
 
-      <label class="label" for="setupLnurlBaseDomain" style="margin-top:14px;">LNURL Base Domain</label>
-      <input id="setupLnurlBaseDomain" type="text" placeholder="z. B. pay.example.com" />
+      <label class="label" for="setupLnurlBaseDomain" style="margin-top:14px;" data-i18n="setup.label.lnurl_base_domain">LNURL Base Domain</label>
+      <input id="setupLnurlBaseDomain" type="text" data-i18n-placeholder="setup.ph.lnurl_base_domain" placeholder="z. B. pay.example.com" />
 
-      <label class="label" for="setupLnurlBaseUrl" style="margin-top:14px;">LNURL Base URL</label>
-      <input id="setupLnurlBaseUrl" type="text" placeholder="z. B. https://pay.example.com" />
+      <label class="label" for="setupLnurlBaseUrl" style="margin-top:14px;" data-i18n="setup.label.lnurl_base_url">LNURL Base URL</label>
+      <input id="setupLnurlBaseUrl" type="text" data-i18n-placeholder="setup.ph.lnurl_base_url" placeholder="z. B. https://pay.example.com" />
       
-      <label class="label" for="setupPassword" style="margin-top:14px;">Passwort setzen</label>
-      <input id="setupPassword" type="password" placeholder="Neues Passwort" />
-      <label class="label" for="setupPasswordConfirm" style="margin-top:14px;">Passwort bestätigen</label>
-      <input id="setupPasswordConfirm" type="password" placeholder="Passwort erneut eingeben" />
+      <label class="label" for="setupPassword" style="margin-top:14px;" data-i18n="setup.label.password">Passwort setzen</label>
+      <input id="setupPassword" type="password" data-i18n-placeholder="setup.ph.password" placeholder="Neues Passwort" />
+      <label class="label" for="setupPasswordConfirm" style="margin-top:14px;" data-i18n="setup.label.password_confirm">Passwort bestätigen</label>
+      <input id="setupPasswordConfirm" type="password" data-i18n-placeholder="setup.ph.password_confirm" placeholder="Passwort erneut eingeben" />
 
-      <label class="label" for="setupDnsMode" style="margin-top:14px;">DNS Mode</label>
+      <label class="label" for="setupDnsMode" style="margin-top:14px;" data-i18n="setup.label.dns_mode">DNS Mode</label>
       <select id="setupDnsMode">
         <option value="none">none</option>
         <option value="manual">manual</option>
@@ -482,34 +533,34 @@
       </select>
 
       <div id="manualDnsHint" class="hint" hidden>
-        <strong>Manual DNS mode</strong><br />
-        Für BIP353 musst du bei deinem DNS-Provider einen TXT-Record setzen.<br />
-        Schema:
+        <strong data-i18n="setup.manual_dns.title">Manual DNS mode</strong><br />
+        <span data-i18n="setup.manual_dns.line1">Für BIP353 musst du bei deinem DNS-Provider einen TXT-Record setzen.</span><br />
+        <span data-i18n="setup.manual_dns.schema">Schema:</span>
         <span class="mono">name.user._bitcoin-payment.domain.tld</span><br />
-        Beispiel:
+        <span data-i18n="setup.manual_dns.example">Beispiel:</span>
         <span class="mono" id="manualDnsExampleName">bolt12.user._bitcoin-payment.pay.example.com</span><br />
-        Inhalt:
+        <span data-i18n="setup.manual_dns.content">Inhalt:</span>
         <span class="mono">"bitcoin:?lno=&lt;offer&gt;"</span><br />
-        Das konkrete Offer wird später von der App erzeugt. Cloudflare-Automation kann später optional aktiviert werden.
+        <span data-i18n="setup.manual_dns.line2">Das konkrete Offer wird später von der App erzeugt. Cloudflare-Automation kann später optional aktiviert werden.</span>
       </div>
 
       <div id="cloudflareFields" class="section" hidden>
-        <label class="label">Cloudflare Zone Name</label>
-        <input id="cfZoneName" type="text" placeholder="z. B. example.com">
+        <label class="label" data-i18n="setup.label.cf_zone_name">Cloudflare Zone Name</label>
+        <input id="cfZoneName" type="text" data-i18n-placeholder="setup.ph.cf_zone_name" placeholder="z. B. example.com">
 
-        <label class="label" style="margin-top:10px;">Cloudflare Zone ID</label>
-        <input id="cfZoneId" type="text" placeholder="Zone ID aus Cloudflare Dashboard">
+        <label class="label" style="margin-top:10px;" data-i18n="setup.label.cf_zone_id">Cloudflare Zone ID</label>
+        <input id="cfZoneId" type="text" data-i18n-placeholder="setup.ph.cf_zone_id" placeholder="Zone ID aus Cloudflare Dashboard">
 
-        <label class="label" style="margin-top:10px;">Cloudflare API Token</label>
-        <input id="cfApiToken" type="password" placeholder="API Token">
+        <label class="label" style="margin-top:10px;" data-i18n="setup.label.cf_api_token">Cloudflare API Token</label>
+        <input id="cfApiToken" type="password" data-i18n-placeholder="setup.ph.cf_api_token" placeholder="API Token">
       </div>
 
-      <div class="hint">
+      <div class="hint" data-i18n="setup.cloudflare_optional_hint">
         Cloudflare bleibt optional. Ohne Cloudflare funktioniert die App weiter, nur BIP353-DNS wird dann nicht automatisch gesetzt.
       </div>
 
       <div class="row">
-        <button id="saveSetupBtn" type="button">Setup speichern</button>
+        <button id="saveSetupBtn" type="button" data-i18n="setup.btn.save">Setup speichern</button>
       </div>
     </section>
   </main>
@@ -518,10 +569,14 @@
     <div class="statusBar" id="statusBar"></div>
   </div>
 
-<main class="card" id="payCard" hidden>
+<main class="card" id="payCard" hidden style="position:relative;">
+  <div class="langSwitch" aria-label="Language switch" style="position:absolute;top:24px;right:24px;display:inline-flex;gap:4px;align-items:center;z-index:20;padding:3px;border-radius:999px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);">
+    <button id="langBtnDePay" type="button" style="appearance:none;border:0;background:transparent;color:rgba(255,255,255,0.58);font-weight:600;font-size:12px;line-height:1;padding:7px 10px;border-radius:999px;cursor:pointer;transition:all .15s ease;letter-spacing:.02em;width:auto;min-width:0;box-shadow:none;">DE</button>
+    <button id="langBtnEnPay" type="button" style="appearance:none;border:0;background:transparent;color:rgba(255,255,255,0.58);font-weight:600;font-size:12px;line-height:1;padding:7px 10px;border-radius:999px;cursor:pointer;transition:all .15s ease;letter-spacing:.02em;width:auto;min-width:0;box-shadow:none;">EN</button>
+  </div>
   <div class="topBar">
     <div class="titleBlock">
-      <div class="pill">BOLT12 Pay Server</div>
+      <div class="pill" data-i18n="console.pill">BOLT12 Pay Server</div>
       <div class="headerRow">
 <div style="display:flex;align-items:center;gap:16px;margin-top:10px;margin-bottom:12px;">
   <a href="/" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
@@ -531,41 +586,41 @@
       style="display:block;width:90px;height:90px;min-width:90px;max-width:90px;object-fit:contain;flex:0 0 90px;margin:0;cursor:pointer;filter:drop-shadow(0 0 3px rgba(255,200,0,0.35));"
     >
   </a>
-  <h1 style="margin:0;">⚡ BOLT12 Offer & Alias Console</h1>
+  <h1 style="margin:0;" data-i18n="console.title">⚡ BOLT12 Offer & Alias Console</h1>
 </div>
     </div>
-    <button class="secondary" id="openSetupBtn" type="button">⚙ Setup</button>
+    <button class="secondary" id="openSetupBtn" type="button" data-i18n="console.btn.setup">⚙ Setup</button>
   </div>
 
-  <div class="sub">BOLT12 / BIP353 ist der primäre Zahlungsweg. LNURL und BOLT11 sind reine Fallbacks.</div>
+  <div class="sub" data-i18n="console.subtitle">BOLT12 / BIP353 ist der primäre Zahlungsweg. LNURL und BOLT11 sind reine Fallbacks.</div>
 
     <section class="section">
       <div class="qrWrap">
-        <div id="qrModeBadge" class="modeBadge">QR: BOLT12 Adresse</div>
+        <div id="qrModeBadge" class="modeBadge" data-i18n="console.badge.qr_bolt12_address">QR: BOLT12 Adresse</div>
         <div id="qrBox" class="qrBox" title="Antippen = aktiven QR-Inhalt kopieren"></div>
-        <div id="qrValueText" class="tiny mono">Lade QR...</div>
+        <div id="qrValueText" class="tiny mono" data-i18n="console.loading_qr">Lade QR...</div>
       </div>
     </section>
 
 <div class="topActions">
   <div class="topActionsRow">
-    <button class="secondary" id="installBtn" type="button" hidden>App installieren</button>
-    <button class="secondary" id="copyActiveBtn" type="button">Inhalt kopieren</button>
-    <button class="secondary" id="walletOpenBtn" type="button">Wallet / WebLN</button>
+    <button class="secondary" id="installBtn" type="button" hidden data-i18n="console.btn.install">App installieren</button>
+    <button class="secondary" id="copyActiveBtn" type="button" data-i18n="console.btn.copy_content">Inhalt kopieren</button>
+    <button class="secondary" id="walletOpenBtn" type="button" data-i18n="console.btn.wallet_open">Wallet / WebLN</button>
   </div>
   <div class="topActionsRow topActionsRowSmall">
-    <button class="secondary" id="goPayBtn" type="button">Zu Pay</button>
-    <button class="danger" id="logoutBtn" type="button">Logout</button>
+    <button class="secondary" id="goPayBtn" type="button" data-i18n="console.btn.go_pay">Zu Pay</button>
+    <button class="danger" id="logoutBtn" type="button" data-i18n="console.btn.logout">Logout</button>
   </div>
 </div>
 
     <section class="section">
-  <label class="label" style="margin-top:14px;">LNURL Fallback (optional)</label>
+  <label class="label" style="margin-top:14px;" id="lnurlFallbackOptionalLabel">LNURL Fallback (optional)</label>
       <div id="addressBox" class="valueBox mono copyable active" title="Antippen = kopieren + QR auf BOLT12-Adresse umschalten">
         Lade Adresse...
       </div>
 
-      <label class="label" style="margin-top:14px;">LNURL Fallback (Lightning Address)</label>
+      <label class="label" style="margin-top:14px;" id="lnurlFallbackAddressLabel">LNURL Fallback (Lightning Address)</label>
       <div id="fallbackAddressBox" class="valueBox mono copyable" title="Antippen = kopieren + QR auf LNURL-Fallback umschalten">
         lnurl@yourdomain.com
       </div>
@@ -582,32 +637,30 @@
       </div>
 
       <div class="hint">
-        Standardmäßig zeigt der QR die BIP353 Address als primären Einstieg. Das aktuelle BOLT12 Offer und LNURL Fallback können separat angezeigt werden. Das UI erzeugt aus der Lightning Address einen
+        <span id="lnurlIntroText">Standardmäßig zeigt der QR die BIP353 Address als primären Einstieg. Das aktuelle BOLT12 Offer und LNURL Fallback können separat angezeigt werden. Das UI erzeugt aus der Lightning Address einen</span>
         <span class="mono">lnurl1...</span>-QR. Ob eine Wallet ihn wirklich zahlen kann, hängt davon ab,
-        ob auf der Domain ein echter LNURL-pay-Endpunkt mit passender Antwort läuft.
+        <span id="lnurlEndpointText">ob auf der Domain ein echter LNURL-pay-Endpunkt mit passender Antwort läuft.</span>
       </div>
 
-      <label class="label" style="margin-top:14px;">Aktuelles Offer</label>
+      <label class="label" style="margin-top:14px;" id="lnurlCurrentOfferLabel">Aktuelles Offer</label>
       <div id="offerBox" class="valueBox mono copyable" title="Antippen = kopieren + QR auf Offer umschalten">
         Lade Offer...
       </div>
 
       <div class="hint">
-        Standardmäßig zeigt der QR die BOLT12-Adresse <span class="mono">bolt12@example.com</span>.
-        Wenn du auf LNURL-Fallback umschaltest, wird stattdessen der LNURL-Inhalt angezeigt.
+        <span id="lnurlQrDefaultPrefix">Standardmäßig zeigt der QR die BOLT12-Adresse</span> <span class="mono">bolt12@example.com</span>.
+        <span id="lnurlQrDefaultSuffix">Wenn du auf LNURL-Fallback umschaltest, wird stattdessen der LNURL-Inhalt angezeigt.</span>
       </div>
     </section>
 
     <section class="section">
-      <label class="label">Schnellauswahl</label>
+      <label class="label" id="quickAmountLabel">Schnellauswahl</label>
       <div class="row">
         <button class="secondary quickAmountBtn" data-amount="21" type="button">21 sats</button>
         <button class="secondary quickAmountBtn" data-amount="1000" type="button">1k sats</button>
         <button class="secondary quickAmountBtn" data-amount="10000" type="button">10k sats</button>
       </div>
-      <div class="hint">
-        Diese Auswahl setzt den Mindestbetrag für ein neues Offer.
-      </div>
+       <div class="hint" id="quickAmountHint">Diese Auswahl setzt den Mindestbetrag für ein neues Offer.</div>
     </section>
 
     <section class="section">
@@ -652,16 +705,16 @@
   </div>
 </section>
     <section class="section">
-      <div class="pill">Alias Manager</div>
-      <div class="sub">Lightning-Adressen anlegen, veröffentlichen und verwalten.</div>
+      <div class="pill" id="aliasManagerTitle">Alias Manager</div>
+      <div class="sub" id="aliasManagerSubtitle">Lightning-Adressen anlegen, veröffentlichen und verwalten.</div>
 
-      <label class="label" for="aliasNameInput">Alias Name</label>
+      <label class="label" for="aliasNameInput" id="aliasNameLabel">Alias Name</label>
       <input id="aliasNameInput" type="text" placeholder="z. B. coffee" />
 
-      <label class="label" for="aliasDescriptionInput" style="margin-top:14px;">Beschreibung</label>
+      <label class="label" for="aliasDescriptionInput" style="margin-top:14px;" id="aliasDescriptionLabel">Beschreibung</label>
       <input id="aliasDescriptionInput" type="text" placeholder="z. B. Coffee donations" />
 
-      <label class="label" for="aliasAmountInput" style="margin-top:14px;">Betrag in sats (optional)</label>
+      <label class="label" for="aliasAmountInput" style="margin-top:14px;" id="aliasAmountLabel">Betrag in sats (optional)</label>
       <input id="aliasAmountInput" type="number" min="1" step="1" placeholder="z. B. 21000" />
 
       <div class="row">
@@ -761,9 +814,9 @@
     async function copyText(value, successMessage) {
       try {
         await navigator.clipboard.writeText(value);
-        setStatus(successMessage || 'Kopiert.');
+        setStatus(successMessage || window.__t('toast.copied'));
       } catch (error) {
-        setStatus('Kopieren fehlgeschlagen.', 'error');
+        setStatus(window.__t('toast.copy_failed'), 'error');
       }
     }
 
@@ -792,7 +845,7 @@
       qrBox.innerHTML = '';
 
       if (!value) {
-        throw new Error('Kein QR-Inhalt vorhanden');
+        throw new Error(window.__t('error.no_qr_content'));
       }
 
       activeQrMode = mode;
@@ -917,7 +970,7 @@ async function saveSetup() {
     const passwordConfirm = (setupPasswordConfirm?.value || '').trim();
 
     if (password && password !== passwordConfirm) {
-      throw new Error('Passwörter stimmen nicht überein');
+      throw new Error(window.__t('error.password_mismatch'));
     }
 
     const payload = {
@@ -943,16 +996,16 @@ async function saveSetup() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data?.detail || 'Setup konnte nicht gespeichert werden');
+      throw new Error(data?.detail || window.__t('error.setup_save_failed'));
     }
 
     if (password) {
       requireRelogin = true;
 
-      setStatus('Setup und Passwort gespeichert. Bitte jetzt neu einloggen.', 'success');
+      setStatus(window.__t('toast.setup_saved_relogin'), 'success');
 
       saveSetupBtn.disabled = false;
-      saveSetupBtn.textContent = 'Neu einloggen';
+      saveSetupBtn.textContent = window.__t('btn.relogin');
 
       saveSetupBtn.onclick = async () => {
         try {
@@ -969,16 +1022,16 @@ async function saveSetup() {
       return;
     }
 
-    setStatus('Setup gespeichert.');
+    setStatus(window.__t('toast.setup_saved'));
     window.location.reload();
 
   } catch (error) {
-    setStatus(`Setup-Fehler: ${error?.message || error}`, 'error', true);
+    setStatus(`${window.__t('toast.setup_error_prefix')}: ${error?.message || error}`, 'error', true);
 
   } finally {
     if (!requireRelogin) {
       saveSetupBtn.disabled = false;
-      saveSetupBtn.textContent = 'Setup speichern';
+      saveSetupBtn.textContent = window.__t('setup.btn.save');
       saveSetupBtn.onclick = saveSetup;
     }
   }
@@ -989,35 +1042,35 @@ async function saveSetup() {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data?.detail || 'Public info konnte nicht geladen werden');
+          throw new Error(data?.detail || window.__t('error.public_info_load_failed'));
         }
 
         currentAddress = data.address || '';
         fallbackAddress = localStorage.getItem('lnurl_fallback_address')
           || data.fallback_address
-          || 'lnurl@yourdomain.com';
+          || window.__t('state.default_lnurl_address');
         currentOffer = data.offer || '';
 
-        addressBox.textContent = currentAddress || 'Keine Adresse';
-        fallbackAddressBox.textContent = fallbackAddress || 'Kein Fallback';
+        addressBox.textContent = currentAddress || window.__t('state.no_address');
+        fallbackAddressBox.textContent = fallbackAddress || window.__t('state.no_fallback');
         fallbackAddressInput.value = fallbackAddress || '';
-        offerBox.textContent = currentOffer || 'Kein Offer';
+        offerBox.textContent = currentOffer || window.__t('state.no_offer');
 
         renderQrForValue(currentAddress, 'address');
 
         try {
           await loadLnurlFallback();
-          setStatus('Public Daten inkl. LNURL geladen.');
+          setStatus(window.__t('toast.public_lnurl_loaded'));
         } catch (lnurlError) {
           currentLnurl = '';
-          setStatus(`Public Daten geladen. LNURL optional fehlgeschlagen: ${lnurlError?.message || lnurlError}`, 'warn', true);
+          setStatus(`${window.__t('toast.public_loaded_lnurl_failed_prefix')}: ${lnurlError?.message || lnurlError}`, 'warn', true);
         }
       } catch (error) {
         console.error('Public load error:', error);
         addressBox.textContent = currentAddress || '';
-        fallbackAddressBox.textContent = fallbackAddress || 'lnurl@yourdomain.com';
-        fallbackAddressInput.value = fallbackAddress || 'lnurl@yourdomain.com';
-        offerBox.textContent = currentOffer || 'Offer nicht geladen';
+        fallbackAddressBox.textContent = fallbackAddress || window.__t('state.default_lnurl_address');
+        fallbackAddressInput.value = fallbackAddress || window.__t('state.default_lnurl_address');
+        offerBox.textContent = currentOffer || window.__t('state.offer_not_loaded');
 
         try {
          if (currentAddress) {
@@ -1025,13 +1078,45 @@ async function saveSetup() {
         }
         } catch (_) {}
 
-        setStatus(`Load failed: ${error?.message || error}`, 'error', true);
+        setStatus(`${window.__t('toast.load_failed_prefix')}: ${error?.message || error}`, 'error', true);
       }
     }
 
 function renderAliasList(items) {
   if (!items || items.length === 0) {
-    aliasList.innerHTML = '<div class="hint">Noch keine Aliase angelegt.</div>';
+    const noAliasesText =
+      (typeof window.__t === 'function' && window.__t('state.no_aliases') !== 'state.no_aliases')
+        ? window.__t('state.no_aliases')
+        : ((localStorage.getItem('app_lang') || 'de') === 'en'
+            ? 'No aliases created yet.'
+            : 'Noch keine Aliase angelegt.');
+
+    aliasList.innerHTML = `<div class="hint">${noAliasesText}</div>`;
+
+    window.__rerenderAliasEmptyState = function () {
+      const aliasList = document.getElementById('aliasList');
+      if (!aliasList) return;
+
+      const hasRealAlias =
+        !!aliasList.querySelector('.aliasCard, .aliasItem, .alias-entry, [data-alias-name]');
+
+      const onlyHint =
+        aliasList.children.length === 1 &&
+        aliasList.firstElementChild &&
+        aliasList.firstElementChild.classList.contains('hint');
+
+      if (!onlyHint && hasRealAlias) return;
+
+      const noAliasesText =
+        (typeof window.__t === 'function' && window.__t('state.no_aliases') !== 'state.no_aliases')
+          ? window.__t('state.no_aliases')
+          : ((localStorage.getItem('app_lang') || 'de') === 'en'
+              ? 'No aliases created yet.'
+              : 'Noch keine Aliase angelegt.');
+
+      aliasList.innerHTML = `<div class="hint">${noAliasesText}</div>`;
+    };
+
     return;
   }
 
@@ -1135,6 +1220,14 @@ function renderAliasList(items) {
         aliasAmountInput.value = '';
 
         await loadAliases();
+      if (typeof window.__applyRuntimeAliasList === "function") {
+        setTimeout(window.__applyRuntimeAliasList, 0);
+        setTimeout(window.__applyRuntimeAliasList, 50);
+      }
+      if (typeof window.__applyRuntimeAliasList === "function") {
+        setTimeout(window.__applyRuntimeAliasList, 0);
+        setTimeout(window.__applyRuntimeAliasList, 50);
+      }
         setStatus(`Alias ${data.address} angelegt.`);
       } catch (error) {
         setStatus(`Alias-Fehler: ${error?.message || error}`, 'error', true);
@@ -1522,7 +1615,7 @@ document.addEventListener('click', function (e) {
       }
 
       createOfferBtn.disabled = true;
-      createOfferBtn.textContent = 'Erzeuge...';
+      createOfferBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Creating...' : 'Erzeuge...';
       setStatus('Erzeuge neues Offer...', 'warn');
 
       try {
@@ -1548,7 +1641,7 @@ document.addEventListener('click', function (e) {
         setStatus(`Fehler: ${error?.message || error}`, 'error', true);
       } finally {
         createOfferBtn.disabled = false;
-        createOfferBtn.textContent = 'Offer erzeugen';
+        createOfferBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Create offer' : 'Offer erzeugen';
       }
     });
 invoiceBox.addEventListener('click', async () => {
@@ -1676,5 +1769,1635 @@ installBtn.addEventListener('click', async () => {
       }
     })();
   </script>
+
+<script>
+(function () {
+  if (window.__publicLangEnhancerInstalled) return;
+  window.__publicLangEnhancerInstalled = true;
+
+  const KEY = "app_lang";
+
+  function getLang() {
+    return localStorage.getItem(KEY) || "de";
+  }
+
+  function allLangButtons() {
+    return [
+      ["langBtnDe", "de"],
+      ["langBtnEn", "en"],
+      ["langBtnDeSetup", "de"],
+      ["langBtnEnSetup", "en"],
+      ["langBtnDePay", "de"],
+      ["langBtnEnPay", "en"],
+    ]
+      .map(([id, code]) => [document.getElementById(id), code])
+      .filter(([btn]) => !!btn);
+  }
+
+  function styleBtn(btn, active) {
+    if (!btn) return;
+    btn.style.color = active ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.58)";
+    btn.style.background = active ? "rgba(255,255,255,0.12)" : "transparent";
+    btn.style.boxShadow = active ? "inset 0 0 0 1px rgba(255,255,255,0.04)" : "none";
+    btn.style.fontWeight = active ? "700" : "600";
+  }
+
+  function applyLangButtons() {
+    const lang = getLang();
+    document.documentElement.setAttribute("lang", lang);
+
+    allLangButtons().forEach(([btn, code]) => {
+      const active = lang === code;
+      btn.classList.toggle("active", active);
+      styleBtn(btn, active);
+    });
+
+    if (typeof window.__applyDnsTranslations === "function") {
+      window.__applyDnsTranslations();
+    }
+    if (typeof window.__applyRuntimeBlock1 === "function") {
+      window.__applyRuntimeBlock1();
+    }
+    if (typeof window.__applyRuntimeBlock2Bolt11 === "function") {
+      window.__applyRuntimeBlock2Bolt11();
+    }
+    if (typeof window.__applyRuntimeBlock1HintFix === "function") {
+      window.__applyRuntimeBlock1HintFix();
+    }
+    if (typeof window.__applyRuntimeQuickAmount === "function") {
+    }
+  }
+
+  function setLang(lang) {
+    localStorage.setItem(KEY, lang);
+    applyLangButtons();
+    if (window.applyTranslations) window.applyTranslations();
+  }
+
+  function bindLangButtons() {
+    allLangButtons().forEach(([btn, code]) => {
+      if (btn.dataset.langBound === "1") return;
+      btn.dataset.langBound = "1";
+      btn.addEventListener("click", () => setLang(code));
+    });
+  }
+
+  function init() {
+    bindLangButtons();
+    applyLangButtons();
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+  window.addEventListener("load", init);
+  setTimeout(init, 0);
+})();
+</script>
+
+<script>
+(function () {
+  if (window.__publicI18nInstalled) return;
+  window.__publicI18nInstalled = true;
+
+  const I18N = {
+    de: {
+      "setup.pill": "Erstkonfiguration",
+      "setup.title": "⚙️ BOLT12 Pay Setup",
+      "setup.subtitle": "Grundkonfiguration für Public URL, Lightning-Adressen und DNS-Modus.",
+      "setup.label.bolt12_address": "Public BOLT12 Address",
+      "setup.label.lnurl_address": "Public LNURL Address",
+      "setup.label.lnurl_base_domain": "LNURL Base Domain",
+      "setup.label.lnurl_base_url": "LNURL Base URL",
+      "setup.label.password": "Passwort setzen",
+      "setup.label.password_confirm": "Passwort bestätigen",
+      "setup.label.dns_mode": "DNS Mode",
+      "setup.ph.bolt12_address": "z. B. bolt12@pay.example.com",
+      "setup.ph.lnurl_address": "z. B. lnurl@pay.example.com",
+      "setup.ph.lnurl_base_domain": "z. B. pay.example.com",
+      "setup.ph.lnurl_base_url": "z. B. https://pay.example.com",
+      "setup.ph.password": "Neues Passwort",
+      "setup.ph.password_confirm": "Passwort erneut eingeben",
+      "setup.manual_dns.title": "Manual DNS mode",
+      "setup.manual_dns.line1": "Für BIP353 musst du bei deinem DNS-Provider einen TXT-Record setzen.",
+      "setup.manual_dns.schema": "Schema:",
+      "setup.manual_dns.example": "Beispiel:",
+      "setup.manual_dns.content": "Inhalt:",
+      "setup.manual_dns.line2": "Das konkrete Offer wird später von der App erzeugt. Cloudflare-Automation kann später optional aktiviert werden.",
+      "setup.label.cf_zone_name": "Cloudflare Zone Name",
+      "setup.label.cf_zone_id": "Cloudflare Zone ID",
+      "setup.label.cf_api_token": "Cloudflare API Token",
+      "setup.ph.cf_zone_name": "z. B. example.com",
+      "setup.ph.cf_zone_id": "Zone ID aus Cloudflare Dashboard",
+      "setup.ph.cf_api_token": "API Token",
+      "setup.cloudflare_optional_hint": "Cloudflare bleibt optional. Ohne Cloudflare funktioniert die App weiter, nur BIP353-DNS wird dann nicht automatisch gesetzt.",
+      "setup.btn.save": "Setup speichern",
+      "dns.none": "Keine",
+      "dns.manual": "Manuell",
+      "dns.cloudflare": "Cloudflare",
+      "btn.relogin": "Log in again",
+      "toast.copied": "Copied.",
+      "toast.copy_failed": "Copy failed.",
+      "toast.setup_saved_relogin": "Setup and password saved. Please log in again.",
+      "toast.setup_saved": "Setup saved.",
+      "toast.setup_error_prefix": "Setup error",
+      "toast.public_lnurl_loaded": "Public data including LNURL loaded.",
+      "toast.public_loaded_lnurl_failed_prefix": "Public data loaded. Optional LNURL failed",
+      "toast.load_failed_prefix": "Load failed",
+      "error.no_qr_content": "No QR content available",
+      "error.password_mismatch": "Passwords do not match",
+      "error.setup_save_failed": "Could not save setup",
+      "error.public_info_load_failed": "Could not load public info",
+      "state.default_lnurl_address": "lnurl@yourdomain.com",
+      "state.no_address": "No address",
+      "state.no_fallback": "No fallback",
+      "state.no_offer": "No offer",
+      "state.offer_not_loaded": "Offer not loaded",
+      "state.no_aliases": "No aliases created yet.",
+
+      "btn.relogin": "Neu einloggen",
+      "toast.copied": "Kopiert.",
+      "toast.copy_failed": "Kopieren fehlgeschlagen.",
+      "toast.setup_saved_relogin": "Setup und Passwort gespeichert. Bitte jetzt neu einloggen.",
+      "toast.setup_saved": "Setup gespeichert.",
+      "toast.setup_error_prefix": "Setup-Fehler",
+      "toast.public_lnurl_loaded": "Public Daten inkl. LNURL geladen.",
+      "toast.public_loaded_lnurl_failed_prefix": "Public Daten geladen. LNURL optional fehlgeschlagen",
+      "toast.load_failed_prefix": "Laden fehlgeschlagen",
+      "error.no_qr_content": "Kein QR-Inhalt vorhanden",
+      "error.password_mismatch": "Passwörter stimmen nicht überein",
+      "error.setup_save_failed": "Setup konnte nicht gespeichert werden",
+      "error.public_info_load_failed": "Public info konnte nicht geladen werden",
+      "state.default_lnurl_address": "lnurl@yourdomain.com",
+      "state.no_address": "Keine Adresse",
+      "state.no_fallback": "Kein Fallback",
+      "state.no_offer": "Kein Offer",
+      "state.offer_not_loaded": "Offer nicht geladen",
+      "state.no_aliases": "Noch keine Aliase angelegt.",
+
+      "btn.relogin": "Neu einloggen",
+      "toast.setup_saved_relogin": "Setup und Passwort gespeichert. Bitte jetzt neu einloggen.",
+
+      "console.pill": "BOLT12 Pay Server",
+      "console.title": "⚡ BOLT12 Offer & Alias Console",
+      "console.btn.setup": "⚙ Setup",
+      "console.subtitle": "BOLT12 / BIP353 ist der primäre Zahlungsweg. LNURL und BOLT11 sind reine Fallbacks.",
+      "console.badge.qr_bolt12_address": "QR: BOLT12 Adresse",
+      "console.loading_qr": "Lade QR...",
+      "console.btn.install": "App installieren",
+      "console.btn.copy_content": "Inhalt kopieren",
+      "console.btn.wallet_open": "Wallet / WebLN",
+      "console.btn.go_pay": "Zu Pay",
+      "console.btn.logout": "Logout"
+    },
+    en: {
+      "setup.pill": "Initial setup",
+      "setup.title": "⚙️ BOLT12 Pay Setup",
+      "setup.subtitle": "Basic configuration for public URL, Lightning addresses and DNS mode.",
+      "setup.label.bolt12_address": "Public BOLT12 Address",
+      "setup.label.lnurl_address": "Public LNURL Address",
+      "setup.label.lnurl_base_domain": "LNURL Base Domain",
+      "setup.label.lnurl_base_url": "LNURL Base URL",
+      "setup.label.password": "Set password",
+      "setup.label.password_confirm": "Confirm password",
+      "setup.label.dns_mode": "DNS Mode",
+      "setup.ph.bolt12_address": "e.g. bolt12@pay.example.com",
+      "setup.ph.lnurl_address": "e.g. lnurl@pay.example.com",
+      "setup.ph.lnurl_base_domain": "e.g. pay.example.com",
+      "setup.ph.lnurl_base_url": "e.g. https://pay.example.com",
+      "setup.ph.password": "New password",
+      "setup.ph.password_confirm": "Enter password again",
+      "setup.manual_dns.title": "Manual DNS mode",
+      "setup.manual_dns.line1": "For BIP353 you need to create a TXT record at your DNS provider.",
+      "setup.manual_dns.schema": "Schema:",
+      "setup.manual_dns.example": "Example:",
+      "setup.manual_dns.content": "Content:",
+      "setup.manual_dns.line2": "The actual offer will be created later by the app. Cloudflare automation can be enabled later if needed.",
+      "setup.label.cf_zone_name": "Cloudflare Zone Name",
+      "setup.label.cf_zone_id": "Cloudflare Zone ID",
+      "setup.label.cf_api_token": "Cloudflare API Token",
+      "setup.ph.cf_zone_name": "e.g. example.com",
+      "setup.ph.cf_zone_id": "Zone ID from Cloudflare dashboard",
+      "setup.ph.cf_api_token": "API token",
+      "setup.cloudflare_optional_hint": "Cloudflare remains optional. The app still works without it; only automatic BIP353 DNS creation is disabled.",
+      "setup.btn.save": "Save setup",
+      "dns.none": "None",
+      "dns.manual": "Manual",
+      "dns.cloudflare": "Cloudflare",
+
+      "btn.relogin": "Log in again",
+      "toast.setup_saved_relogin": "Setup and password saved. Please log in again.",
+
+      "console.pill": "BOLT12 Pay Server",
+      "console.title": "⚡ BOLT12 Offer & Alias Console",
+      "console.btn.setup": "⚙ Setup",
+      "console.subtitle": "BOLT12 / BIP353 is the primary payment path. LNURL and BOLT11 are fallback options only.",
+      "console.badge.qr_bolt12_address": "QR: BOLT12 address",
+      "console.loading_qr": "Loading QR...",
+      "console.btn.install": "Install app",
+      "console.btn.copy_content": "Copy content",
+      "console.btn.wallet_open": "Wallet / WebLN",
+      "console.btn.go_pay": "Go to Pay",
+      "console.btn.logout": "Logout"
+    }
+  };
+
+  function t(key) {
+    const lang = localStorage.getItem("app_lang") || "de";
+    return (I18N[lang] && I18N[lang][key]) || key;
+  }
+
+  window.__t = t;
+
+  window.applyTranslations = function applyTranslations() {
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      const key = el.getAttribute("data-i18n");
+      if (key) el.textContent = t(key);
+    });
+
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+      const key = el.getAttribute("data-i18n-placeholder");
+      if (key) el.placeholder = t(key);
+    });
+  };
+
+  function init() {
+    if (window.applyTranslations) window.applyTranslations();
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+  window.addEventListener("load", init);
+  setTimeout(init, 0);
+})();
+</script>
+
+<script>
+(function () {
+  if (window.__dnsI18nInstalled) return;
+  window.__dnsI18nInstalled = true;
+
+  function applyDnsTranslations() {
+    const sel = document.getElementById("setupDnsMode");
+    if (!sel) return;
+
+    const map = {
+      none: window.__t("dns.none"),
+      manual: window.__t("dns.manual"),
+      cloudflare: window.__t("dns.cloudflare"),
+    };
+
+    [...sel.options].forEach(opt => {
+      if (map[opt.value]) {
+        opt.textContent = map[opt.value];
+      }
+    });
+  }
+
+  window.__applyDnsTranslations = applyDnsTranslations;
+
+  document.addEventListener("DOMContentLoaded", applyDnsTranslations);
+  window.addEventListener("load", applyDnsTranslations);
+  setTimeout(applyDnsTranslations, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__runtimeBlock1Installed) return;
+  window.__runtimeBlock1Installed = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      quick_amount: "Schnellauswahl",
+      quick_hint: "Diese Auswahl setzt den Mindestbetrag für ein neues Offer.",
+      min_amount: "Mindestbetrag in sats",
+      min_amount_ph: "Leer = Backend nutzt 1 sat",
+      description: "Beschreibung / Label",
+      description_ph: "z. B. bolt12, coffee, donation",
+      create_offer: "Offer erzeugen",
+      create_offer_hint: "Erzeugt ein neues BOLT12-Offer über dein Backend und schaltet den QR automatisch auf das neue Offer.",
+    },
+    en: {
+      quick_amount: "Quick amounts",
+      quick_hint: "This selection sets the minimum amount for a new offer.",
+      min_amount: "Minimum amount in sats",
+      min_amount_ph: "Empty = backend uses 1 sat",
+      description: "Description / Label",
+      description_ph: "e.g. bolt12, coffee, donation",
+      create_offer: "Create offer",
+      create_offer_hint: "Creates a new BOLT12 offer through your backend and automatically switches the QR to the new offer.",
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function setText(el, value) {
+    if (el) el.textContent = value;
+  }
+
+  function applyRuntimeBlock1() {
+    const amountInput = document.getElementById("amountInput");
+    const messageInput = document.getElementById("messageInput");
+    const createOfferBtn = document.getElementById("createOfferBtn");
+
+    if (amountInput) {
+      const label = document.querySelector('label[for="amountInput"]');
+      setText(label, tx("min_amount"));
+      amountInput.placeholder = tx("min_amount_ph");
+    }
+
+    if (messageInput) {
+      const label = document.querySelector('label[for="messageInput"]');
+      setText(label, tx("description"));
+      messageInput.placeholder = tx("description_ph");
+    }
+
+    if (createOfferBtn) {
+      setText(createOfferBtn, tx("create_offer"));
+
+      const section = createOfferBtn.closest(".section") || createOfferBtn.parentElement;
+      if (section) {
+        const labels = Array.from(section.querySelectorAll("label"));
+        for (const label of labels) {
+          if ((label.textContent || "").trim() === "Schnellauswahl" ||
+              (label.textContent || "").trim() === "Quick amounts") {
+            setText(label, tx("quick_amount"));
+          }
+        }
+
+        const spans = Array.from(section.querySelectorAll("span"));
+        for (const span of spans) {
+          const t = (span.textContent || "").trim();
+          if (
+            t === "Diese Auswahl setzt den Mindestbetrag für ein neues Offer." ||
+            t === "This selection sets the minimum amount for a new offer."
+          ) {
+            setText(span, tx("quick_hint"));
+          }
+          if (
+            t === "Erzeugt ein neues BOLT12-Offer über dein Backend und schaltet den QR automatisch auf das neue Offer." ||
+            t === "Creates a new BOLT12 offer through your backend and automatically switches the QR to the new offer."
+          ) {
+            setText(span, tx("create_offer_hint"));
+          }
+        }
+
+        const divs = Array.from(section.querySelectorAll("div"));
+        for (const div of divs) {
+          const t = (div.textContent || "").trim();
+          if (
+            t === "Diese Auswahl setzt den Mindestbetrag für ein neues Offer." ||
+            t === "This selection sets the minimum amount for a new offer."
+          ) {
+            setText(div, tx("quick_hint"));
+          }
+          if (
+            t === "Erzeugt ein neues BOLT12-Offer über dein Backend und schaltet den QR automatisch auf das neue Offer." ||
+            t === "Creates a new BOLT12 offer through your backend and automatically switches the QR to the new offer."
+          ) {
+            setText(div, tx("create_offer_hint"));
+          }
+        }
+
+        const ps = Array.from(section.querySelectorAll("p"));
+        for (const el of ps) {
+          const t = (el.textContent || "").trim();
+          if (
+            t === "Diese Auswahl setzt den Mindestbetrag für ein neues Offer." ||
+            t === "This selection sets the minimum amount for a new offer."
+          ) {
+            setText(el, tx("quick_hint"));
+          }
+          if (
+            t === "Erzeugt ein neues BOLT12-Offer über dein Backend und schaltet den QR automatisch auf das neue Offer." ||
+            t === "Creates a new BOLT12 offer through your backend and automatically switches the QR to the new offer."
+          ) {
+            setText(el, tx("create_offer_hint"));
+          }
+        }
+      }
+    }
+  }
+
+  window.__applyRuntimeBlock1 = applyRuntimeBlock1;
+
+  function init() {
+    applyRuntimeBlock1();
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+  window.addEventListener("load", init);
+  setTimeout(init, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__runtimeBlock2Bolt11Installed) return;
+  window.__runtimeBlock2Bolt11Installed = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      title: "BOLT11 Kompatibilitätsmodus",
+      subtitle: "Normale Lightning-Rechnung für maximale Wallet- und WebLN-Kompatibilität.",
+      amount: "Betrag in sats",
+      amount_ph: "z. B. 21000",
+      memo: "Memo",
+      memo_ph: "z. B. compat test",
+      create_invoice: "BOLT11 Rechnung erzeugen",
+      invoice_qr: "Rechnung QR",
+      copy_invoice: "Rechnung kopieren",
+      pay_webln: "Mit Alby / WebLN bezahlen",
+      current_invoice: "Aktuelle BOLT11 Rechnung",
+      no_invoice: "Noch keine Rechnung erzeugt.",
+      rest_prefix: "Dieser Modus erzeugt eine normale",
+      rest_suffix: "Rechnung über LND REST."
+    },
+    en: {
+      title: "BOLT11 compatibility mode",
+      subtitle: "Standard Lightning invoice for maximum wallet and WebLN compatibility.",
+      amount: "Amount in sats",
+      amount_ph: "e.g. 21000",
+      memo: "Memo",
+      memo_ph: "e.g. compat test",
+      create_invoice: "Create BOLT11 invoice",
+      invoice_qr: "Invoice QR",
+      copy_invoice: "Copy invoice",
+      pay_webln: "Pay with Alby / WebLN",
+      current_invoice: "Current BOLT11 invoice",
+      no_invoice: "No invoice created yet.",
+      rest_prefix: "This mode creates a standard",
+      rest_suffix: "invoice via LND REST."
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function setText(el, value) {
+    if (el) el.textContent = value;
+  }
+
+  function applyRuntimeBlock2Bolt11() {
+    const amountInput = document.getElementById("invoiceAmountInput");
+    const memoInput = document.getElementById("invoiceMemoInput");
+    const createBtn = document.getElementById("createInvoiceBtn");
+    const qrBtn = document.getElementById("showInvoiceQrBtn");
+    const copyBtn = document.getElementById("copyInvoiceBtn");
+    const payBtn = document.getElementById("payInvoiceWeblnBtn");
+
+    if (!createBtn) return;
+
+    const section = createBtn.closest(".section") || createBtn.parentElement;
+    if (!section) return;
+
+    const pill = Array.from(section.querySelectorAll(".pill")).find(el => {
+      const t = (el.textContent || "").trim();
+      return t === "BOLT11 Kompatibilitätsmodus" || t === "BOLT11 compatibility mode";
+    });
+    setText(pill, tx("title"));
+
+    const sub = Array.from(section.querySelectorAll(".sub")).find(el => {
+      const t = (el.textContent || "").trim();
+      return t === "Normale Lightning-Rechnung für maximale Wallet- und WebLN-Kompatibilität." ||
+             t === "Standard Lightning invoice for maximum wallet and WebLN compatibility.";
+    });
+    setText(sub, tx("subtitle"));
+
+    if (amountInput) {
+      const label = section.querySelector('label[for="invoiceAmountInput"]');
+      setText(label, tx("amount"));
+      amountInput.placeholder = tx("amount_ph");
+    }
+
+    if (memoInput) {
+      const label = section.querySelector('label[for="invoiceMemoInput"]');
+      setText(label, tx("memo"));
+      memoInput.placeholder = tx("memo_ph");
+    }
+
+    setText(createBtn, tx("create_invoice"));
+    setText(qrBtn, tx("invoice_qr"));
+    setText(copyBtn, tx("copy_invoice"));
+    setText(payBtn, tx("pay_webln"));
+
+    const labels = Array.from(section.querySelectorAll("label"));
+    labels.forEach(label => {
+      const t = (label.textContent || "").trim();
+      if (t === "Aktuelle BOLT11 Rechnung" || t === "Current BOLT11 invoice") {
+        setText(label, tx("current_invoice"));
+      }
+    });
+
+    const textNodes = Array.from(section.querySelectorAll("span, div, p"));
+    textNodes.forEach(el => {
+      const t = (el.textContent || "").trim();
+      if (t === "Noch keine Rechnung erzeugt." || t === "No invoice created yet.") {
+        setText(el, tx("no_invoice"));
+      }
+      if (
+        t === "Dieser Modus erzeugt eine normale lnbc...-Rechnung über LND REST." ||
+        t === "This mode creates a standard lnbc... invoice via LND REST."
+      ) {
+        el.innerHTML = `${tx("rest_prefix")} <span class="mono">lnbc...</span>-${tx("rest_suffix")}`;
+      }
+    });
+  }
+
+  window.__applyRuntimeBlock2Bolt11 = applyRuntimeBlock2Bolt11;
+
+  function init() {
+    applyRuntimeBlock2Bolt11();
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+  window.addEventListener("load", init);
+  setTimeout(init, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__runtimeBlock1HintFixInstalled) return;
+  window.__runtimeBlock1HintFixInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      quick_amount: "Schnellauswahl",
+      quick_hint: "Diese Auswahl setzt den Mindestbetrag für ein neues Offer."
+    },
+    en: {
+      quick_amount: "Quick amounts",
+      quick_hint: "This selection sets the minimum amount for a new offer."
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function applyRuntimeBlock1HintFix() {
+    const createOfferBtn = document.getElementById("createOfferBtn");
+    if (!createOfferBtn) return;
+
+    const section = createOfferBtn.closest(".section") || createOfferBtn.parentElement;
+    if (!section) return;
+
+    Array.from(section.querySelectorAll("label")).forEach(el => {
+      const t = (el.textContent || "").trim();
+      if (t === "Schnellauswahl" || t === "Quick amounts") {
+        el.textContent = tx("quick_amount");
+      }
+    });
+
+    Array.from(section.querySelectorAll("span, div, p")).forEach(el => {
+      const t = (el.textContent || "").trim();
+      if (
+        t === "Diese Auswahl setzt den Mindestbetrag für ein neues Offer." ||
+        t === "This selection sets the minimum amount for a new offer."
+      ) {
+        el.textContent = tx("quick_hint");
+      }
+    });
+  }
+
+  window.__applyRuntimeBlock1HintFix = applyRuntimeBlock1HintFix;
+
+  function init() {
+    applyRuntimeBlock1HintFix();
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+  window.addEventListener("load", init);
+  setTimeout(init, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__runtimeQuickAmountInstalled) return;
+  window.__runtimeQuickAmountInstalled = true;
+
+  function quickLang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const QUICK_T = {
+    de: {
+      label: "Schnellauswahl",
+      hint: "Diese Auswahl setzt den Mindestbetrag für ein neues Offer."
+    },
+    en: {
+      label: "Quick amounts",
+      hint: "This selection sets the minimum amount for a new offer."
+    }
+  };
+
+  function quickTx(key) {
+    const l = quickLang();
+    return (QUICK_T[l] && QUICK_T[l][key]) || QUICK_T.de[key] || key;
+  }
+
+  function applyRuntimeQuickAmount() {
+    const label = document.getElementById("quickAmountLabel");
+    const hint = document.getElementById("quickAmountHint");
+
+    if (label) label.textContent = quickTx("label");
+    if (hint) hint.textContent = quickTx("hint");
+  }
+
+  window.__applyRuntimeQuickAmount = applyRuntimeQuickAmount;
+
+  function bindQuickAmountLangButtons() {
+    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.quickAmountBound === "1") return;
+      btn.dataset.quickAmountBound = "1";
+      btn.addEventListener("click", () => {
+        setTimeout(applyRuntimeQuickAmount, 0);
+        setTimeout(applyRuntimeQuickAmount, 30);
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindQuickAmountLangButtons();
+    applyRuntimeQuickAmount();
+  });
+  window.addEventListener("load", () => {
+    bindQuickAmountLangButtons();
+    applyRuntimeQuickAmount();
+  });
+  setTimeout(() => {
+    bindQuickAmountLangButtons();
+    applyRuntimeQuickAmount();
+  }, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__runtimeLnurlInstalled) return;
+  window.__runtimeLnurlInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      optional: "LNURL Fallback (optional)",
+      address: "LNURL Fallback (Lightning Address)",
+      preset_lnurl: "Preset: lnurl",
+      preset_coffee: "Preset: coffee",
+      preset_alex: "Preset: alex",
+      preset_none: "Kein Preset",
+      set_alias: "LNURL Alias setzen",
+      intro: "Standardmäßig zeigt der QR die BIP353 Address als primären Einstieg. Das aktuelle BOLT12 Offer und LNURL Fallback können separat angezeigt werden. Das UI erzeugt aus der Lightning Address einen",
+      endpoint: "ob auf der Domain ein echter LNURL-pay-Endpunkt mit passender Antwort läuft.",
+      current_offer: "Aktuelles Offer",
+      qr_prefix: "Standardmäßig zeigt der QR die BOLT12-Adresse",
+      qr_suffix: "Wenn du auf LNURL-Fallback umschaltest, wird stattdessen der LNURL-Inhalt angezeigt."
+    },
+    en: {
+      optional: "LNURL fallback (optional)",
+      address: "LNURL fallback (Lightning Address)",
+      preset_lnurl: "Preset: lnurl",
+      preset_coffee: "Preset: coffee",
+      preset_alex: "Preset: alex",
+      preset_none: "No preset",
+      set_alias: "Set LNURL alias",
+      intro: "By default, the QR shows the BIP353 address as the primary entry point. The current BOLT12 offer and LNURL fallback can be displayed separately. The UI generates a",
+      endpoint: "whether the domain exposes a real LNURL-pay endpoint with a valid response.",
+      current_offer: "Current offer",
+      qr_prefix: "By default, the QR shows the BOLT12 address",
+      qr_suffix: "If you switch to LNURL fallback, the LNURL content is shown instead."
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function applyRuntimeLnurl() {
+    const optionalLabel = document.getElementById("lnurlFallbackOptionalLabel");
+    const addressLabel = document.getElementById("lnurlFallbackAddressLabel");
+    const setAliasBtn = document.getElementById("applyFallbackBtn");
+    const currentOfferLabel = document.getElementById("lnurlCurrentOfferLabel");
+    const introText = document.getElementById("lnurlIntroText");
+    const endpointText = document.getElementById("lnurlEndpointText");
+    const qrPrefix = document.getElementById("lnurlQrDefaultPrefix");
+    const qrSuffix = document.getElementById("lnurlQrDefaultSuffix");
+    const preset = document.getElementById("fallbackPresetSelect");
+
+    if (optionalLabel) optionalLabel.textContent = tx("optional");
+    if (addressLabel) addressLabel.textContent = tx("address");
+    if (setAliasBtn) setAliasBtn.textContent = tx("set_alias");
+    if (currentOfferLabel) currentOfferLabel.textContent = tx("current_offer");
+    if (introText) introText.textContent = tx("intro");
+    if (endpointText) endpointText.textContent = tx("endpoint");
+    if (qrPrefix) qrPrefix.textContent = tx("qr_prefix");
+    if (qrSuffix) qrSuffix.textContent = tx("qr_suffix");
+
+    if (preset) {
+      Array.from(preset.options).forEach((opt) => {
+        if (opt.value === "lnurl") opt.textContent = tx("preset_lnurl");
+        else if (opt.value === "coffee") opt.textContent = tx("preset_coffee");
+        else if (opt.value === "alex") opt.textContent = tx("preset_alex");
+        else if (opt.value === "") opt.textContent = tx("preset_none");
+      });
+    }
+  }
+
+  window.__applyRuntimeLnurl = applyRuntimeLnurl;
+
+  function bindLnurlLangButtons() {
+    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.lnurlBound === "1") return;
+      btn.dataset.lnurlBound = "1";
+      btn.addEventListener("click", () => {
+        setTimeout(applyRuntimeLnurl, 0);
+        setTimeout(applyRuntimeLnurl, 30);
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindLnurlLangButtons();
+    applyRuntimeLnurl();
+  });
+  window.addEventListener("load", () => {
+    bindLnurlLangButtons();
+    applyRuntimeLnurl();
+  });
+  setTimeout(() => {
+    bindLnurlLangButtons();
+    applyRuntimeLnurl();
+  }, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__runtimeAliasStaticInstalled) return;
+  window.__runtimeAliasStaticInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      title: "Alias Manager",
+      subtitle: "Lightning-Adressen anlegen, veröffentlichen und verwalten.",
+      name: "Alias Name",
+      name_ph: "z. B. coffee",
+      description: "Beschreibung",
+      description_ph: "z. B. Coffee donations",
+      amount: "Betrag in sats (optional)",
+      amount_ph: "z. B. 21000",
+      create: "Alias anlegen",
+      refresh: "Liste aktualisieren",
+      hint: "Veröffentlichen erzeugt ein neues BOLT12-Offer und setzt bei Cloudflare automatisch den passenden BIP353 TXT-Record."
+    },
+    en: {
+      title: "Alias manager",
+      subtitle: "Create, publish and manage Lightning addresses.",
+      name: "Alias name",
+      name_ph: "e.g. coffee",
+      description: "Description",
+      description_ph: "e.g. Coffee donations",
+      amount: "Amount in sats (optional)",
+      amount_ph: "e.g. 21000",
+      create: "Create alias",
+      refresh: "Refresh list",
+      hint: "Publishing creates a new BOLT12 offer and automatically sets the matching BIP353 TXT record in Cloudflare."
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function applyRuntimeAliasStatic() {
+    const title = document.getElementById("aliasManagerTitle");
+    const subtitle = document.getElementById("aliasManagerSubtitle");
+    const nameLabel = document.getElementById("aliasNameLabel");
+    const descLabel = document.getElementById("aliasDescriptionLabel");
+    const amountLabel = document.getElementById("aliasAmountLabel");
+    const nameInput = document.getElementById("aliasNameInput");
+    const descInput = document.getElementById("aliasDescriptionInput");
+    const amountInput = document.getElementById("aliasAmountInput");
+    const createBtn = document.getElementById("createAliasBtn");
+    const refreshBtn = document.getElementById("refreshAliasBtn");
+    const hint = document.getElementById("aliasManagerHint");
+
+    if (title) title.textContent = tx("title");
+    if (subtitle) subtitle.textContent = tx("subtitle");
+    if (nameLabel) nameLabel.textContent = tx("name");
+    if (descLabel) descLabel.textContent = tx("description");
+    if (amountLabel) amountLabel.textContent = tx("amount");
+    if (nameInput) nameInput.placeholder = tx("name_ph");
+    if (descInput) descInput.placeholder = tx("description_ph");
+    if (amountInput) amountInput.placeholder = tx("amount_ph");
+    if (createBtn) createBtn.textContent = tx("create");
+    if (refreshBtn) refreshBtn.textContent = tx("refresh");
+    if (hint) hint.textContent = tx("hint");
+
+    const maybeHints = Array.from(document.querySelectorAll("div.hint, span.hint, p.hint, .hint"));
+    for (const el of maybeHints) {
+      const t = (el.textContent || "").trim();
+      if (
+        t === "Veröffentlichen erzeugt ein neues BOLT12-Offer und setzt bei Cloudflare automatisch den passenden BIP353 TXT-Record." ||
+        t === "Publishing creates a new BOLT12 offer and automatically sets the matching BIP353 TXT record in Cloudflare."
+      ) {
+        el.textContent = tx("hint");
+      }
+    }
+  }
+
+  window.__applyRuntimeAliasStatic = applyRuntimeAliasStatic;
+
+  function bindAliasLangButtons() {
+    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.aliasBound === "1") return;
+      btn.dataset.aliasBound = "1";
+      btn.addEventListener("click", () => {
+        setTimeout(applyRuntimeAliasStatic, 0);
+        setTimeout(applyRuntimeAliasStatic, 30);
+      });
+    });
+  }
+
+  function bindAliasCreateButtonFix() {
+    const btn = document.getElementById("createAliasBtn");
+    if (!btn || btn.dataset.aliasFixBound === "1") return;
+    btn.dataset.aliasFixBound = "1";
+
+    btn.addEventListener("click", () => {
+      setTimeout(applyRuntimeAliasStatic, 50);
+      setTimeout(applyRuntimeAliasStatic, 200);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindAliasLangButtons();
+    bindAliasCreateButtonFix();
+    applyRuntimeAliasStatic();
+  });
+  window.addEventListener("load", () => {
+    bindAliasLangButtons();
+    applyRuntimeAliasStatic();
+  });
+  setTimeout(() => {
+    bindAliasLangButtons();
+    bindAliasCreateButtonFix();
+    applyRuntimeAliasStatic();
+  }, 0);
+})();
+</script>
+
+
+
+
+<script>
+(function () {
+  if (window.__runtimeAliasListInstalled) return;
+  window.__runtimeAliasListInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      description: "Beschreibung:",
+      amount: "Betrag:",
+      variable: "variabel",
+      dns: "DNS:",
+      public_page: "Öffentliche Seite:",
+      offer: "Offer:",
+      draft: "Entwurf",
+      published: "veröffentlicht",
+      publish: "Veröffentlichen",
+      edit: "Bearbeiten",
+      renew_offer: "Offer erneuern",
+      open: "Öffnen",
+      copy_link: "Link kopieren",
+      address_qr: "Adresse QR",
+      copy_address: "Adresse kopieren",
+      offer_qr: "Offer QR",
+      copy_offer: "Offer kopieren",
+      delete: "Löschen",
+      delete_dns: "Löschen + DNS"
+    },
+    en: {
+      description: "Description:",
+      amount: "Amount:",
+      variable: "variable",
+      dns: "DNS:",
+      public_page: "Public page:",
+      offer: "Offer:",
+      draft: "Draft",
+      published: "Published",
+      publish: "Publish",
+      edit: "Edit",
+      renew_offer: "Renew offer",
+      open: "Open",
+      copy_link: "Copy link",
+      address_qr: "Address QR",
+      copy_address: "Copy address",
+      offer_qr: "Offer QR",
+      copy_offer: "Copy offer",
+      delete: "Delete",
+      delete_dns: "Delete + DNS"
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function replaceText(el, fromList, to) {
+    if (!el) return false;
+    const t = (el.textContent || "").trim();
+    if (fromList.includes(t)) {
+      el.textContent = to;
+      return true;
+    }
+    return false;
+  }
+
+  function replacePrefixInHtml(el, dePrefix, enPrefix, replacement) {
+    if (!el || !el.innerHTML) return;
+    let html = el.innerHTML;
+    html = html.replace(new RegExp(dePrefix, "g"), replacement);
+    html = html.replace(new RegExp(enPrefix, "g"), replacement);
+    if (html !== el.innerHTML) el.innerHTML = html;
+  }
+
+  function applyRuntimeAliasList() {
+    const root = document.getElementById("aliasList");
+    if (!root) return;
+
+    const cards = Array.from(root.children);
+    cards.forEach((card) => {
+      replacePrefixInHtml(card, "Beschreibung:", "Description:", tx("description"));
+      replacePrefixInHtml(card, "Betrag:", "Amount:", tx("amount"));
+      replacePrefixInHtml(card, "Öffentliche Seite:", "Public page:", tx("public_page"));
+      replacePrefixInHtml(card, "DNS:", "DNS:", tx("dns"));
+      replacePrefixInHtml(card, "Offer:", "Offer:", tx("offer"));
+
+      Array.from(card.querySelectorAll("*")).forEach((el) => {
+        replaceText(el, ["variabel", "variable"], tx("variable"));
+        replaceText(el, ["Entwurf", "Draft"], tx("draft"));
+        replaceText(el, ["veröffentlicht", "Published"], tx("published"));
+        replaceText(el, ["Veröffentlichen", "Publish"], tx("publish"));
+        replaceText(el, ["Bearbeiten", "Edit"], tx("edit"));
+        replaceText(el, ["Offer erneuern", "Renew offer"], tx("renew_offer"));
+        replaceText(el, ["Öffnen", "Open"], tx("open"));
+        replaceText(el, ["Link kopieren", "Copy link"], tx("copy_link"));
+        replaceText(el, ["Adresse QR", "Address QR"], tx("address_qr"));
+        replaceText(el, ["Adresse kopieren", "Copy address"], tx("copy_address"));
+        replaceText(el, ["Offer QR"], tx("offer_qr"));
+        replaceText(el, ["Offer kopieren", "Copy offer"], tx("copy_offer"));
+        replaceText(el, ["Löschen", "Delete"], tx("delete"));
+        replaceText(el, ["Löschen + DNS", "Delete + DNS"], tx("delete_dns"));
+      });
+    });
+  }
+
+  window.__applyRuntimeAliasList = applyRuntimeAliasList;
+
+  function scheduleAliasListApply() {
+    const delays = [0, 40, 120, 250, 500, 900, 1400, 2000, 2800, 3800];
+    delays.forEach((ms) => setTimeout(applyRuntimeAliasList, ms));
+  }
+
+  function bindAliasListLangButtons() {
+    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.aliasListBound === "1") return;
+      btn.dataset.aliasListBound = "1";
+      btn.addEventListener("click", scheduleAliasListApply);
+    });
+  }
+
+  function bindAliasRefreshButton() {
+    const btn = document.getElementById("refreshAliasBtn");
+    if (!btn || btn.dataset.aliasRefreshBound === "1") return;
+    btn.dataset.aliasRefreshBound = "1";
+
+    btn.addEventListener("click", () => {
+      scheduleAliasListApply();
+      setTimeout(applyRuntimeAliasList, 1800);
+      setTimeout(applyRuntimeAliasList, 2500);
+    });
+  }
+
+  function bindAliasListActionDelegation() {
+    const root = document.getElementById("aliasList");
+    if (!root || root.dataset.aliasListDelegationBound === "1") return;
+    root.dataset.aliasListDelegationBound = "1";
+
+    root.addEventListener("click", (event) => {
+      const target = event.target.closest("button, a");
+      if (!target) return;
+
+      const txt = (target.textContent || "").trim();
+      const relevant = [
+        "Veröffentlichen", "Publish",
+        "Bearbeiten", "Edit",
+        "Offer erneuern", "Renew offer",
+        "Öffnen", "Open",
+        "Link kopieren", "Copy link",
+        "Adresse QR", "Address QR",
+        "Adresse kopieren", "Copy address",
+        "Offer QR",
+        "Offer kopieren", "Copy offer",
+        "Löschen", "Delete",
+        "Löschen + DNS", "Delete + DNS"
+      ];
+
+      if (relevant.includes(txt)) {
+        scheduleAliasListApply();
+
+        if (["Bearbeiten", "Edit", "Veröffentlichen", "Publish", "Löschen + DNS", "Delete + DNS"].includes(txt)) {
+          setTimeout(applyRuntimeAliasList, 1800);
+          setTimeout(applyRuntimeAliasList, 2500);
+          setTimeout(applyRuntimeAliasList, 3500);
+          setTimeout(applyRuntimeAliasList, 5000);
+          setTimeout(applyRuntimeAliasList, 7000);
+        }
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindAliasListLangButtons();
+    bindAliasRefreshButton();
+    bindAliasListActionDelegation();
+    scheduleAliasListApply();
+  });
+  window.addEventListener("load", () => {
+    bindAliasListLangButtons();
+    bindAliasRefreshButton();
+    bindAliasListActionDelegation();
+    scheduleAliasListApply();
+  });
+  setTimeout(() => {
+    bindAliasListLangButtons();
+    bindAliasRefreshButton();
+    bindAliasListActionDelegation();
+    scheduleAliasListApply();
+  }, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__aliasFetchHookInstalled) return;
+  window.__aliasFetchHookInstalled = true;
+
+  const oldFetch = window.fetch;
+
+  window.fetch = async function (...args) {
+    const res = await oldFetch.apply(this, args);
+
+    try {
+      if (typeof window.__applyRuntimeAliasList === "function") {
+        // nach API call mehrfach nachziehen
+        setTimeout(window.__applyRuntimeAliasList, 50);
+        setTimeout(window.__applyRuntimeAliasList, 200);
+        setTimeout(window.__applyRuntimeAliasList, 600);
+        setTimeout(window.__applyRuntimeAliasList, 1200);
+        setTimeout(window.__applyRuntimeAliasList, 2500);
+      }
+    } catch (e) {}
+
+    return res;
+  };
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__runtimeToastInstalled) return;
+  window.__runtimeToastInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      "toast.public_lnurl_loaded": "Public Daten inkl. LNURL geladen.",
+      "toast.copied": "Kopiert.",
+      "toast.copy_failed": "Kopieren fehlgeschlagen.",
+      "toast.setup_saved_relogin": "Setup und Passwort gespeichert. Bitte jetzt neu einloggen.",
+      "toast.setup_saved": "Setup gespeichert.",
+      "toast.setup_error_prefix": "Setup-Fehler",
+      "toast.public_loaded_lnurl_failed_prefix": "Public Daten geladen. LNURL optional fehlgeschlagen",
+      "toast.load_failed_prefix": "Laden fehlgeschlagen",
+
+      "toast.offer_creating": "Erzeuge neues Offer...",
+      "toast.offer_created": "Neues Offer erfolgreich erzeugt.",
+      "toast.alias_updated": "Alias aktualisiert.",
+
+      "toast.bolt12_address_copied": "BOLT12 Adresse kopiert.",
+      "toast.lnurl_copied": "LNURL kopiert.",
+      "toast.no_preset": "Kein Preset",
+      "toast.lnurl_saved_qr_updated": "LNURL Alias gespeichert und QR aktualisiert.",
+
+      "toast.min_amount_21": "Mindestbetrag gesetzt: 21 sats.",
+      "toast.min_amount_1000": "Mindestbetrag gesetzt: 1000 sats.",
+      "toast.min_amount_10000": "Mindestbetrag gesetzt: 10000 sats.",
+
+      "toast.bolt11_amount_required": "Bitte Betrag für BOLT11 Rechnung eingeben.",
+      "toast.no_bolt11_invoice": "Noch keine BOLT11 Rechnung vorhanden.",
+      "toast.bolt11_invoice_created": "BOLT11 Rechnung erfolgreich erzeugt.",
+      "toast.bolt11_qr_shown": "BOLT11 QR angezeigt.",
+      "toast.bolt11_invoice_copied": "BOLT11 Rechnung kopiert.",
+      "toast.alias_name_required": "Bitte Alias-Namen eingeben.",
+
+      "toast.offer_copied": "Offer kopiert.",
+      "toast.link_copied": "Link kopiert.",
+      "toast.address_copied": "Adresse kopiert.",
+      "toast.qr_updated": "QR aktualisiert."
+    },
+    en: {
+      "toast.public_lnurl_loaded": "Public data including LNURL loaded.",
+      "toast.copied": "Copied.",
+      "toast.copy_failed": "Copy failed.",
+      "toast.setup_saved_relogin": "Setup and password saved. Please log in again.",
+      "toast.setup_saved": "Setup saved.",
+      "toast.setup_error_prefix": "Setup error",
+      "toast.public_loaded_lnurl_failed_prefix": "Public data loaded. Optional LNURL failed",
+      "toast.load_failed_prefix": "Load failed",
+
+      "toast.offer_creating": "Creating new offer...",
+      "toast.offer_created": "New offer created successfully.",
+      "toast.alias_updated": "Alias updated.",
+
+      "toast.bolt12_address_copied": "BOLT12 address copied.",
+      "toast.lnurl_copied": "LNURL copied.",
+      "toast.no_preset": "No preset",
+      "toast.lnurl_saved_qr_updated": "LNURL alias saved and QR updated.",
+
+      "toast.min_amount_21": "Minimum amount set: 21 sats.",
+      "toast.min_amount_1000": "Minimum amount set: 1000 sats.",
+      "toast.min_amount_10000": "Minimum amount set: 10000 sats.",
+
+      "toast.bolt11_amount_required": "Please enter an amount for the BOLT11 invoice.",
+      "toast.no_bolt11_invoice": "No BOLT11 invoice available yet.",
+      "toast.bolt11_invoice_created": "BOLT11 invoice created successfully.",
+      "toast.bolt11_qr_shown": "BOLT11 QR shown.",
+      "toast.bolt11_invoice_copied": "BOLT11 invoice copied.",
+      "toast.alias_name_required": "Please enter an alias name.",
+
+      "toast.offer_copied": "Offer copied.",
+      "toast.link_copied": "Link copied.",
+      "toast.address_copied": "Address copied.",
+      "toast.qr_updated": "QR updated."
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  const directMap = {
+    "toast.public_lnurl_loaded": "toast.public_lnurl_loaded",
+    "toast.copied": "toast.copied",
+    "toast.copy_failed": "toast.copy_failed",
+
+    "Public Daten inkl. LNURL geladen.": "toast.public_lnurl_loaded",
+    "Public data including LNURL loaded.": "toast.public_lnurl_loaded",
+
+    "Kopiert.": "toast.copied",
+    "Copied.": "toast.copied",
+
+    "Kopieren fehlgeschlagen.": "toast.copy_failed",
+    "Copy failed.": "toast.copy_failed",
+
+    "Erzeuge neues Offer...": "toast.offer_creating",
+    "Creating new offer...": "toast.offer_creating",
+
+    "Neues Offer erfolgreich erzeugt.": "toast.offer_created",
+    "New offer created successfully.": "toast.offer_created",
+
+    "BOLT12 Adresse kopiert.": "toast.bolt12_address_copied",
+    "BOLT12 address copied.": "toast.bolt12_address_copied",
+
+    "LNURL kopiert.": "toast.lnurl_copied",
+    "LNURL copied.": "toast.lnurl_copied",
+
+    "Kein Preset": "toast.no_preset",
+    "No preset": "toast.no_preset",
+
+    "LNURL Alias gespeichert und QR aktualisiert.": "toast.lnurl_saved_qr_updated",
+    "LNURL alias saved and QR updated.": "toast.lnurl_saved_qr_updated",
+
+    "Mindestbetrag gesetzt: 21 sats.": "toast.min_amount_21",
+    "Minimum amount set: 21 sats.": "toast.min_amount_21",
+
+    "Mindestbetrag gesetzt: 1000 sats.": "toast.min_amount_1000",
+    "Minimum amount set: 1000 sats.": "toast.min_amount_1000",
+
+    "Mindestbetrag gesetzt: 10000 sats.": "toast.min_amount_10000",
+    "Minimum amount set: 10000 sats.": "toast.min_amount_10000",
+
+    "Bitte Betrag für BOLT11 Rechnung eingeben.": "toast.bolt11_amount_required",
+    "Please enter an amount for the BOLT11 invoice.": "toast.bolt11_amount_required",
+
+    "Noch keine BOLT11 Rechnung vorhanden.": "toast.no_bolt11_invoice",
+    "No BOLT11 invoice available yet.": "toast.no_bolt11_invoice",
+
+    "BOLT11 Rechnung erfolgreich erzeugt.": "toast.bolt11_invoice_created",
+    "BOLT11 invoice created successfully.": "toast.bolt11_invoice_created",
+
+    "BOLT11 QR angezeigt.": "toast.bolt11_qr_shown",
+    "BOLT11 QR shown.": "toast.bolt11_qr_shown",
+
+    "BOLT11 Rechnung kopiert.": "toast.bolt11_invoice_copied",
+    "BOLT11 invoice copied.": "toast.bolt11_invoice_copied",
+
+    "Bitte Alias-Namen eingeben.": "toast.alias_name_required",
+    "Please enter an alias name.": "toast.alias_name_required",
+
+    "Offer kopiert.": "toast.offer_copied",
+    "Offer copied.": "toast.offer_copied",
+
+    "Link kopiert.": "toast.link_copied",
+    "Link copied.": "toast.link_copied",
+
+    "Alias aktualisiert.": "toast.alias_updated",
+    "Alias updated.": "toast.alias_updated",
+
+    "Adresse kopiert.": "toast.address_copied",
+    "Address copied.": "toast.address_copied",
+
+    "QR aktualisiert.": "toast.qr_updated",
+    "QR updated.": "toast.qr_updated"
+  };
+
+  function normalizeMessage(msg) {
+    if (typeof msg !== "string") return msg;
+    const m = msg.trim();
+
+    if (directMap[m]) return tx(directMap[m]);
+
+    if (m.startsWith("Setup-Fehler:") || m.startsWith("Setup error:")) {
+      const rest = m.split(":").slice(1).join(":").trim();
+      return `${tx("toast.setup_error_prefix")}: ${rest}`;
+    }
+
+    if (
+      m.startsWith("Public Daten geladen. LNURL optional fehlgeschlagen:") ||
+      m.startsWith("Public data loaded. Optional LNURL failed:")
+    ) {
+      const rest = m.split(":").slice(1).join(":").trim();
+      return `${tx("toast.public_loaded_lnurl_failed_prefix")}: ${rest}`;
+    }
+
+    if (m.startsWith("Laden fehlgeschlagen:") || m.startsWith("Load failed:")) {
+      const rest = m.split(":").slice(1).join(":").trim();
+      return `${tx("toast.load_failed_prefix")}: ${rest}`;
+    }
+
+    return msg;
+  }
+
+  function patchVisibleToastNodes() {
+    const selectors = [".toast", "#toast", ".status", "#statusMessage", ".statusMessage"];
+    const nodes = Array.from(document.querySelectorAll(selectors.join(",")));
+    nodes.forEach((el) => {
+      const current = (el.textContent || "").trim();
+      const next = normalizeMessage(current);
+      if (next && next !== current) {
+        el.textContent = next;
+      }
+    });
+  }
+
+  if (typeof window.setStatus === "function" && !window.__runtimeToastSetStatusWrapped) {
+    window.__runtimeToastSetStatusWrapped = true;
+    const oldSetStatus = window.setStatus;
+    window.setStatus = function (message, type, sticky) {
+      return oldSetStatus(normalizeMessage(message), type, sticky);
+    };
+  }
+
+  function scheduleToastPatch() {
+    setTimeout(patchVisibleToastNodes, 0);
+    setTimeout(patchVisibleToastNodes, 50);
+    setTimeout(patchVisibleToastNodes, 150);
+    setTimeout(patchVisibleToastNodes, 400);
+  }
+
+  function bindToastLangButtons() {
+    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.toastBound === "1") return;
+      btn.dataset.toastBound = "1";
+      btn.addEventListener("click", scheduleToastPatch);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindToastLangButtons();
+    scheduleToastPatch();
+  });
+  window.addEventListener("load", () => {
+    bindToastLangButtons();
+    scheduleToastPatch();
+  });
+  setTimeout(() => {
+    bindToastLangButtons();
+    scheduleToastPatch();
+  }, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__runtimeFinalI18nInstalled) return;
+  window.__runtimeFinalI18nInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  function t(de, en) {
+    return lang() === "en" ? en : de;
+  }
+
+  // ---------- DYNAMIC TOASTS ----------
+
+  function normalizeDynamic(msg) {
+    if (typeof msg !== "string") return msg;
+
+    // Alias created
+    msg = msg.replace(
+      /^Alias (.+) angelegt\.$/,
+      (_, a) => t(`Alias ${a} angelegt.`, `Alias ${a} created.`)
+    );
+
+    // Alias published
+    msg = msg.replace(
+      /^Alias (.+) veröffentlicht\.$/,
+      (_, a) => t(`Alias ${a} veröffentlicht.`, `Alias ${a} published.`)
+    );
+
+    msg = msg.replace(
+      /^Alias (.+) aktualisiert\.$/,
+      (_, a) => t(`Alias ${a} aktualisiert.`, `Alias ${a} updated.`)
+    );
+
+    // Alias deleted
+    msg = msg.replace(
+      /^Alias (.+) gelöscht\.$/,
+      (_, a) => t(`Alias ${a} gelöscht.`, `Alias ${a} deleted.`)
+    );
+
+    // Alias + DNS deleted
+    msg = msg.replace(
+      /^Alias (.+) und DNS gelöscht\.$/,
+      (_, a) => t(`Alias ${a} und DNS gelöscht.`, `Alias ${a} and DNS deleted.`)
+    );
+
+    // Offer renewed
+    msg = msg.replace(
+      /^Offer für (.+) erneuert\.$/,
+      (_, a) => t(`Offer für ${a} erneuert.`, `Offer for ${a} renewed.`)
+    );
+
+    // Link copied
+    msg = msg.replace(
+      /^Alias-Link (.+) kopiert\.$/,
+      (_, url) => t(`Alias-Link ${url} kopiert.`, `Alias link ${url} copied.`)
+    );
+
+    // Address copied
+    msg = msg.replace(
+      /^Adresse (.+) kopiert\.$/,
+      (_, addr) => t(`Adresse ${addr} kopiert.`, `Address ${addr} copied.`)
+    );
+
+    // Address QR
+    msg = msg.replace(
+      /^Adress-QR für Alias (.+) angezeigt\.$/,
+      (_, a) => t(`Adress-QR für Alias ${a} angezeigt.`, `Address QR for alias ${a} shown.`)
+    );
+
+    // Offer QR
+    msg = msg.replace(
+      /^Offer-QR für Alias (.+) angezeigt\.$/,
+      (_, a) => t(`Offer-QR für Alias ${a} angezeigt.`, `Offer QR for alias ${a} shown.`)
+    );
+
+    return msg;
+  }
+
+  // setStatus erweitern
+  if (typeof window.setStatus === "function" && !window.__runtimeFinalStatusWrapped) {
+    window.__runtimeFinalStatusWrapped = true;
+    const old = window.setStatus;
+    window.setStatus = function (msg, type, sticky) {
+      return old(normalizeDynamic(msg), type, sticky);
+    };
+  }
+
+  // ---------- CONFIRM POPUPS ----------
+
+  const oldConfirm = window.confirm;
+  window.confirm = function (msg) {
+    if (typeof msg === "string") {
+
+      msg = msg.replace(
+        /^Alias (.+) wirklich löschen\?$/,
+        (_, a) => t(`Alias ${a} wirklich löschen?`, `Delete alias ${a}?`)
+      );
+
+      msg = msg.replace(
+        /^Alias (.+) wirklich löschen und DNS Record entfernen\?$/,
+        (_, a) => t(
+          `Alias ${a} wirklich löschen und DNS Record entfernen?`,
+          `Delete alias ${a} and remove DNS record?`
+        )
+      );
+
+      msg = msg.replace(
+        /^Neue Beschreibung:$/,
+        () => t("Neue Beschreibung:", "New description:")
+      );
+
+      msg = msg.replace(
+        /^Neuer Betrag in sats \(leer = variabel\):$/,
+        () => t("Neuer Betrag in sats (leer = variabel):", "New amount in sats (empty = variable):")
+      );
+    }
+    return oldConfirm(msg);
+  };
+
+  const oldPrompt = window.prompt;
+  window.prompt = function (msg, def) {
+    if (typeof msg === "string") {
+      msg = msg.replace(
+        /^Neue Beschreibung:$/,
+        () => t("Neue Beschreibung:", "New description:")
+      );
+
+      msg = msg.replace(
+        /^Neuer Betrag in sats \(leer = variabel\):$/,
+        () => t("Neuer Betrag in sats (leer = variabel):", "New amount in sats (empty = variable):")
+      );
+    }
+    return oldPrompt(msg, def);
+  };
+
+  // ---------- TOOLTIP / TITLE ----------
+
+  function patchTitles() {
+    const map = {
+      "Veröffentlichen": "Publish",
+      "Bearbeiten": "Edit",
+      "Löschen": "Delete",
+      "Löschen + DNS": "Delete + DNS",
+      "Link kopieren": "Copy link",
+      "Adresse kopieren": "Copy address",
+      "Offer kopieren": "Copy offer",
+      "Öffnen": "Open",
+      "Zur Startseite": "Back to homepage",
+      "Antippen = kopieren + QR auf BOLT12-Adresse umschalten.": "Tap = copy + switch QR to BOLT12 address.",
+      "Antippen = kopieren + QR auf BOLT12-Adresse umschalten": "Tap = copy + switch QR to BOLT12 address.",
+      "Antippen = kopieren + QR auf LNURL-Fallback umschalten.": "Tap = copy + switch QR to LNURL fallback.",
+      "Antippen = kopieren + QR auf LNURL-Fallback umschalten": "Tap = copy + switch QR to LNURL fallback.",
+      "Antippen = kopieren + QR auf Offer umschalten.": "Tap = copy + switch QR to offer.",
+      "Antippen = kopieren + QR auf Offer umschalten": "Tap = copy + switch QR to offer.",
+      "Antippen = kopieren + QR auf BOLT11 Rechnung umschalten.": "Tap = copy + switch QR to BOLT11 invoice.",
+      "Antippen = kopieren + QR auf BOLT11 Rechnung umschalten": "Tap = copy + switch QR to BOLT11 invoice."
+    };
+
+    document.querySelectorAll("[title]").forEach(el => {
+      const txt = el.getAttribute("title");
+      if (!txt) return;
+
+      if (lang() === "en" && map[txt]) {
+        el.setAttribute("title", map[txt]);
+      }
+      if (lang() === "de") {
+        for (const k in map) {
+          if (map[k] === txt) {
+            el.setAttribute("title", k);
+          }
+        }
+      }
+    });
+  }
+
+  function schedule() {
+    setTimeout(patchTitles, 0);
+    setTimeout(patchTitles, 100);
+    setTimeout(patchTitles, 400);
+  }
+
+  function bindTooltipLangButtons() {
+    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.tooltipBound === "1") return;
+      btn.dataset.tooltipBound = "1";
+      btn.addEventListener("click", () => {
+        setTimeout(schedule, 0);
+        setTimeout(schedule, 50);
+        setTimeout(schedule, 150);
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindTooltipLangButtons();
+    schedule();
+  });
+  window.addEventListener("load", () => {
+    bindTooltipLangButtons();
+    schedule();
+  });
+  setTimeout(() => {
+    bindTooltipLangButtons();
+    schedule();
+  }, 0);
+
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__aliasEmptyStateLangBindInstalled) return;
+  window.__aliasEmptyStateLangBindInstalled = true;
+
+  function rerenderLater() {
+    if (typeof window.__rerenderAliasEmptyState !== "function") return;
+    setTimeout(window.__rerenderAliasEmptyState, 0);
+    setTimeout(window.__rerenderAliasEmptyState, 50);
+    setTimeout(window.__rerenderAliasEmptyState, 150);
+  }
+
+  function bind() {
+    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay", "langBtnDe", "langBtnEn"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.aliasEmptyBound === "1") return;
+      btn.dataset.aliasEmptyBound = "1";
+      btn.addEventListener("click", rerenderLater);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bind();
+    rerenderLater();
+  });
+  window.addEventListener("load", () => {
+    bind();
+    rerenderLater();
+  });
+  setTimeout(() => {
+    bind();
+    rerenderLater();
+  }, 0);
+})();
+</script>
+
 </body>
 </html>

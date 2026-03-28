@@ -66,8 +66,8 @@
       </div>
     </div>
 
-    <label for="password">Passwort</label>
-    <input id="password" type="password" autocomplete="current-password" placeholder="Passwort eingeben" />
+    <label for="password" id="passwordLabel">Password</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="Enter password" />
 
     <button id="loginBtn" type="button">Login</button>
     <div id="msg" class="error"></div>
@@ -95,7 +95,11 @@
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
-          msgEl.textContent = data.detail || data.error || "Login fehlgeschlagen";
+          msgEl.textContent = (typeof data.detail === "string" && data.detail)
+            || (typeof data.error === "string" && data.error)
+            || ((localStorage.getItem("app_lang") || "de") === "en"
+                ? "Invalid password"
+                : "Ungültiges Passwort");
           loginBtn.disabled = false;
           loginBtn.textContent = "Login";
           return;
@@ -115,5 +119,144 @@
       if (ev.key === "Enter") doLogin();
     });
   </script>
+
+<script>
+(function () {
+  if (window.__payLoginI18nInstalled) return;
+  window.__payLoginI18nInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      password_label: "Passwort",
+      password_ph: "Passwort eingeben",
+      login_btn: "Login",
+      empty_password: "Bitte Passwort eingeben.",
+      invalid_password: "Ungültiges Passwort"
+    },
+    en: {
+      password_label: "Password",
+      password_ph: "Enter password",
+      login_btn: "Login",
+      empty_password: "Please enter a password.",
+      invalid_password: "Invalid password"
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function applyPayLoginI18n() {
+    const label = document.getElementById("passwordLabel");
+    const input = document.getElementById("password");
+    const btn = document.getElementById("loginBtn");
+
+    if (label) label.textContent = tx("password_label");
+    if (input) input.placeholder = tx("password_ph");
+    if (btn) btn.textContent = tx("login_btn");
+  }
+
+  function normalizeErrorMessage(msg) {
+    if (typeof msg !== "string") {
+      if (msg && typeof msg.detail === "string") {
+        msg = msg.detail;
+      } else if (msg && typeof msg.message === "string") {
+        msg = msg.message;
+      } else {
+        return tx("invalid_password");
+      }
+    }
+
+    const m = msg.trim();
+
+    if (
+      m === "[object Object]" ||
+      m === "Object object" ||
+      m === "undefined" ||
+      m === "null"
+    ) {
+      return tx("invalid_password");
+    }
+
+    if (
+      m === "Please enter a password." ||
+      m === "Bitte Passwort eingeben."
+    ) {
+      return tx("empty_password");
+    }
+
+    if (
+      m === "Invalid password" ||
+      m === "Ungültiges Passwort"
+    ) {
+      return tx("invalid_password");
+    }
+
+    return msg;
+  }
+
+  function patchErrorRendering() {
+    const errorEl = document.getElementById("error");
+    if (!errorEl) return;
+
+    const originalSetter = errorEl.__payLoginPatched;
+    if (originalSetter) return;
+    errorEl.__payLoginPatched = true;
+
+    const observer = new MutationObserver(() => {
+      const txt = (errorEl.textContent || "").trim();
+      if (!txt) return;
+      const fixed = normalizeErrorMessage(txt);
+      if (fixed !== txt) {
+        errorEl.textContent = fixed;
+      }
+    });
+
+    observer.observe(errorEl, { childList: true, characterData: true, subtree: true });
+  }
+
+  function patchLoginHandler() {
+    const btn = document.getElementById("loginBtn");
+    const passwordEl = document.getElementById("password");
+    const errorEl = document.getElementById("error");
+
+    if (!btn || !passwordEl || !errorEl) return;
+    if (btn.dataset.payLoginPatchBound === "1") return;
+    btn.dataset.payLoginPatchBound = "1";
+
+    btn.addEventListener("click", () => {
+      if (!(passwordEl.value || "").trim()) {
+        setTimeout(() => {
+          errorEl.textContent = tx("empty_password");
+        }, 0);
+      }
+    }, true);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    applyPayLoginI18n();
+    patchErrorRendering();
+    patchLoginHandler();
+  });
+
+  window.addEventListener("load", () => {
+    applyPayLoginI18n();
+    patchErrorRendering();
+    patchLoginHandler();
+  });
+
+  setTimeout(() => {
+    applyPayLoginI18n();
+    patchErrorRendering();
+    patchLoginHandler();
+  }, 0);
+})();
+</script>
+
 </body>
 </html>

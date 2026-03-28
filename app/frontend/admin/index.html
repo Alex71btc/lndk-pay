@@ -748,8 +748,8 @@ main.card .headerRow {
 
   <div class="scannerModal" id="scannerModal" aria-hidden="true">
     <div class="scannerCard">
-      <h2>QR-Scanner</h2>
-      <div class="scannerHint" id="scannerTitle">Scanne ein Offer oder eine BIP353-Adresse.</div>
+      <h2><span data-i18n="scanner.title">QR-Scanner</span></h2>
+      <div class="scannerHint" id="scannerTitle" data-i18n="scanner.subtitle.generic">Scanne ein Offer oder eine BIP353-Adresse.</div>
 
       <div class="scannerViewport">
         <video id="scannerVideo" autoplay playsinline muted></video>
@@ -757,13 +757,13 @@ main.card .headerRow {
       </div>
 
       <div class="row">
-        <button class="secondary" id="closeScannerBtn" type="button">Scanner schließen</button>
+        <button class="secondary" id="closeScannerBtn" type="button"><span data-i18n="scanner.close">Scanner schließen</span></button>
       </div>
 
-      <div class="scannerHint">
+      <div class="scannerHint"><span id="scannerBottomHint" data-i18n="scanner.hint">
         Scannt <span class="mono">lno...</span>, <span class="mono">lightning:...</span>,
         <span class="mono">bitcoin:...</span> oder <span class="mono">user@domain</span>.
-      </div>
+      </span></div>
     </div>
   </div>
 
@@ -1420,8 +1420,7 @@ async function saveIdentityConfig() {
 
   const btn = document.getElementById('saveIdentityBtn');
   btn.disabled = true;
-  const oldText = btn.textContent;
-  btn.textContent = 'Speichere...';
+  btn.innerHTML = `<span data-i18n="btn.identity_save_busy">${window.__t('btn.identity_save_busy')}</span>`;
 
   try {
     const response = await fetch('/api/identity-config', {
@@ -1446,7 +1445,7 @@ async function saveIdentityConfig() {
     setStatus(`Fehler: ${message}`, 'error', true);
   } finally {
     btn.disabled = false;
-    btn.textContent = oldText;
+    btn.innerHTML = `<span data-i18n="btn.identity_save">${window.__t('btn.identity_save')}</span>`;
   }
 }
     function applyScanResult(rawValue) {
@@ -1471,8 +1470,19 @@ async function saveIdentityConfig() {
       scanTarget = target;
       scannerTitle.textContent =
         target === 'pay'
-          ? 'Scanne ein Offer oder eine BIP353-Adresse für Pay.'
-          : 'Scanne ein Offer oder eine BIP353-Adresse für Decode.';
+          ? window.__t('scanner.subtitle.pay')
+          : window.__t('scanner.subtitle.decode');
+
+      const scannerHints = Array.from(document.querySelectorAll('.scannerHint'));
+      scannerHints.forEach((el) => {
+        const txt = (el.textContent || '').trim();
+        if (
+          txt === 'Scannt lno..., lightning:..., bitcoin:... oder user@domain.' ||
+          txt === 'Scans lno..., lightning:..., bitcoin:... or user@domain.'
+        ) {
+          el.textContent = window.__t('scanner.hint');
+        }
+      });
 
       if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
         setStatus(window.__t('toast.qr_https_required'), 'error', true);
@@ -1573,7 +1583,7 @@ async function saveIdentityConfig() {
 
       const btn = document.getElementById('createOfferBtn');
       btn.disabled = true;
-      btn.textContent = 'Erzeuge...';
+      btn.innerHTML = `<span data-i18n="btn.create_busy">${window.__t('btn.create_busy')}</span>`;
       setStatus(window.__t('toast.create_start'), 'warn');
 
       try {
@@ -1603,7 +1613,7 @@ async function saveIdentityConfig() {
         setStatus(`Fehler: ${message}`, 'error', true);
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Offer erzeugen';
+        btn.innerHTML = `<span data-i18n="btn.create">${window.__t('btn.create')}</span>`;
       }
     });
 
@@ -2169,6 +2179,7 @@ window.addEventListener('load', async () => {
       "title.create": "Offer erzeugen",
       "btn.pay": "⚡ Zahlung starten",
       "btn.create": "Offer erzeugen",
+      "btn.create_busy": "Erzeuge...",
       "label.amount": "Zahlbetrag in sats",
       "label.min": "Mindestbetrag in sats",
       "label.desc": "Beschreibung / Label",
@@ -2254,6 +2265,13 @@ window.addEventListener('load', async () => {
       "toast.qr_lib_missing": "html5-qrcode konnte nicht geladen werden.",
       "toast.camera_denied": "Kein Kamera-Zugriff erlaubt.",
       "toast.scanner_closed": "Scanner geschlossen.",
+
+      "scanner.title": "QR-Scanner",
+      "scanner.subtitle.generic": "Scanne ein Offer oder eine BIP353-Adresse.",
+      "scanner.subtitle.pay": "Scanne ein Offer oder eine BIP353-Adresse für Pay.",
+      "scanner.subtitle.decode": "Scanne ein Offer oder eine BIP353-Adresse für Decode.",
+      "scanner.close": "Scanner schließen",
+      "scanner.hint": "Scannt lno..., lightning:..., bitcoin:... oder user@domain.",
       "toast.identity_loaded": "Identity geladen:",
       "toast.identity_saved": "Identity gespeichert:",
       "toast.address_copied": "Adresse kopiert.",
@@ -2278,6 +2296,7 @@ window.addEventListener('load', async () => {
       "label.zap_enabled": "Zap / Nostr aktiv",
       "btn.identity_load": "Identity laden",
       "btn.identity_save": "Identity speichern",
+      "btn.identity_save_busy": "Speichere...",
       "hint.identity": "Ordnet einer Lightning Address wie name@domain einen Nostr Pubkey zu. Diese Zuordnung wird für NIP-05 und LNURL Zaps verwendet.",
       "label.identity_result": "Identity Ergebnis",
       "ph.identity_result": "Hier erscheint die Identity-Konfiguration...",
@@ -2320,6 +2339,7 @@ window.addEventListener('load', async () => {
       "title.create": "Create offer",
       "btn.pay": "⚡ Start payment",
       "btn.create": "Create offer",
+      "btn.create_busy": "Creating...",
       "label.amount": "Amount in sats",
       "label.min": "Minimum amount in sats",
       "label.desc": "Description / Label",
@@ -2405,6 +2425,13 @@ window.addEventListener('load', async () => {
       "toast.qr_lib_missing": "html5-qrcode could not be loaded.",
       "toast.camera_denied": "Camera access was denied.",
       "toast.scanner_closed": "Scanner closed.",
+
+      "scanner.title": "QR Scanner",
+      "scanner.subtitle.generic": "Scan an offer or a BIP353 address.",
+      "scanner.subtitle.pay": "Scan an offer or a BIP353 address for Pay.",
+      "scanner.subtitle.decode": "Scan an offer or a BIP353 address for Decode.",
+      "scanner.close": "Close scanner",
+      "scanner.hint": "Scans lno..., lightning:..., bitcoin:... or user@domain.",
       "toast.identity_loaded": "Identity loaded:",
       "toast.identity_saved": "Identity saved:",
       "toast.address_copied": "Address copied.",
@@ -2429,6 +2456,7 @@ window.addEventListener('load', async () => {
       "label.zap_enabled": "Enable Zap / Nostr",
       "btn.identity_load": "Load identity",
       "btn.identity_save": "Save identity",
+      "btn.identity_save_busy": "Saving...",
       "hint.identity": "Assigns a Nostr pubkey to a Lightning Address like name@domain. This mapping is used for NIP-05 and LNURL zaps.",
       "label.identity_result": "Identity result",
       "ph.identity_result": "The identity configuration will appear here...",
@@ -2489,6 +2517,231 @@ window.addEventListener('load', async () => {
   }
 
   document.addEventListener("DOMContentLoaded", applyTranslations);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__adminTooltipRuntimeInstalled) return;
+  window.__adminTooltipRuntimeInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  function patchTitles() {
+    const map = {
+      "Zur Startseite": "Back to homepage",
+      "Zum Kopieren antippen": "Tap to copy"
+    };
+
+    document.querySelectorAll("[title]").forEach((el) => {
+      const txt = el.getAttribute("title");
+      if (!txt) return;
+
+      if (lang() === "en" && map[txt]) {
+        el.setAttribute("title", map[txt]);
+      } else if (lang() === "de") {
+        for (const de in map) {
+          const en = map[de];
+          if (txt === en) {
+            el.setAttribute("title", de);
+          }
+        }
+      }
+    });
+  }
+
+  function scheduleTitles() {
+    setTimeout(patchTitles, 0);
+    setTimeout(patchTitles, 50);
+    setTimeout(patchTitles, 150);
+  }
+
+  function bindLangButtons() {
+    ["langBtnDe", "langBtnEn"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.adminTooltipBound === "1") return;
+      btn.dataset.adminTooltipBound = "1";
+      btn.addEventListener("click", scheduleTitles);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindLangButtons();
+    scheduleTitles();
+  });
+  window.addEventListener("load", () => {
+    bindLangButtons();
+    scheduleTitles();
+  });
+  setTimeout(() => {
+    bindLangButtons();
+    scheduleTitles();
+  }, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__adminQrScannerRuntimeInstalled) return;
+  window.__adminQrScannerRuntimeInstalled = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  const T = {
+    de: {
+      title: "QR-Scanner",
+      pay_subtitle: "Scanne ein Offer oder eine BIP353-Adresse für Pay.",
+      decode_subtitle: "Scanne ein Offer oder eine BIP353-Adresse für Decode.",
+      close: "Scanner schließen",
+      hint: "Scannt lno..., lightning:..., bitcoin:... oder user@domain.",
+      start_failed_prefix: "Scanner-Start fehlgeschlagen:"
+    },
+    en: {
+      title: "QR Scanner",
+      pay_subtitle: "Scan an offer or a BIP353 address for Pay.",
+      decode_subtitle: "Scan an offer or a BIP353 address for Decode.",
+      close: "Close scanner",
+      hint: "Scans lno..., lightning:..., bitcoin:... or user@domain.",
+      start_failed_prefix: "Scanner start failed:"
+    }
+  };
+
+  function tx(key) {
+    const l = lang();
+    return (T[l] && T[l][key]) || T.de[key] || key;
+  }
+
+  function applyAdminQrScannerRuntime() {
+    const title = document.getElementById("qrScannerTitle");
+    const paySubtitle = document.getElementById("qrScannerPaySubtitle");
+    const decodeSubtitle = document.getElementById("qrScannerDecodeSubtitle");
+    const subtitle = document.getElementById("qrScannerSubtitle");
+    const closeBtn = document.getElementById("closeScannerBtn");
+    const hint = document.getElementById("qrScannerHint") || document.getElementById("qrScannerGenericHint");
+    const bottomHint = document.getElementById("scannerBottomHint");
+
+    if (title) title.textContent = tx("title");
+    if (paySubtitle) paySubtitle.textContent = tx("pay_subtitle");
+    if (decodeSubtitle) decodeSubtitle.textContent = tx("decode_subtitle");
+    if (subtitle && !paySubtitle && !decodeSubtitle) subtitle.textContent = tx("pay_subtitle");
+    if (closeBtn) closeBtn.textContent = tx("close");
+    if (hint) hint.textContent = tx("hint");
+    if (bottomHint) bottomHint.textContent = tx("hint");
+  }
+
+  window.__applyAdminQrScannerRuntime = applyAdminQrScannerRuntime;
+
+  if (typeof window.setStatus === "function" && !window.__adminQrScannerErrorWrapped) {
+    window.__adminQrScannerErrorWrapped = true;
+    const oldSetStatus = window.setStatus;
+    window.setStatus = function (message, type, sticky) {
+      if (typeof message === "string") {
+        message = message.replace(
+          /^Scanner-Start fehlgeschlagen:\s*(.*)$/,
+          (_, rest) => `${tx("start_failed_prefix")} ${rest}`
+        );
+        message = message.replace(
+          /^Scanner start failed:\s*(.*)$/,
+          (_, rest) => `${tx("start_failed_prefix")} ${rest}`
+        );
+      }
+      return oldSetStatus(message, type, sticky);
+    };
+  }
+
+  function bindLangButtons() {
+    ["langBtnDe", "langBtnEn"].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset.adminQrScannerBound === "1") return;
+      btn.dataset.adminQrScannerBound = "1";
+      btn.addEventListener("click", () => {
+        setTimeout(applyAdminQrScannerRuntime, 0);
+        setTimeout(applyAdminQrScannerRuntime, 50);
+        setTimeout(applyAdminQrScannerRuntime, 150);
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindLangButtons();
+    applyAdminQrScannerRuntime();
+  });
+  window.addEventListener("load", () => {
+    bindLangButtons();
+    applyAdminQrScannerRuntime();
+  });
+  setTimeout(() => {
+    bindLangButtons();
+    applyAdminQrScannerRuntime();
+  }, 0);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__adminScannerTextSafePatch) return;
+  window.__adminScannerTextSafePatch = true;
+
+  function lang() {
+    return localStorage.getItem("app_lang") || "de";
+  }
+
+  function t(de, en) {
+    return lang() === "en" ? en : de;
+  }
+
+  // Nur Text-Normalisierung, KEIN DOM-Manipulations-Wahnsinn
+  if (typeof window.setStatus === "function" && !window.__adminScannerSafeWrapped) {
+    window.__adminScannerSafeWrapped = true;
+
+    const old = window.setStatus;
+
+    window.setStatus = function (msg, type, sticky) {
+
+      if (typeof msg === "string") {
+
+        msg = msg.replace(
+          /^Scanne ein Offer oder eine BIP353-Adresse für Pay\.$/,
+          () => t(
+            "Scanne ein Offer oder eine BIP353-Adresse für Pay.",
+            "Scan an offer or a BIP353 address for Pay."
+          )
+        );
+
+        msg = msg.replace(
+          /^Scanne ein Offer oder eine BIP353-Adresse für Decode\.$/,
+          () => t(
+            "Scanne ein Offer oder eine BIP353-Adresse für Decode.",
+            "Scan an offer or a BIP353 address for Decode."
+          )
+        );
+
+        msg = msg.replace(
+          /^Scannt lno\.\.\., lightning:\.\.\., bitcoin:\.\.\. oder user@domain\.$/,
+          () => t(
+            "Scannt lno..., lightning:..., bitcoin:... oder user@domain.",
+            "Scans lno..., lightning:..., bitcoin:... or user@domain."
+          )
+        );
+
+        msg = msg.replace(
+          /^Scanner schließen$/,
+          () => t("Scanner schließen", "Close scanner")
+        );
+
+      }
+
+      return old(msg, type, sticky);
+    };
+  }
+
 })();
 </script>
 

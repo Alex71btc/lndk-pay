@@ -996,6 +996,7 @@ def _resolve_bip353_address(address: str) -> str:
             if hasattr(answer, "strings"):
                 txt_value = "".join(
                     part.decode("utf-8") if isinstance(part, (bytes, bytearray)) else str(part)
+
                     for part in answer.strings
                 )
             else:
@@ -2509,27 +2510,27 @@ async def public_index_page():
     for alias_name, alias in aliases.items():
         description = alias.get("description") or "Lightning payment"
         amount_sat = alias.get("amount_sat")
-        amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
+        amount_label = f"{amount_sat} sats" if amount_sat else "variable amount"
 
         items_html += f"""
         <div class="aliasCard">
           <div class="aliasTitle mono">{alias_name}@{get_lnurl_base_domain()}</div>
           <div class="aliasMeta">
             {description}<br />
-            Betrag: {amount_label}
+            Amount: {amount_label}
           </div>
           <div class="row">
-            <button onclick="window.location.href='/{alias_name}'">Öffnen</button>
-            <button class="secondary" onclick="navigator.clipboard.writeText('{alias_name}@{get_lnurl_base_domain()}')">Adresse kopieren</button>
+            <button onclick="window.location.href='/{alias_name}'">Open</button>
+            <button class="secondary" onclick="navigator.clipboard.writeText('{alias_name}@{get_lnurl_base_domain()}')">Copy address</button>
           </div>
         </div>
         """
 
     if not items_html:
         items_html = """
-        <div class="aliasCard">
-          <div class="aliasMeta">Noch keine öffentlichen Aliase vorhanden.</div>
-        </div>
+    <div class="aliasCard" data-empty-alias-list="1">
+      <div class="aliasMeta">No public aliases available yet.</div>
+    </div>
         """
 
     html = f"""
@@ -2631,30 +2632,193 @@ async def public_index_page():
   </style>
 </head>
 <body>
-  <main class="card">
+<main class="card">
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+    <div style="
+      display:inline-flex;
+      gap:4px;
+      padding:4px;
+      border-radius:16px;
+      border:1px solid #26324a;
+      background:rgba(19,28,46,.92);
+    ">
+      <button id="landingLangDe"
+        style="
+          min-width:36px;
+          height:26px;
+          padding:0 8px;
+          border-radius:10px;
+          border:none;
+          background:transparent;
+          color:#a7b0c3;
+          font-size:.78rem;
+          font-weight:700;
+        "
+      >DE</button>
+
+      <button id="landingLangEn"
+        style="
+          min-width:36px;
+          height:26px;
+          padding:0 8px;
+          border-radius:10px;
+          font-size:.78rem;
+          border:none;
+          background:#3a4254;
+          color:#eef2ff;
+          font-weight:700;
+        "
+      >EN</button>
+    </div>
+  </div>
 <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px;">
-  <a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+  <a href="{HOME_URL}" aria-label="Back to homepage" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
     <img
       src="/assets/icon.png"
       alt="BOLT12 Pay Server Logo"
       style="width:72px;height:72px;object-fit:contain;display:block;cursor:pointer;filter:drop-shadow(0 0 3px rgba(255,200,0,0.35));"
     >
   </a>
-  <h1 style="margin:0;">⚡ Lightning Payments</h1>
+<h1 id="landingTitle" style="margin:0;">⚡ Lightning Payments</h1>
 </div>
-    <div class="sub">
-      Öffentliche Zahlungsseiten auf <span class="mono">{get_lnurl_base_domain()}</span><br />
-      <span style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 Fallback</span>
-    </div>
+<div class="sub">
+  <span id="landingSubtitle">Public payment pages on</span> <span class="mono">{get_lnurl_base_domain()}</span><br />
+  <span id="landingSubline" style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 fallback</span>
+</div>
     <div class="row" style="margin-bottom: 18px;">
-      <button class="secondary" onclick="window.location.href='/app'">Open App</button>
-      <button class="secondary" onclick="window.location.href='/pay'">Open Pay</button>
-      <button class="secondary" onclick="window.location.href='/app?setup=1'">Setup Wizard</button>
+<button id="landingOpenApp" class="secondary" onclick="window.location.href='/app'">Open App</button>
+<button id="landingOpenPay" class="secondary" onclick="window.location.href='/pay'">Open Pay</button>
+<button id="landingSetup" class="secondary" onclick="window.location.href='/app?setup=1'">Setup Wizard</button>
     </div>
     <div class="aliasList">
       {items_html}
     </div>
   </main>
+<script>
+(function () {{
+  const T = {{
+    en: {{
+      title: "⚡ Lightning Payments",
+      subtitle: "Public payment pages on",
+      subline: "BOLT12 • Lightning Address • BOLT11 fallback",
+      openApp: "Open App",
+      openPay: "Open Pay",
+      setup: "Setup Wizard",
+      empty: "No public aliases available yet."
+    }},
+    de: {{
+      title: "⚡ Lightning Zahlungen",
+      subtitle: "Öffentliche Zahlungsseiten auf",
+      subline: "BOLT12 • Lightning Address • BOLT11 Fallback",
+      openApp: "App öffnen",
+      openPay: "Bezahlen öffnen",
+      setup: "Setup Assistent",
+      empty: "Noch keine öffentlichen Aliase vorhanden."
+    }}
+  }};
+function getLang() {{
+  const stored = localStorage.getItem("app_lang");
+  if (stored) return stored;
+
+  const nav = navigator.language || "";
+  if (nav.startsWith("de")) return "de";
+
+  return "en";
+}}
+
+
+  window.setLang = function (lang) {{
+    localStorage.setItem("app_lang", lang);
+    applyLang();
+  }};
+
+  function setActive(lang) {{
+    const deBtn = document.getElementById("landingLangDe");
+    const enBtn = document.getElementById("landingLangEn");
+    if (!deBtn || !enBtn) return;
+
+    const activeBg = "#3a4254";
+    const activeColor = "#eef2ff";
+    const idleBg = "transparent";
+    const idleColor = "#a7b0c3";
+
+    [deBtn, enBtn].forEach((btn) => {{
+      btn.style.boxShadow = "none";
+      btn.style.border = "none";
+    }});
+
+    if (lang === "de") {{
+      deBtn.style.background = activeBg;
+      deBtn.style.color = activeColor;
+      enBtn.style.background = idleBg;
+      enBtn.style.color = idleColor;
+    }} else {{
+      enBtn.style.background = activeBg;
+      enBtn.style.color = activeColor;
+      deBtn.style.background = idleBg;
+      deBtn.style.color = idleColor;
+    }}
+  }}
+
+  function applyLang() {{
+    const lang = getLang();
+    const t = T[lang] || T.en;
+
+    const title = document.getElementById("landingTitle");
+    const subtitle = document.getElementById("landingSubtitle");
+    const subline = document.getElementById("landingSubline");
+    const openApp = document.getElementById("landingOpenApp");
+    const openPay = document.getElementById("landingOpenPay");
+    const setup = document.getElementById("landingSetup");
+
+    if (title) title.textContent = t.title;
+    if (subtitle) subtitle.textContent = t.subtitle;
+    if (subline) subline.textContent = t.subline;
+    if (openApp) openApp.textContent = t.openApp;
+    if (openPay) openPay.textContent = t.openPay;
+    if (setup) setup.textContent = t.setup;
+
+    const aliasList = document.querySelector(".aliasList");
+    const emptyCard = aliasList ? aliasList.querySelector('[data-empty-alias-list="1"]') : null;
+    if (emptyCard) {{
+      emptyCard.innerHTML = '<div class="aliasMeta">' + t.empty + '</div>';
+    }}
+
+    setActive(lang);
+  }}
+  function applyAliasTooltips() {{
+    const t = T[getLang()] || T.en;
+    [
+      "aliasBip353String",
+      "aliasOfferString",
+      "aliasLnurlString",
+      "aliasBolt11String"
+    ].forEach((id) => {{
+      const el = document.getElementById(id);
+      if (el) el.title = t.tapToCopy;
+    }});
+    [
+      "aliasBip353Qr",
+      "aliasOfferQr",
+      "aliasLnurlQr",
+      "aliasBolt11Qr"
+    ].forEach((id) => {{
+      const el = document.getElementById(id);
+      if (el) el.title = t.tapQrToCopy;
+    }});
+  }}
+
+  window.addEventListener("load", function () {{
+    const deBtn = document.getElementById("landingLangDe");
+    const enBtn = document.getElementById("landingLangEn");
+
+    if (deBtn) deBtn.onclick = function () {{ window.setLang("de"); }};
+    if (enBtn) enBtn.onclick = function () {{ window.setLang("en"); }};
+    applyLang();
+  }});
+}})();
+</script>
 </body>
 </html>
 """
@@ -2814,7 +2978,7 @@ def _pay_login_html() -> str:
 <body>
   <main class="card">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-<a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+<a href="{HOME_URL}" aria-label="Back to homepage" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
   <img src="/assets/icon.png" alt="Logo" style="width:48px;height:48px;border-radius:12px;cursor:pointer;">
 </a>
       <div>
@@ -3053,7 +3217,7 @@ async def public_alias_page(alias_name: str):
 
     description = alias.get("description") or "Lightning payment"
     amount_sat = alias.get("amount_sat")
-    amount_label = f"{amount_sat} sats" if amount_sat else "variabler Betrag"
+    amount_label = f"{amount_sat} sats" if amount_sat else "variable amount"
 
     last_offer = alias.get("last_offer") or ""
 
@@ -3080,17 +3244,17 @@ async def public_alias_page(alias_name: str):
     if last_offer:
         offer_section = f"""
         <div class="section">
-          <div class="sectionTitle">BOLT12 Offer (primär)</div>
+          <div id="aliasOfferTitle" class="sectionTitle">BOLT12 Offer (primary)</div>
           <div class="qr">
-            <img src="/api/qr/{last_offer}" width="260" height="260" alt="BOLT12 Offer QR">
+            <img id="aliasOfferQr" class="copyable" src="/api/qr/{last_offer}" width="260" height="260" alt="BOLT12 Offer QR" title="Tap to copy QR content">
           </div>
-          <div class="mono">{last_offer}</div>
+          <div id="aliasOfferString" class="mono copyable" title="Tap to copy">{last_offer}</div>
           <div class="row">
-            <button onclick="window.location.href='lightning:{last_offer}'">Mit Wallet öffnen</button>
-            <button class="secondary" onclick="navigator.clipboard.writeText('{last_offer}')">Offer kopieren</button>
+          <button id="aliasOfferWalletBtn" onclick="window.location.href='lightning:{last_offer}'">Open with wallet</button>
+          <button id="aliasCopyOfferBtn" class="secondary">Copy offer</button>
           </div>
-          <div class="hint">
-            Primärer Zahlungsweg dieser Seite. Wallets mit BOLT12-Support sollten diesen Pfad verwenden.
+          <div id="aliasOfferHint" class="hint">
+          Primary payment method. Wallets with BOLT12 support should use this.
           </div>
         </div>
         """
@@ -3101,15 +3265,15 @@ async def public_alias_page(alias_name: str):
         <div class="section">
           <div class="sectionTitle">BOLT11 Compatibility Fallback</div>
           <div class="qr">
-            <img src="/api/qr/{bolt11_invoice}" width="220" height="220" alt="BOLT11 Invoice QR">
+            <img id="aliasBolt11Qr" class="copyable" src="/api/qr/{bolt11_invoice}" width="220" height="220" alt="BOLT11 Invoice QR" title="Tap to copy QR content">
           </div>
-          <div class="mono">{bolt11_invoice}</div>
+          <div id="aliasBolt11String" class="mono copyable" title="Tap to copy">{bolt11_invoice}</div>
           <div class="row">
-            <button onclick="payBolt11Invoice()">WebLN / Wallet</button>
-            <button class="secondary" onclick="navigator.clipboard.writeText('{bolt11_invoice}')">Invoice kopieren</button>
+          <button id="aliasBolt11WalletBtn" onclick="payBolt11Invoice()">WebLN / Wallet</button>
+          <button id="aliasCopyInvoiceBtn" class="secondary">Copy invoice</button>
           </div>
-          <div class="hint">
-            Nur für Wallets ohne BOLT12- oder LNURL-Unterstützung.
+          <div id="aliasBolt11Hint" class="hint">
+          Only for wallets without BOLT12 or LNURL support.
           </div>
         </div>
         """
@@ -3118,18 +3282,18 @@ async def public_alias_page(alias_name: str):
     if lnurl_fallback:
         lnurl_section = f"""
         <div class="section">
-          <div class="sectionTitle">LNURL Fallback</div>
-          <div class="mono">{lnurl_address}</div>
+          <div id="aliasLnurlTitle" class="sectionTitle">LNURL Fallback</div>
+          <div id="aliasLnurlString" class="mono copyable" title="Tap to copy">{lnurl_address}</div>
           <div class="qr">
-            <img src="/api/qr/{lnurl_fallback}" width="220" height="220" alt="LNURL QR">
+            <img id="aliasLnurlQr" class="copyable" src="/api/qr/{lnurl_fallback}" width="220" height="220" alt="LNURL QR" title="Tap to copy QR content">
           </div>
           <div class="row">
-            <button onclick="navigator.clipboard.writeText('{lnurl_fallback}')">LNURL kopieren</button>
-            <button class="secondary" onclick="window.location.href='lightning:{lnurl_address}'">Fallback mit Wallet öffnen</button>
+          <button id="aliasCopyLnurlBtn">Copy LNURL</button>
+          <button id="aliasLnurlWalletBtn" class="secondary" onclick="window.location.href='lightning:{lnurl_address}'">Open fallback with wallet</button>
           </div>
-          <div class="hint">
-            Für Wallets ohne BOLT12-Unterstützung. QR zeigt echten LNURL-String, Wallet-Button nutzt die Lightning Address.
-          </div>
+          <div id="aliasLnurlHint" class="hint">
+          For wallets without BOLT12 support. QR contains the LNURL, wallet button uses Lightning Address.
+         </div>
         </div>
         """
 
@@ -3239,20 +3403,109 @@ button:hover {{
   margin-top:6px;
 }}
 
+.copyable {{
+  cursor: pointer;
+}}
+
+.copyable:hover {{
+  opacity: .9;
+}}
+
 .hint {{
   color:#9aa6bd;
   font-size:.9rem;
   text-align:center;
   margin-top:8px;
 }}
+.toastWrap {{
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(760px, calc(100vw - 20px));
+  z-index: 3000;
+  pointer-events: none;
+}}
+
+.statusBar {{
+  display: none;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #26324a;
+  background: #0c1322;
+  font-size: .95rem;
+  line-height: 1.4;
+  box-shadow: 0 12px 30px rgba(0,0,0,.35);
+  pointer-events: auto;
+  text-align: center;
+}}
+
+.statusBar.show {{ display: block; }}
+
+.statusBar.ok {{
+  border-color: rgba(143,227,136,.35);
+  background: rgba(143,227,136,.10);
+  color: #8fe388;
+}}
+
+.statusBar.error {{
+  border-color: rgba(255,123,114,.35);
+  background: rgba(255,123,114,.10);
+  color: #ff7b72;
+}}
+
+.statusBar.warn {{
+  border-color: rgba(255,209,102,.35);
+  background: rgba(255,209,102,.10);
+  color: #ffd166;
+}}
 </style>
 </head>
 
 <body>
 <main class="card">
-<h1>⚡ BOLT12 Payment Page</h1>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+    <div style="
+      display:inline-flex;
+      gap:4px;
+      padding:4px;
+      border-radius:16px;
+      border:1px solid #26324a;
+      background:rgba(19,28,46,.92);
+    ">
+      <button id="aliasLangDe"
+        style="
+          min-width:38px;
+          height:28px;
+          padding:0 8px;
+          border-radius:10px;
+          border:none;
+          background:transparent;
+          color:#a7b0c3;
+          font-size:.8rem;
+          font-weight:700;
+        "
+      >DE</button>
+
+      <button id="aliasLangEn"
+        style="
+          min-width:38px;
+          height:28px;
+          padding:0 8px;
+          border-radius:10px;
+          border:none;
+          background:#3a4254;
+          color:#eef2ff;
+          font-size:.8rem;
+          font-weight:700;
+        "
+      >EN</button>
+    </div>
+  </div>
+<h1 id="aliasTitle">⚡ Lightning Payment</h1>
 <div style="text-align:center;margin:0 0 16px 0;">
-  <a href="{HOME_URL}" aria-label="Zur Startseite" title="Zur Startseite" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+  <a href="{HOME_URL}" aria-label="Back to homepage" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
     <img
       src="/assets/icon.png"
       alt="BOLT12 Pay Server Logo"
@@ -3260,35 +3513,34 @@ button:hover {{
     >
   </a>
 </div>
-<div class="mono">{bip353_address}</div>
+<div id="aliasBip353String" class="mono copyable" title="Tap to copy">{bip353_address}</div>
 
 <div class="sub">
-{description}<br/>
-Betrag: {amount_label}<br/>
-<span style="font-size:.92rem;">BOLT12 zuerst · LNURL und BOLT11 nur als Fallback</span>
+<span id="aliasDescription">{description}</span><br/>
+<span id="aliasAmountLabel">Amount</span>: <span id="aliasAmountValue">{amount_label}</span><br/>
+<span id="aliasSubline" style="font-size:.92rem;">BOLT12 first · LNURL and BOLT11 as fallback</span>
 </div>
 
 {offer_section}
 
 <div class="section">
-  <div class="sectionTitle">BIP353 Address</div>
+<div id="aliasBip353Title" class="sectionTitle">BIP353 Address</div>
   <div class="mono">{bip353_address}</div>
   <div class="qr">
-    <img src="/api/qr/{bip353_address}" width="220" height="220" alt="BIP353 QR">
+    <img id="aliasBip353Qr" class="copyable" src="/api/qr/{bip353_address}" width="220" height="220" alt="BIP353 QR" title="Tap to copy QR content">
   </div>
   <div class="row">
-    <button onclick="navigator.clipboard.writeText('{bip353_address}')">Adresse kopieren</button>
-    <button class="secondary" onclick="window.location.href='lightning:{bip353_address}'">Mit Wallet öffnen</button>
+   <button id="aliasCopyAddressBtn">Copy address</button>
+   <button id="aliasOpenWalletBtn" class="secondary" onclick="window.location.href='lightning:{bip353_address}'">Open with wallet</button>
   </div>
-  <div class="hint">
-    Human-Readable Adresse für diese BOLT12 Payment Page.
+  <div id="aliasBip353Hint" class="hint">
+  Human-readable address for this payment page.
   </div>
 </div>
 
 {lnurl_section}
 
 {bolt11_section}
-
 </main>
 
 <script>
@@ -3310,7 +3562,254 @@ async function payBolt11Invoice() {{
   window.location.href = 'lightning:' + invoice;
 }}
 </script>
+<script>
+(function () {{
+  const T = {{
+    en: {{
+      title: "⚡ Lightning Payment",
+      amount: "Amount",
+      subline: "BOLT12 first · LNURL and BOLT11 as fallback",
+      bip353Title: "BIP353 Address",
+      copyAddress: "Copy address",
+      openWallet: "Open with wallet",
+      bip353Hint: "Human-readable address for this payment page.",
+      offerTitle: "BOLT12 Offer (primary)",
+      copyOffer: "Copy offer",
+      offerHint: "Primary payment method. Wallets with BOLT12 support should use this.",
+      lnurlTitle: "LNURL Fallback",
+      copyLnurl: "Copy LNURL",
+      lnurlWallet: "Open fallback with wallet",
+      lnurlHint: "For wallets without BOLT12 support. QR contains the LNURL, wallet button uses Lightning Address.",
+      copyInvoice: "Copy invoice",
+      bolt11Hint: "Only for wallets without BOLT12 or LNURL support.",
+      copiedAddress: "Address copied.",
+      copiedOffer: "Offer copied.",
+      copiedLnurl: "LNURL copied.",
+      copiedInvoice: "Invoice copied.",
+      copyFailed: "Copy failed.",
+      tapToCopy: "Tap to copy",
+      tapQrToCopy: "Tap to copy QR content"
+    }},
+    de: {{
+      title: "⚡ Lightning Zahlung",
+      amount: "Betrag",
+      subline: "BOLT12 zuerst · LNURL und BOLT11 nur als Fallback",
+      bip353Title: "BIP353 Adresse",
+      copyAddress: "Adresse kopieren",
+      openWallet: "Mit Wallet öffnen",
+      bip353Hint: "Menschenlesbare Adresse für diese Zahlungsseite.",
+      offerTitle: "BOLT12 Offer (primär)",
+      copyOffer: "Offer kopieren",
+      offerHint: "Primärer Zahlungsweg dieser Seite. Wallets mit BOLT12-Support sollten diesen Pfad verwenden.",
+      lnurlTitle: "LNURL Fallback",
+      copyLnurl: "LNURL kopieren",
+      lnurlWallet: "Fallback mit Wallet öffnen",
+      lnurlHint: "Für Wallets ohne BOLT12-Unterstützung. QR enthält den LNURL-String, der Wallet-Button nutzt die Lightning Address.",
+      copyInvoice: "Invoice kopieren",
+      bolt11Hint: "Nur für Wallets ohne BOLT12- oder LNURL-Unterstützung.",
+      copiedAddress: "Adresse kopiert.",
+      copiedOffer: "Offer kopiert.",
+      copiedLnurl: "LNURL kopiert.",
+      copiedInvoice: "Invoice kopiert.",
+      copyFailed: "Kopieren fehlgeschlagen.",
+      tapToCopy: "Zum Kopieren antippen",
+      tapQrToCopy: "Zum Kopieren antippen (QR-Inhalt)"
+    }}
+  }};
 
+  function getLang() {{
+    return localStorage.getItem("app_lang") || "en";
+  }}
+
+  window.setAliasLang = function (lang) {{
+    localStorage.setItem("app_lang", lang);
+    applyAliasLang();
+  }};
+
+  function setActive(lang) {{
+    const deBtn = document.getElementById("aliasLangDe");
+    const enBtn = document.getElementById("aliasLangEn");
+    if (!deBtn || !enBtn) return;
+
+    const activeBg = "#3a4254";
+    const activeColor = "#eef2ff";
+    const idleBg = "transparent";
+    const idleColor = "#a7b0c3";
+
+    if (lang === "de") {{
+      deBtn.style.background = activeBg;
+      deBtn.style.color = activeColor;
+      enBtn.style.background = idleBg;
+      enBtn.style.color = idleColor;
+    }} else {{
+      enBtn.style.background = activeBg;
+      enBtn.style.color = activeColor;
+      deBtn.style.background = idleBg;
+      deBtn.style.color = idleColor;
+    }}
+  }}
+
+  function applyAliasTooltips() {{
+    const t = T[getLang()] || T.en;
+    [
+      "aliasBip353String",
+      "aliasOfferString",
+      "aliasLnurlString",
+      "aliasBolt11String"
+    ].forEach((id) => {{
+      const el = document.getElementById(id);
+      if (el) el.title = t.tapToCopy;
+    }});
+    [
+      "aliasBip353Qr",
+      "aliasOfferQr",
+      "aliasLnurlQr",
+      "aliasBolt11Qr"
+    ].forEach((id) => {{
+      const el = document.getElementById(id);
+      if (el) el.title = t.tapQrToCopy;
+    }});
+  }}
+
+  function applyAliasLang() {{
+    const lang = getLang();
+    const t = T[lang] || T.en;
+
+    const title = document.getElementById("aliasTitle");
+    const amount = document.getElementById("aliasAmountLabel");
+    const subline = document.getElementById("aliasSubline");
+    const bip353Title = document.getElementById("aliasBip353Title");
+    const copyAddress = document.getElementById("aliasCopyAddressBtn");
+    const openWallet = document.getElementById("aliasOpenWalletBtn");
+    const bip353Hint = document.getElementById("aliasBip353Hint");
+    const offerTitle = document.getElementById("aliasOfferTitle");
+    const copyOffer = document.getElementById("aliasCopyOfferBtn");
+    const offerWallet = document.getElementById("aliasOfferWalletBtn");
+    const offerHint = document.getElementById("aliasOfferHint");
+    const lnurlTitle = document.getElementById("aliasLnurlTitle");
+    const copyLnurl = document.getElementById("aliasCopyLnurlBtn");
+    const lnurlWallet = document.getElementById("aliasLnurlWalletBtn");
+    const lnurlHint = document.getElementById("aliasLnurlHint");
+    const copyInvoice = document.getElementById("aliasCopyInvoiceBtn");
+    const bolt11Hint = document.getElementById("aliasBolt11Hint");
+
+    if (title) title.textContent = t.title;
+    if (amount) amount.textContent = t.amount;
+    if (subline) subline.textContent = t.subline;
+    if (bip353Title) bip353Title.textContent = t.bip353Title;
+    if (copyAddress) copyAddress.textContent = t.copyAddress;
+    if (openWallet) openWallet.textContent = t.openWallet;
+    if (bip353Hint) bip353Hint.textContent = t.bip353Hint;
+    if (offerTitle) offerTitle.textContent = t.offerTitle;
+    if (copyOffer) copyOffer.textContent = t.copyOffer;
+    if (offerWallet) offerWallet.textContent = t.openWallet;
+    if (offerHint) offerHint.textContent = t.offerHint;
+    if (lnurlTitle) lnurlTitle.textContent = t.lnurlTitle;
+    if (copyLnurl) copyLnurl.textContent = t.copyLnurl;
+    if (lnurlWallet) lnurlWallet.textContent = t.lnurlWallet;
+    if (lnurlHint) lnurlHint.textContent = t.lnurlHint;
+    if (copyInvoice) copyInvoice.textContent = t.copyInvoice;
+    if (bolt11Hint) bolt11Hint.textContent = t.bolt11Hint;
+
+    applyAliasTooltips();
+    setActive(lang);
+  }}
+
+  function showAliasToast(message, kind) {{
+    const toast = document.getElementById("aliasToast");
+    if (!toast) return;
+
+    const toastKind = kind || "ok";
+    toast.textContent = message || "";
+    toast.className = "statusBar show " + toastKind;
+    toast.style.display = "block";
+
+    clearTimeout(window.__aliasToastTimer);
+    window.__aliasToastTimer = setTimeout(() => {{
+      toast.className = "statusBar";
+      toast.textContent = "";
+      toast.style.display = "none";
+    }}, 1800);
+  }}
+
+  async function copyWithToast(text, message) {{
+    try {{
+      await navigator.clipboard.writeText(text || "");
+      showAliasToast(message, "ok");
+    }} catch (err) {{
+      const t = T[getLang()] || T.en;
+      showAliasToast(t.copyFailed, "error");
+    }}
+  }}
+
+  window.addEventListener("load", function () {{
+    const deBtn = document.getElementById("aliasLangDe");
+    const enBtn = document.getElementById("aliasLangEn");
+
+    const copyAddressBtn = document.getElementById("aliasCopyAddressBtn");
+    const copyOfferBtn = document.getElementById("aliasCopyOfferBtn");
+    const copyLnurlBtn = document.getElementById("aliasCopyLnurlBtn");
+    const copyInvoiceBtn = document.getElementById("aliasCopyInvoiceBtn");
+
+    const bip353String = document.getElementById("aliasBip353String");
+    const offerString = document.getElementById("aliasOfferString");
+    const lnurlString = document.getElementById("aliasLnurlString");
+    const bolt11String = document.getElementById("aliasBolt11String");
+
+    const bip353Qr = document.getElementById("aliasBip353Qr");
+    const offerQr = document.getElementById("aliasOfferQr");
+    const lnurlQr = document.getElementById("aliasLnurlQr");
+    const bolt11Qr = document.getElementById("aliasBolt11Qr");
+
+    if (deBtn) deBtn.onclick = function () {{ window.setAliasLang("de"); }};
+    if (enBtn) enBtn.onclick = function () {{ window.setAliasLang("en"); }};
+
+    if (copyAddressBtn) copyAddressBtn.onclick = function () {{
+      copyWithToast("{bip353_address}", (T[getLang()] || T.en).copiedAddress);
+    }};
+    if (copyOfferBtn) copyOfferBtn.onclick = function () {{
+      copyWithToast("{last_offer}", (T[getLang()] || T.en).copiedOffer);
+    }};
+    if (copyLnurlBtn) copyLnurlBtn.onclick = function () {{
+      copyWithToast("{lnurl_fallback}", (T[getLang()] || T.en).copiedLnurl);
+    }};
+    if (copyInvoiceBtn) copyInvoiceBtn.onclick = function () {{
+      copyWithToast("{bolt11_invoice or ''}", (T[getLang()] || T.en).copiedInvoice);
+    }};
+
+    if (bip353String) bip353String.onclick = function () {{
+      copyWithToast("{bip353_address}", (T[getLang()] || T.en).copiedAddress);
+    }};
+    if (offerString) offerString.onclick = function () {{
+      copyWithToast("{last_offer}", (T[getLang()] || T.en).copiedOffer);
+    }};
+    if (lnurlString) lnurlString.onclick = function () {{
+      copyWithToast("{lnurl_address}", (T[getLang()] || T.en).copiedAddress);
+    }};
+    if (bolt11String) bolt11String.onclick = function () {{
+      copyWithToast("{bolt11_invoice or ''}", (T[getLang()] || T.en).copiedInvoice);
+    }};
+
+    if (bip353Qr) bip353Qr.onclick = function () {{
+      copyWithToast("{bip353_address}", (T[getLang()] || T.en).copiedAddress);
+    }};
+    if (offerQr) offerQr.onclick = function () {{
+      copyWithToast("{last_offer}", (T[getLang()] || T.en).copiedOffer);
+    }};
+    if (lnurlQr) lnurlQr.onclick = function () {{
+      copyWithToast("{lnurl_fallback}", (T[getLang()] || T.en).copiedLnurl);
+    }};
+    if (bolt11Qr) bolt11Qr.onclick = function () {{
+      copyWithToast("{bolt11_invoice or ''}", (T[getLang()] || T.en).copiedInvoice);
+    }};
+
+    applyAliasLang();
+  }});
+}})();
+</script>
+<div class="toastWrap">
+  <div id="aliasToast" class="statusBar"></div>
+</div>
 </body>
 </html>
 """

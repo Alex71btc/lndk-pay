@@ -12,3 +12,4 @@ devtools/
 
 # temp html exports
 Projekt*
+frontend/public/index.html.*
