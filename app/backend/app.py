@@ -77,6 +77,10 @@ def _is_pay_ui_enabled() -> bool:
     return bool(_get_ui_password_hash() or PAY_UI_PASSWORD)
 
 
+def _is_pay_ui_configured() -> bool:
+    return bool(_get_ui_password_hash() or PAY_UI_PASSWORD)
+
+
 def _verify_ui_password(password: str) -> bool:
     stored_hash = _get_ui_password_hash()
 
@@ -638,6 +642,21 @@ class IdentityConfigPayload(BaseModel):
 
 def _normalize_nostr_pubkey(value: str) -> str:
     v = (value or "").strip()
+    if not v:
+        return ""
+
+    if v.startswith("npub"):
+        return _npub_to_hex_pubkey(v)
+
+    if len(v) != 64:
+        raise ValueError("Nostr Pubkey muss 64-stelliger HEX-Key oder npub sein.")
+
+    try:
+        bytes.fromhex(v)
+    except Exception:
+        raise ValueError("Ungültiger HEX-Pubkey.")
+
+    return v.lower()
 
     if re.fullmatch(r"[0-9a-fA-F]{64}", v):
         return v.lower()
@@ -2913,8 +2932,11 @@ def _is_pay_session_valid(request: StarletteRequest) -> bool:
 
 
 def require_pay_auth(request: Request) -> None:
-    if not _is_pay_ui_enabled():
-        return
+    if not _is_pay_ui_configured():
+        raise HTTPException(
+            status_code=403,
+            detail="Pay UI setup incomplete. Please set an admin password first.",
+        )
     if not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
 
@@ -3059,7 +3081,10 @@ async def app_shell(request: StarletteRequest):
 
 @app.get("/pay")
 def pay_page(request: StarletteRequest):
-    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+    if not _is_pay_ui_configured():
+        return RedirectResponse(url="/app?setup=1", status_code=307)
+
+    if not _is_pay_session_valid(request):
         next_url = str(request.url.path)
         if request.url.query:
             next_url += f"?{request.url.query}"
@@ -3084,9 +3109,13 @@ def admin_legacy_redirect() -> RedirectResponse:
 
 
 @app.get("/pay-login")
-def pay_login_page():
-    if not _is_pay_ui_enabled():
+def pay_login_page(request: StarletteRequest):
+    if not _is_pay_ui_configured():
+        return RedirectResponse(url="/app?setup=1", status_code=307)
+
+    if _is_pay_session_valid(request):
         return RedirectResponse(url="/pay", status_code=307)
+
     file = ADMIN_DIR / "pay-login.html"
     if not file.exists():
         raise HTTPException(status_code=404, detail="frontend/admin/pay-login.html not found")
@@ -3121,9 +3150,28 @@ def api_auth_login(payload: PayLoginRequest):
 
 @app.get("/api/auth/session")
 def api_auth_session(request: StarletteRequest):
-    enabled = _is_pay_ui_enabled()
-    ok = _is_pay_session_valid(request) if enabled else True
-    return JSONResponse({"ok": ok, "enabled": enabled}, headers=_no_store_headers())
+    configured = _is_pay_ui_configured()
+    if not configured:
+        return JSONResponse(
+            {
+                "ok": False,
+                "enabled": False,
+                "configured": False,
+                "setup_required": True,
+            },
+            headers=_no_store_headers(),
+        )
+
+    ok = _is_pay_session_valid(request)
+    return JSONResponse(
+        {
+            "ok": ok,
+            "enabled": True,
+            "configured": True,
+            "setup_required": False,
+        },
+        headers=_no_store_headers(),
+    )
 
 
 @app.post("/api/auth/logout")

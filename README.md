@@ -107,6 +107,119 @@ The Umbrel package lives under:
 
 `umbrel/bolt12-pay`
 
+## Remote Access & Security (Cloudflare Tunnel + Access)
+
+If you expose BOLT12 Pay to the internet, you should **protect the admin interface** using an access-control layer such as Cloudflare Tunnel + Access.
+
+### Why this matters
+
+BOLT12 Pay has two different types of traffic:
+
+**1. Admin / control interface (sensitive)**
+- `/pay`
+- `/pay-login`
+- setup and admin actions
+- identity management, payments, etc.
+
+**2. Public payment endpoints (must stay reachable)**
+- Lightning Address (LNURL)
+- public payment pages
+- BIP353 resolution
+- payment callbacks
+
+Because of this, a single global protection rule is **not sufficient**.
+
+---
+
+## Recommended setup (Cloudflare Access)
+
+Use **two separate Cloudflare Access applications** for the same hostname.
+
+### 1. Admin App → `ALLOW`
+
+Protect all admin-related routes.
+
+**Paths to protect:**
+
+- `/pay*`
+- `/pay-login*`
+
+**Policy:**
+
+- Action: `ALLOW`
+- Require login (Google, GitHub, email, etc.)
+- Short session duration recommended
+
+This ensures that the admin UI is never publicly accessible.
+
+---
+
+### 2. Public App → `BYPASS`
+
+Allow public access for payment-related traffic.
+
+**Policy:**
+
+- Action: `BYPASS`
+
+This is required so that:
+
+- Lightning Address works
+- LNURL requests succeed
+- wallets can access payment endpoints
+- public payment pages remain usable
+
+---
+
+## Example logic
+
+A typical path-based setup looks like:
+
+**Protected:**
+- `/pay*`
+- `/pay-login*`
+
+**Public:**
+- `/`
+- `/app` (if needed for public flows)
+- `/.well-known/*`
+- `/api/lnurl/*`
+- `/api/lnurl/callback`
+- other public payment endpoints
+
+Adjust paths depending on your configuration.
+
+---
+
+## ⚠️ Important
+
+Do NOT:
+
+- protect the entire app with a single `ALLOW` rule  
+  → breaks public payment flows
+
+- leave `/pay` publicly accessible without protection  
+  → exposes full admin interface
+
+---
+
+## Recommended additional hardening
+
+- set an admin password in BOLT12 Pay
+- use Cloudflare Access session limits
+- restrict exposure to only necessary endpoints
+- avoid exposing raw backend APIs directly
+
+---
+
+## TL;DR
+
+- **Admin UI → protected**
+- **Payment endpoints → public**
+
+This separation is required for a functional self-hosted Lightning service.
+
+
 ## License
 
 MIT License

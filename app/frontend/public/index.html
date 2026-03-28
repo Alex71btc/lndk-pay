@@ -525,6 +525,25 @@
       <label class="label" for="setupPasswordConfirm" style="margin-top:14px;" data-i18n="setup.label.password_confirm">Passwort bestätigen</label>
       <input id="setupPasswordConfirm" type="password" data-i18n-placeholder="setup.ph.password_confirm" placeholder="Passwort erneut eingeben" />
 
+      <div class="hint" style="margin-top:14px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,0.02);">
+        <div style="font-weight:700;color:var(--text);margin-bottom:6px;" data-i18n="setup.security.title">🔐 Remote access security</div>
+        <div data-i18n="setup.security.text">
+          If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.
+        </div>
+        <div style="margin-top:8px;" data-i18n="setup.security.routes">
+          Recommended: protect <span class="mono">/pay</span> and <span class="mono">/pay-login</span>, while keeping required public payment endpoints reachable.
+        </div>
+        <div style="margin-top:8px;">
+          <a
+            href="https://github.com/Alex71btc/lndk-pay#cloudflare-tunnel--access"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="color:#93c5fd;"
+            data-i18n="setup.security.link"
+          >→ Open README setup guide</a>
+        </div>
+      </div>
+
       <label class="label" for="setupDnsMode" style="margin-top:14px;" data-i18n="setup.label.dns_mode">DNS Mode</label>
       <select id="setupDnsMode">
         <option value="none">none</option>
@@ -1890,6 +1909,10 @@ installBtn.addEventListener('click', async () => {
       "setup.ph.cf_api_token": "API Token",
       "setup.cloudflare_optional_hint": "Cloudflare bleibt optional. Ohne Cloudflare funktioniert die App weiter, nur BIP353-DNS wird dann nicht automatisch gesetzt.",
       "setup.btn.save": "Setup speichern",
+      "setup.security.title": "🔐 Remote-Zugriff absichern",
+      "setup.security.text": "Wenn du diese App aus dem Internet erreichbar machst, schütze Admin-Routen mit Cloudflare Tunnel + Access oder einer vergleichbaren Zugriffskontrolle.",
+      "setup.security.routes": "Empfohlen: <span class=\"mono\">/pay</span> und <span class=\"mono\">/pay-login</span> schützen, während notwendige öffentliche Payment-Endpunkte erreichbar bleiben.",
+      "setup.security.link": "→ README Setup-Anleitung öffnen",
       "dns.none": "Keine",
       "dns.manual": "Manuell",
       "dns.cloudflare": "Cloudflare",
@@ -1979,6 +2002,10 @@ installBtn.addEventListener('click', async () => {
       "setup.ph.cf_api_token": "API token",
       "setup.cloudflare_optional_hint": "Cloudflare remains optional. The app still works without it; only automatic BIP353 DNS creation is disabled.",
       "setup.btn.save": "Save setup",
+      "setup.security.title": "🔐 Remote access security",
+      "setup.security.text": "If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.",
+      "setup.security.routes": "Recommended: protect <span class=\"mono\">/pay</span> and <span class=\"mono\">/pay-login</span>, while keeping required public payment endpoints reachable.",
+      "setup.security.link": "→ Open README setup guide",
       "dns.none": "None",
       "dns.manual": "Manual",
       "dns.cloudflare": "Cloudflare",
