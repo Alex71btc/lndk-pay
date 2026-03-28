@@ -109,8 +109,6 @@ The Umbrel package lives under:
 
 ## Screenshots
 
-## Screenshots
-
 ![Home](./umbrel/bolt12-pay/screenshots/1.png)
 
 ![Payment Flow](./umbrel/bolt12-pay/screenshots/2.png)
