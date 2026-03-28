@@ -109,13 +109,17 @@ The Umbrel package lives under:
 
 ## Screenshots
 
-Add screenshots here once finalized:
+## Screenshots
 
-  - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/1.png
-  - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/2.png
-  - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/3.png
-  - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/4.png
-  - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/5.png
+![Home](./umbrel/bolt12-pay/screenshots/1.png)
+
+![Payment Flow](./umbrel/bolt12-pay/screenshots/2.png)
+
+![Lightning Address](./umbrel/bolt12-pay/screenshots/3.png)
+
+![Admin](./umbrel/bolt12-pay/screenshots/4.png)
+
+![Identity](./umbrel/bolt12-pay/screenshots/5.png)
 
 ## Roadmap
 
