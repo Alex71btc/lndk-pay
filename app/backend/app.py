@@ -71,6 +71,10 @@ PAY_UI_SESSION_TTL = int(os.getenv("PAY_UI_SESSION_TTL", "1800"))
 PAY_UI_COOKIE_NAME = "pay_session"
 PAY_SESSIONS: dict[str, dict] = {}
 
+NWC_SESSION_TTL = int(os.getenv("NWC_SESSION_TTL", "180"))
+NWC_COOKIE_NAME = "nwc_session"
+NWC_SESSIONS: dict[str, dict] = {}
+
 
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
@@ -388,6 +392,11 @@ LNURL_USERNAME_RE = re.compile(r"^[a-z0-9._-]{1,64}$")
 
 
 # --- Models ----------------------------------------------------------------
+
+
+class NwcUnlockRequest(BaseModel):
+    password: str = Field(default="")
+
 class OfferRequest(BaseModel):
     amount: Optional[int] = Field(
         default=None,
@@ -2959,6 +2968,52 @@ def require_pay_auth(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
 
+def _issue_nwc_session() -> tuple[str, int]:
+    now = int(time.time())
+    token = secrets.token_urlsafe(32)
+    expires_at = now + NWC_SESSION_TTL
+    NWC_SESSIONS[token] = {
+        "created_at": now,
+        "expires_at": expires_at,
+    }
+    return token, expires_at
+
+
+def _cleanup_nwc_sessions() -> None:
+    now = int(time.time())
+    expired = [token for token, meta in NWC_SESSIONS.items() if int(meta.get("expires_at", 0)) <= now]
+    for token in expired:
+        NWC_SESSIONS.pop(token, None)
+
+
+def _get_nwc_session_token(request: StarletteRequest) -> Optional[str]:
+    return request.cookies.get(NWC_COOKIE_NAME)
+
+
+def _read_nwc_session_token(request: StarletteRequest) -> Optional[str]:
+    return _get_nwc_session_token(request)
+
+
+def _is_nwc_session_valid(request: StarletteRequest) -> bool:
+    _cleanup_nwc_sessions()
+    token = _get_nwc_session_token(request)
+    if not token:
+        return False
+    meta = NWC_SESSIONS.get(token)
+    if not meta:
+        return False
+    if int(meta.get("expires_at", 0)) <= int(time.time()):
+        NWC_SESSIONS.pop(token, None)
+        return False
+    return True
+
+
+def require_nwc_auth(request: Request) -> None:
+    require_pay_auth(request)
+    if not _is_nwc_session_valid(request):
+        raise HTTPException(status_code=401, detail="NWC unlock required")
+
+
 def _pay_login_html() -> str:
     return f"""<!doctype html>
 <html lang="en">
@@ -4473,9 +4528,56 @@ def debug_zaps():
     return _get_pending_zaps()
 
 
+
+@app.post("/api/admin/nwc/unlock")
+async def api_admin_nwc_unlock(payload: NwcUnlockRequest, request: StarletteRequest):
+    require_pay_auth(request)
+
+    password = (payload.password or "").strip()
+    if not password:
+        raise HTTPException(status_code=401, detail="Password required")
+
+    configured_hash = _get_ui_password_hash()
+    if not configured_hash:
+        raise HTTPException(status_code=400, detail="No Pay UI password configured")
+
+    if _hash_password(password) != configured_hash:
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    token, expires_at = _issue_nwc_session()
+    resp = JSONResponse({
+        "ok": True,
+        "expires_in": max(0, expires_at - int(time.time()))
+    })
+    resp.set_cookie(
+        key=NWC_COOKIE_NAME,
+        value=token,
+        max_age=NWC_SESSION_TTL,
+        httponly=True,
+        samesite="Lax",
+        secure=False,
+        path="/",
+    )
+    return resp
+
+
+@app.post("/api/admin/nwc/lock")
+async def api_admin_nwc_lock(request: StarletteRequest):
+    require_pay_auth(request)
+
+    token = _read_nwc_session_token(request)
+    if token:
+        NWC_SESSIONS.pop(token, None)
+
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(key=NWC_COOKIE_NAME, path="/")
+    return resp
+
+
 @app.get("/api/admin/nwc/connections")
 async def api_admin_nwc_connections(request: StarletteRequest):
     require_pay_auth(request)
+    require_nwc_auth(request)
 
     items = list_nwc_connections()
     out = []
@@ -4495,6 +4597,7 @@ async def api_admin_nwc_connections_create(
     request: StarletteRequest,
 ):
     require_pay_auth(request)
+    require_nwc_auth(request)
 
     wallet_service_pubkey = _nostr_server_pubkey_hex()
     if not wallet_service_pubkey:
@@ -4527,6 +4630,7 @@ async def api_admin_nwc_connections_create(
 @app.post("/api/admin/nwc/connections/{connection_id}/toggle")
 async def api_admin_nwc_connections_toggle(connection_id: str, request: StarletteRequest):
     require_pay_auth(request)
+    require_nwc_auth(request)
 
     try:
         item = toggle_nwc_connection(connection_id)
@@ -4547,6 +4651,7 @@ async def api_admin_nwc_connections_toggle(connection_id: str, request: Starlett
 @app.delete("/api/admin/nwc/connections/{connection_id}")
 async def api_admin_nwc_connections_delete(connection_id: str, request: StarletteRequest):
     require_pay_auth(request)
+    require_nwc_auth(request)
 
     try:
         delete_nwc_connection(connection_id)

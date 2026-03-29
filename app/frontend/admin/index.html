@@ -794,7 +794,6 @@ main.card .headerRow {
             <button id="confirmNwcUnlockBtn" type="button"><span data-i18n="btn.nwc_unlock">Unlock</span></button>
             <button class="secondary" id="cancelNwcUnlockBtn" type="button">Cancel</button>
           </div>
-        </div>
       </div>
     </details>
 
@@ -1196,32 +1195,33 @@ function startNwcAutoLock(seconds) {
       return connections;
     }
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      setNwcUnlockedState(false);
+document.addEventListener('DOMContentLoaded', async () => {
+  setNwcUnlockedState(false);
 
-      unlockNwcBtn?.addEventListener('click', openNwcUnlockModal);
-      lockNwcBtn?.addEventListener('click', lockNwc);
-      confirmNwcUnlockBtn?.addEventListener('click', unlockNwc);
-      cancelNwcUnlockBtn?.addEventListener('click', closeNwcUnlockModal);
+  unlockNwcBtn?.addEventListener('click', openNwcUnlockModal);
+  lockNwcBtn?.addEventListener('click', lockNwc);
+  confirmNwcUnlockBtn?.addEventListener('click', unlockNwc);
+  cancelNwcUnlockBtn?.addEventListener('click', closeNwcUnlockModal);
 
-      nwcUnlockPassword?.addEventListener('keydown', async (ev) => {
-        if (ev.key === 'Enter') {
-          ev.preventDefault();
-          await unlockNwc();
-        }
-      });
+  nwcUnlockPassword?.addEventListener('keydown', async (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      await unlockNwc();
+    }
+  });
 
-      nwcUnlockModal?.addEventListener('click', (ev) => {
-        if (ev.target === nwcUnlockModal) closeNwcUnlockModal();
-      });
+  nwcUnlockModal?.addEventListener('click', (ev) => {
+    if (ev.target === nwcUnlockModal) closeNwcUnlockModal();
+  });
 
-      try {
-        await loadNwcConnections();
-      } catch (err) {
-        console.error('NWC init failed', err);
-        setNwcUnlockedState(false);
-      }
-    });
+  try {
+    await loadNwcConnections();
+    setNwcUnlockedState(false); // 👈 wichtig
+  } catch (err) {
+    console.error('NWC init failed', err);
+    renderNwcQr('');
+  }
+});
 
     async function createNwcConnection() {
       const payload = {
@@ -3038,7 +3038,8 @@ if ('serviceWorker' in navigator) {
       "label.no": "no",
       "btn.enable": "Enable",
       "btn.disable": "Disable",
-      "btn.delete": "Delete","toast.nwc_locked": "NWC locked.",
+      "btn.delete": "Delete",
+      "toast.nwc_locked": "NWC locked.",
       "toast.nwc_autolocked": "NWC auto-locked.",
       "toast.nwc_unlock_failed": "Failed to unlock NWC.",
       "toast.nwc_unlock_password_required": "Please enter your Pay password.",
