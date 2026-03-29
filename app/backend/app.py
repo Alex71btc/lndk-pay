@@ -29,6 +29,14 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, Field
 from backend.config import load_config, save_config
+from backend.nwc import (
+    list_nwc_connections,
+    create_nwc_connection,
+    get_nwc_connection,
+    build_nwc_uri,
+    toggle_nwc_connection,
+    delete_nwc_connection,
+)
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from coincurve import PrivateKey, PublicKey
@@ -502,6 +510,15 @@ class AliasUpdateRequest(BaseModel):
 class PayLoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=300)
     totp_code: Optional[str] = Field(default="")
+
+class NwcConnectionCreateRequest(BaseModel):
+    name: str = "NWC Connection"
+    relay_url: str = "wss://relay.getalby.com/v1"
+    allow_get_info: bool = True
+    allow_get_balance: bool = True
+    allow_pay_invoice: bool = True
+    max_payment_sat: int = Field(default=100000, ge=1, le=100000000)
+
 
 
 
@@ -4424,5 +4441,72 @@ async def api_admin_nostr_server_key_generate(request: StarletteRequest):
 @app.get("/api/debug/pending-zaps")
 def debug_zaps():
     return _get_pending_zaps()
+
+
+@app.get("/api/admin/nwc/connections")
+async def api_admin_nwc_connections(request: StarletteRequest):
+    require_pay_auth(request)
+
+    items = list_nwc_connections()
+    out = []
+    for item in items:
+        item_copy = dict(item)
+        item_copy["uri"] = build_nwc_uri(item_copy)
+        item_copy["client_secret_masked"] = (
+            item_copy.get("client_secret", "")[:8] + "…" if item_copy.get("client_secret") else ""
+        )
+        out.append(item_copy)
+    return {"connections": out}
+
+
+@app.post("/api/admin/nwc/connections")
+async def api_admin_nwc_connections_create(
+    payload: NwcConnectionCreateRequest,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+
+    wallet_service_pubkey = _nostr_server_pubkey_hex()
+    if not wallet_service_pubkey:
+        raise HTTPException(
+            status_code=400,
+            detail="No Nostr server private key configured. Generate the server key first.",
+        )
+
+    item = create_nwc_connection(
+        wallet_service_pubkey=wallet_service_pubkey,
+        name=payload.name,
+        relay_url=payload.relay_url,
+        allow_get_info=payload.allow_get_info,
+        allow_get_balance=payload.allow_get_balance,
+        allow_pay_invoice=payload.allow_pay_invoice,
+        max_payment_sat=payload.max_payment_sat,
+    )
+
+    return {"ok": True, "connection": {**item, "uri": build_nwc_uri(item)}}
+
+
+@app.post("/api/admin/nwc/connections/{connection_id}/toggle")
+async def api_admin_nwc_connections_toggle(connection_id: str, request: StarletteRequest):
+    require_pay_auth(request)
+
+    try:
+        item = toggle_nwc_connection(connection_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="NWC connection not found")
+
+    return {"ok": True, "connection": {**item, "uri": build_nwc_uri(item)}}
+
+
+@app.delete("/api/admin/nwc/connections/{connection_id}")
+async def api_admin_nwc_connections_delete(connection_id: str, request: StarletteRequest):
+    require_pay_auth(request)
+
+    try:
+        delete_nwc_connection(connection_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="NWC connection not found")
+
+    return {"ok": True}
 
 # ===== END ZAP EVENTS =====

@@ -22,3 +22,10 @@ patch_*.py
 app/data/config/config.json
 app/data/config/*.json
 !app/data/config/*.example.json
+# Backups
+*.tar.gz
+*.zip
+backup/
+backups/
+*.bak
+*.old

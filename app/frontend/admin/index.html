@@ -651,8 +651,8 @@ main.card .headerRow {
       <div id="historyList" class="historyList"></div>
     </details>
 
-    <section class="section">
-      <h2><span data-i18n="title.nostr_identity">Nostr / Identity</span></h2>
+    <details class="section">
+      <summary><span data-i18n="title.nostr_identity">Nostr / Identity</span></summary>
 
       <label class="label" for="identityAliasInput"><span data-i18n="label.identity_alias">Lightning Address Alias</span></label>
       <input id="identityAliasInput" type="text" data-i18n-placeholder="ph.identity_alias" placeholder="z. B. alex" />
@@ -687,10 +687,10 @@ main.card .headerRow {
 
       <label class="label" for="identityResultOutput" style="margin-top:14px;"><span data-i18n="label.identity_result">Identity Ergebnis</span></label>
       <textarea id="identityResultOutput" class="mono copyable" readonly data-i18n-placeholder="ph.identity_result" placeholder="Hier erscheint die Identity-Konfiguration..." title="Zum Kopieren antippen"></textarea>
-    </section>
+    </details>
 
-    <section class="section">
-      <h2><span data-i18n="title.nostr_notification_keys">Nostr Notification Keys</span></h2>
+    <details class="section">
+      <summary><span data-i18n="title.nostr_notification_keys">Nostr Notification Keys</span></summary>
 
       <label class="label"><span data-i18n="label.server_signer">Server signer</span></label>
       <div id="nostrServerStatus" class="valueBox" data-i18n="label.loading">Loading...</div>
@@ -713,7 +713,63 @@ main.card .headerRow {
       <div class="hint" style="margin-top:12px;">
         <span data-i18n="hint.notification_keys">Der Server-Key signiert App-interne Nostr-Events. Der Notification-NSEC wird für DM-/Push-kompatible Zap-Benachrichtigungen verwendet.</span>
       </div>
-    </section>
+    </details>
+
+    <details class="section">
+      <summary><span data-i18n="title.nwc">NWC / Zap Wallet</span></summary>
+
+      <label class="label" for="nwcNameInput"><span data-i18n="label.nwc_name">Connection Name</span></label>
+      <input id="nwcNameInput" type="text" data-i18n-placeholder="ph.nwc_name" placeholder="e.g. Amethyst on Pixel" />
+
+      <label class="label" for="nwcRelayInput" style="margin-top:14px;"><span data-i18n="label.nwc_relay">Relay URL</span></label>
+      <input id="nwcRelayInput" type="text" value="wss://relay.getalby.com/v1" data-i18n-placeholder="ph.nwc_relay" placeholder="wss://relay.getalby.com/v1" />
+
+      <label class="label" for="nwcMaxPaymentInput" style="margin-top:14px;"><span data-i18n="label.nwc_max_payment">Max payment per invoice (sat)</span></label>
+      <input id="nwcMaxPaymentInput" type="number" min="1" step="1" value="50000" data-i18n-placeholder="ph.nwc_max_payment" placeholder="50000" />
+
+      <div class="row">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input id="nwcAllowGetInfoInput" type="checkbox" checked />
+          <span data-i18n="label.nwc_allow_get_info">Allow get_info</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input id="nwcAllowGetBalanceInput" type="checkbox" checked />
+          <span data-i18n="label.nwc_allow_get_balance">Allow get_balance</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input id="nwcAllowPayInvoiceInput" type="checkbox" checked />
+          <span data-i18n="label.nwc_allow_pay_invoice">Allow pay_invoice</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="createNwcConnectionBtn" type="button"><span data-i18n="btn.nwc_create">Create NWC connection</span></button>
+      </div>
+
+      <div class="hint">
+        <span data-i18n="hint.nwc">Creates a Nostr Wallet Connect connection for Zap-capable clients such as Amethyst, Damus, or Primal.</span>
+      </div>
+
+      <label class="label" for="nwcUriOutput" style="margin-top:14px;"><span data-i18n="label.nwc_uri">Latest NWC URI</span></label>
+      <textarea id="nwcUriOutput" class="mono copyable" readonly data-i18n-placeholder="ph.nwc_uri" placeholder="nostr+walletconnect://..." title="Zum Kopieren antippen"></textarea>
+
+      <div class="qrPanel" style="margin-top:14px;">
+        <div class="modeBadge" data-i18n="badge.nwc_qr">QR: NWC Connection</div>
+        <div id="nwcQrBox" class="qrBox" title="Tap to copy NWC URI"></div>
+        <div class="hint" data-i18n="hint.nwc_qr">
+          Scan this QR code in a Nostr client that supports NWC wallet connections.
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="secondary" id="copyNwcUriBtn" type="button"><span data-i18n="btn.nwc_copy_uri">Copy NWC URI</span></button>
+      </div>
+
+      <label class="label" style="margin-top:14px;"><span data-i18n="label.nwc_connections">Connections</span></label>
+      <div id="nwcConnectionsList" class="historyList"></div>
+    </details>
 
     <details class="section">
       <summary><span data-i18n="title.cloudflare">Alias / Cloudflare BIP353</span></summary>
@@ -742,7 +798,7 @@ main.card .headerRow {
       </div>
 
       <label class="label" for="cfResultOutput" style="margin-top:14px;"><span data-i18n="label.result">Ergebnis</span></label>
-      <textarea id="cfResultOutput" class="mono copyable" readonly placeholder="Hier erscheint die Cloudflare-Antwort..." title="Zum Kopieren antippen"></textarea>
+      <textarea id="cfResultOutput" class="mono copyable" readonly data-i18n-placeholder="ph.cloudflare_result" placeholder="Hier erscheint die Cloudflare-Antwort..." title="Zum Kopieren antippen"></textarea>
     </details>
   </main>
 
@@ -809,6 +865,16 @@ main.card .headerRow {
     const nostrNotifyStatus = document.getElementById('nostrNotifyStatus');
     const nostrNotifyPubkey = document.getElementById('nostrNotifyPubkey');
 
+    const nwcNameInput = document.getElementById('nwcNameInput');
+    const nwcRelayInput = document.getElementById('nwcRelayInput');
+    const nwcMaxPaymentInput = document.getElementById('nwcMaxPaymentInput');
+    const nwcAllowGetInfoInput = document.getElementById('nwcAllowGetInfoInput');
+    const nwcAllowGetBalanceInput = document.getElementById('nwcAllowGetBalanceInput');
+    const nwcAllowPayInvoiceInput = document.getElementById('nwcAllowPayInvoiceInput');
+    const nwcUriOutput = document.getElementById('nwcUriOutput');
+    const nwcQrBox = document.getElementById('nwcQrBox');
+    const nwcConnectionsList = document.getElementById('nwcConnectionsList');
+
 
     const cfRecordNameInput = document.getElementById('cfRecordNameInput');
     const cfOfferInput = document.getElementById('cfOfferInput');
@@ -819,6 +885,10 @@ main.card .headerRow {
     const scannerVideo = document.getElementById('scannerVideo');
     const scannerReader = document.getElementById('scannerReader');
     const scannerTitle = document.getElementById('scannerTitle');
+
+    document.getElementById('createNwcConnectionBtn')?.addEventListener('click', createNwcConnection);
+    document.getElementById('copyNwcUriBtn')?.addEventListener('click', () => copyText(nwcUriOutput?.value || '', window.__t('toast.nwc_uri_copied')));
+    nwcQrBox?.addEventListener('click', () => copyText(nwcUriOutput?.value || '', window.__t('toast.nwc_uri_copied')));
 
     let statusTimer = null;
     let deferredPrompt = null;
@@ -854,6 +924,192 @@ main.card .headerRow {
         setStatus(successMessage || 'Kopiert.');
       } catch (error) {
         setStatus(window.__t('toast.copy_failed'), 'error');
+      }
+    }
+
+    function renderNwcQr(value) {
+      if (!nwcQrBox) return;
+      const text = String(value || '').trim();
+
+      nwcQrBox.innerHTML = '';
+
+      if (!text) {
+        nwcQrBox.innerHTML = '<div class="tiny">No NWC URI yet</div>';
+        return;
+      }
+
+      try {
+        new QRCode(nwcQrBox, {
+          text,
+          width: 240,
+          height: 240,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch (err) {
+        console.error('renderNwcQr failed', err);
+        nwcQrBox.innerHTML = '<div class="tiny">QR render failed</div>';
+      }
+    }
+
+    function renderNwcConnections(items) {
+      if (!nwcConnectionsList) return;
+      const list = Array.isArray(items) ? items : [];
+
+      if (!list.length) {
+        nwcConnectionsList.innerHTML = '<div class="emptyState">No NWC connections yet.</div>';
+        return;
+      }
+
+      nwcConnectionsList.innerHTML = list.map(item => {
+        const perms = item.permissions || {};
+        const limits = item.limits || {};
+        const state = item.enabled ? 'Enabled' : 'Disabled';
+        const uri = item.uri || '';
+        const relay = item.relay_url || '';
+        const maxSat = limits.max_payment_sat || '';
+
+        return `
+          <div class="historyItem">
+            <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div>
+                <div style="font-weight:700;">${item.name || 'NWC Connection'}</div>
+                <div class="historyMeta">${state} • relay: <span class="mono">${relay}</span></div>
+              </div>
+              <div class="historyMeta">max: ${maxSat} sats</div>
+            </div>
+
+            <div class="hint" style="margin-top:8px;">
+              get_info: ${perms.get_info ? 'yes' : 'no'} •
+              get_balance: ${perms.get_balance ? 'yes' : 'no'} •
+              pay_invoice: ${perms.pay_invoice ? 'yes' : 'no'}
+            </div>
+<div
+  class="valueBox mono copyable"
+  style="margin-top:10px;"
+  data-nwc-action="copy-uri"
+  data-nwc-uri="${encodeURIComponent(uri || '')}"
+>
+  ${uri || ''}
+</div>
+
+<div class="historyActions">
+  <button
+    class="secondary"
+    type="button"
+    data-nwc-action="copy-uri"
+    data-nwc-uri="${encodeURIComponent(uri || '')}"
+  >Copy URI</button>
+
+<button
+  class="secondary"
+  type="button"
+  data-nwc-action="show-qr"
+  data-nwc-uri="${encodeURIComponent(uri || '')}"
+>
+  <span data-i18n="btn.nwc_show_qr">Show QR</span>
+</button>
+
+  <button
+    class="secondary"
+    type="button"
+    data-nwc-action="toggle"
+    data-nwc-id="${item.id || ''}"
+  >${item.enabled ? 'Disable' : 'Enable'}</button>
+
+  <button
+    class="danger"
+    type="button"
+    data-nwc-action="delete"
+    data-nwc-id="${item.id || ''}"
+  >Delete</button>
+</div>
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadNwcConnections() {
+      const res = await fetch('/api/admin/nwc/connections', { credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || 'Failed to load NWC connections');
+      }
+      renderNwcConnections(data.connections || []);
+      const firstUri = (data.connections && data.connections[0] && data.connections[0].uri) || '';
+      if (nwcUriOutput) nwcUriOutput.value = firstUri;
+      renderNwcQr(firstUri);
+      return data.connections || [];
+    }
+
+    async function createNwcConnection() {
+      const payload = {
+        name: (nwcNameInput?.value || '').trim() || 'NWC Connection',
+        relay_url: (nwcRelayInput?.value || '').trim() || 'wss://relay.getalby.com/v1',
+        allow_get_info: !!nwcAllowGetInfoInput?.checked,
+        allow_get_balance: !!nwcAllowGetBalanceInput?.checked,
+        allow_pay_invoice: !!nwcAllowPayInvoiceInput?.checked,
+        max_payment_sat: Number(nwcMaxPaymentInput?.value || 0),
+      };
+
+      if (!payload.max_payment_sat || payload.max_payment_sat < 1) {
+        setStatus('Please enter a valid max payment in sats.', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('createNwcConnectionBtn');
+      if (btn) btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/admin/nwc/connections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.error || 'Failed to create NWC connection');
+
+        if (nwcUriOutput) nwcUriOutput.value = data.connection?.uri || '';
+        renderNwcQr(data.connection?.uri || '');
+        await loadNwcConnections();
+        setStatus('NWC connection created.');
+      } catch (err) {
+        setStatus(err.message || 'Failed to create NWC connection.', 'error', true);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function toggleNwcConnection(id) {
+      try {
+        const res = await fetch(`/api/admin/nwc/connections/${encodeURIComponent(id)}/toggle`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.error || 'Failed to toggle NWC connection');
+        await loadNwcConnections();
+        setStatus('NWC connection updated.');
+      } catch (err) {
+        setStatus(err.message || 'Failed to toggle NWC connection.', 'error', true);
+      }
+    }
+
+    async function deleteNwcConnection(id) {
+      if (!confirm('Delete this NWC connection?')) return;
+
+      try {
+        const res = await fetch(`/api/admin/nwc/connections/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.error || 'Failed to delete NWC connection');
+        await loadNwcConnections();
+        setStatus('NWC connection deleted.');
+      } catch (err) {
+        setStatus(err.message || 'Failed to delete NWC connection.', 'error', true);
       }
     }
 
@@ -1448,6 +1704,42 @@ async function saveIdentityConfig() {
     btn.innerHTML = `<span data-i18n="btn.identity_save">${window.__t('btn.identity_save')}</span>`;
   }
 }
+
+nwcConnectionsList?.addEventListener('click', async (ev) => {
+  const target = ev.target.closest('[data-nwc-action]');
+  if (!target) return;
+
+  const action = target.dataset.nwcAction;
+
+  if (action === 'copy-uri') {
+    const uri = decodeURIComponent(target.dataset.nwcUri || '');
+    if (nwcUriOutput) nwcUriOutput.value = uri;
+    renderNwcQr(uri);
+    await copyText(uri, window.__t('toast.nwc_uri_copied'));
+    return;
+  }
+
+if (action === 'show-qr') {
+  const uri = decodeURIComponent(target.dataset.nwcUri || '');
+  if (nwcUriOutput) nwcUriOutput.value = uri;
+  renderNwcQr(uri);
+  setStatus(window.__t ? window.__t('toast.qr_updated') : 'QR updated');
+  return;
+}
+  if (action === 'toggle') {
+    const id = target.dataset.nwcId || '';
+    if (!id) return;
+    await toggleNwcConnection(id);
+    return;
+  }
+
+  if (action === 'delete') {
+    const id = target.dataset.nwcId || '';
+    if (!id) return;
+    await deleteNwcConnection(id);
+  }
+});
+
     function applyScanResult(rawValue) {
       const value = normalizeScannedText(rawValue);
       if (!value) {
@@ -2130,6 +2422,11 @@ if ('serviceWorker' in navigator) {
 
 window.addEventListener('load', async () => {
   await loadNostrStatus();
+  try {
+    await loadNwcConnections();
+  } catch (err) {
+    console.error('loadNwcConnections failed', err);
+  }
 });
 
 </script>
@@ -2272,6 +2569,11 @@ window.addEventListener('load', async () => {
       "scanner.subtitle.decode": "Scanne ein Offer oder eine BIP353-Adresse für Decode.",
       "scanner.close": "Scanner schließen",
       "scanner.hint": "Scannt lno..., lightning:..., bitcoin:... oder user@domain.",
+      "badge.nwc_qr": "QR: NWC Verbindung",
+      "hint.nwc_qr": "Scanne diesen QR-Code in einem Nostr-Client mit NWC-Unterstützung.",
+      "toast.nwc_uri_copied": "NWC URI kopiert.",
+      "btn.nwc_show_qr": "QR anzeigen",
+      "toast.qr_updated": "QR-Code aktualisiert.",
       "toast.identity_loaded": "Identity geladen:",
       "toast.identity_saved": "Identity gespeichert:",
       "toast.address_copied": "Adresse kopiert.",
@@ -2311,6 +2613,22 @@ window.addEventListener('load', async () => {
       "btn.save_notification_nsec": "Notification NSEC speichern",
       "hint.notification_keys": "Der Server-Key signiert App-interne Nostr-Events. Der Notification-NSEC wird für DM-/Push-kompatible Zap-Benachrichtigungen verwendet.",
       "ph.notification_nsec": "nsec1...",
+      "title.nwc": "NWC / Zap Wallet",
+      "label.nwc_name": "Verbindungsname",
+      "ph.nwc_name": "z. B. Amethyst auf Pixel",
+      "label.nwc_relay": "Relay URL",
+      "ph.nwc_relay": "wss://relay.getalby.com/v1",
+      "label.nwc_max_payment": "Max. Zahlung pro Rechnung (sat)",
+      "ph.nwc_max_payment": "50000",
+      "label.nwc_allow_get_info": "get_info erlauben",
+      "label.nwc_allow_get_balance": "get_balance erlauben",
+      "label.nwc_allow_pay_invoice": "pay_invoice erlauben",
+      "btn.nwc_create": "NWC-Verbindung erstellen",
+      "hint.nwc": "Erstellt eine Nostr Wallet Connect Verbindung für Zap-fähige Clients wie Amethyst, Damus oder Primal.",
+      "label.nwc_uri": "Letzte NWC URI",
+      "ph.nwc_uri": "nostr+walletconnect://...",
+      "btn.nwc_copy_uri": "NWC URI kopieren",
+      "label.nwc_connections": "Verbindungen",
       "title.cloudflare": "Alias / Cloudflare BIP353",
       "label.record_name": "Record Name",
       "label.offer_lno": "Offer (lno...)",
@@ -2322,6 +2640,7 @@ window.addEventListener('load', async () => {
       "ph.record_name": "z. B. phoenixd",
       "ph.offer_lno": "Hier das lno... Offer einfügen oder übernehmen",
       "ph.generated_address": "Hier erscheint die neue Adresse...",
+      "ph.cloudflare_result": "Hier erscheint die Cloudflare-Antwort...",
       "hint.cloudflare_prefix": "Erstellt einen TXT-Record wie",
       "pay.summary.success": "✅ BOLT12-Offer erfolgreich bezahlt",
       "pay.summary.direct_offer": "🧾 Direktes Offer bezahlt",
@@ -2432,6 +2751,11 @@ window.addEventListener('load', async () => {
       "scanner.subtitle.decode": "Scan an offer or a BIP353 address for Decode.",
       "scanner.close": "Close scanner",
       "scanner.hint": "Scans lno..., lightning:..., bitcoin:... or user@domain.",
+      "badge.nwc_qr": "QR: NWC Connection",
+      "toast.nwc_uri_copied": "NWC URI copied.",
+      "hint.nwc_qr": "Scan this QR code in a Nostr client that supports NWC wallet connections.",
+      "btn.nwc_show_qr": "Show QR",
+      "toast.qr_updated": "QR updated.",
       "toast.identity_loaded": "Identity loaded:",
       "toast.identity_saved": "Identity saved:",
       "toast.address_copied": "Address copied.",
@@ -2471,6 +2795,22 @@ window.addEventListener('load', async () => {
       "btn.save_notification_nsec": "Save notification NSEC",
       "hint.notification_keys": "The server key signs internal app Nostr events. The notification NSEC is used for DM-/push-compatible zap notifications.",
       "ph.notification_nsec": "nsec1...",
+      "title.nwc": "NWC / Zap Wallet",
+      "label.nwc_name": "Connection Name",
+      "ph.nwc_name": "e.g. Amethyst on Pixel",
+      "label.nwc_relay": "Relay URL",
+      "ph.nwc_relay": "wss://relay.getalby.com/v1",
+      "label.nwc_max_payment": "Max payment per invoice (sat)",
+      "ph.nwc_max_payment": "50000",
+      "label.nwc_allow_get_info": "Allow get_info",
+      "label.nwc_allow_get_balance": "Allow get_balance",
+      "label.nwc_allow_pay_invoice": "Allow pay_invoice",
+      "btn.nwc_create": "Create NWC connection",
+      "hint.nwc": "Creates a Nostr Wallet Connect connection for Zap-capable clients such as Amethyst, Damus, or Primal.",
+      "label.nwc_uri": "Latest NWC URI",
+      "ph.nwc_uri": "nostr+walletconnect://...",
+      "btn.nwc_copy_uri": "Copy NWC URI",
+      "label.nwc_connections": "Connections",
       "title.cloudflare": "Alias / Cloudflare BIP353",
       "label.record_name": "Record name",
       "label.offer_lno": "Offer (lno...)",
@@ -2482,6 +2822,7 @@ window.addEventListener('load', async () => {
       "ph.record_name": "e.g. phoenixd",
       "ph.offer_lno": "Paste or use the current lno... offer here",
       "ph.generated_address": "The new address will appear here...",
+      "ph.cloudflare_result": "The Cloudflare response will appear here...",
       "hint.cloudflare_prefix": "Creates a TXT record like",
       "pay.summary.success": "✅ BOLT12 offer paid successfully",
       "pay.summary.direct_offer": "🧾 Direct offer paid",
