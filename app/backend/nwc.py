@@ -139,3 +139,6 @@ def delete_nwc_connection(connection_id: str) -> None:
         raise KeyError("NWC connection not found")
 
     _save_raw(filtered)
+
+def load_connections():
+    return list_nwc_connections()

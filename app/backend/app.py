@@ -38,7 +38,7 @@ from backend.nwc import (
     delete_nwc_connection,
 )
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import pad, unpad
 from coincurve import PrivateKey, PublicKey
 
 # --- Configuration ---------------------------------------------------------
@@ -638,7 +638,8 @@ def _load_nostr_name_map():
 
 NOSTR_NAME_MAP = _get_setting("NOSTR_NAME_MAP", "nostr", "name_map", default={})
 
-app = FastAPI(title="LNDK Backend", version="0.5.0")
+app = FastAPI(
+title="LNDK Backend", version="0.5.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -4115,6 +4116,33 @@ def _nip04_encrypt(privkey_hex: str, pubkey_hex: str, plaintext: str) -> str:
     )
 
 
+
+def _nip04_decrypt(privkey_hex: str, pubkey_hex: str, payload: str) -> str:
+    try:
+        if "?iv=" not in payload:
+            raise ValueError("Missing ?iv= separator")
+
+        ciphertext_b64, iv_b64 = payload.split("?iv=", 1)
+        ciphertext = base64.b64decode(ciphertext_b64)
+        iv = base64.b64decode(iv_b64)
+
+        privkey_bytes = bytes.fromhex(privkey_hex)
+        sender_pubkey = PublicKey(bytes.fromhex("02" + pubkey_hex))
+
+        shared_point = sender_pubkey.multiply(privkey_bytes)
+        shared_point_compressed = shared_point.format(compressed=True)
+
+        key = shared_point_compressed[1:33]
+
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        decrypted = unpad(cipher.decrypt(ciphertext), 16)
+
+        return decrypted.decode("utf-8")
+
+    except Exception as exc:
+        raise ValueError(f"NIP-04 decrypt failed: {exc}") from exc
+
+
 def _build_dm_event(recipient_pubkey_hex: str, encrypted_content: str) -> dict[str, Any]:
     return {
         "kind": 4,
@@ -4372,13 +4400,15 @@ async def _zap_publisher_loop():
         try:
             await _process_pending_zaps_once()
         except Exception as e:
-            print("zap loop error", e)
+            print("zap loop error", e, flush=True)
         await asyncio.sleep(NOSTR_ZAP_POLL_INTERVAL)
 
 @app.on_event("startup")
-async def start_zap_loop():
-    asyncio.create_task(_zap_publisher_loop())
-    print("zap publisher loop started")
+async def startup_background_tasks():
+    app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
+    app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
+    print("zap publisher loop started", flush=True)
+    print("[NWC] startup task scheduled", flush=True)
 
 @app.get("/api/admin/nostr-status")
 async def api_admin_nostr_status(request: StarletteRequest):
@@ -4510,3 +4540,6 @@ async def api_admin_nwc_connections_delete(connection_id: str, request: Starlett
     return {"ok": True}
 
 # ===== END ZAP EVENTS =====
+
+
+from .nwc_runtime import start_nwc_runtime
