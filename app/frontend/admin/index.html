@@ -757,7 +757,7 @@ main.card .headerRow {
 
       <div class="qrPanel" style="margin-top:14px;">
         <div class="modeBadge" data-i18n="badge.nwc_qr">QR: NWC Connection</div>
-        <div id="nwcQrBox" class="qrBox" title="Tap to copy NWC URI"></div>
+        <div id="nwcQr" class="qrBox" title="Tap to copy NWC URI"></div>
         <div class="hint" data-i18n="hint.nwc_qr">
           Scan this QR code in a Nostr client that supports NWC wallet connections.
         </div>
@@ -872,7 +872,7 @@ main.card .headerRow {
     const nwcAllowGetBalanceInput = document.getElementById('nwcAllowGetBalanceInput');
     const nwcAllowPayInvoiceInput = document.getElementById('nwcAllowPayInvoiceInput');
     const nwcUriOutput = document.getElementById('nwcUriOutput');
-    const nwcQrBox = document.getElementById('nwcQrBox');
+    const nwcQrBox = document.getElementById('nwcQr') || document.getElementById('nwcQrBox');
     const nwcConnectionsList = document.getElementById('nwcConnectionsList');
 
 
@@ -928,28 +928,30 @@ main.card .headerRow {
     }
 
     function renderNwcQr(value) {
-      if (!nwcQrBox) return;
-      const text = String(value || '').trim();
+      const qrEl = document.getElementById('nwcQr') || document.getElementById('nwcQrBox') || nwcQrBox;
+      if (!qrEl) return;
 
-      nwcQrBox.innerHTML = '';
+      const raw = String(value || '').trim();
+      qrEl.innerHTML = '';
 
-      if (!text) {
-        nwcQrBox.innerHTML = '<div class="tiny">No NWC URI yet</div>';
+      if (!raw) {
+        qrEl.innerHTML = '<div class="hint">No NWC QR generated yet.</div>';
         return;
       }
 
       try {
-        new QRCode(nwcQrBox, {
-          text,
-          width: 240,
-          height: 240,
+        new QRCode(qrEl, {
+          text: raw,
+          width: 220,
+          height: 220,
           correctLevel: QRCode.CorrectLevel.M
         });
       } catch (err) {
-        console.error('renderNwcQr failed', err);
-        nwcQrBox.innerHTML = '<div class="tiny">QR render failed</div>';
+        console.error('Failed to render NWC QR', err);
+        qrEl.innerHTML = '<div class="hint">Failed to render QR.</div>';
       }
     }
+
 
     function renderNwcConnections(items) {
       if (!nwcConnectionsList) return;
@@ -1035,12 +1037,31 @@ main.card .headerRow {
       if (!res.ok) {
         throw new Error(data.detail || data.error || 'Failed to load NWC connections');
       }
-      renderNwcConnections(data.connections || []);
-      const firstUri = (data.connections && data.connections[0] && data.connections[0].uri) || '';
-      if (nwcUriOutput) nwcUriOutput.value = firstUri;
-      renderNwcQr(firstUri);
-      return data.connections || [];
+
+      const connections = data.connections || [];
+      renderNwcConnections(connections);
+
+      const currentValue = (nwcUriOutput?.value || '').trim();
+      if (!currentValue && connections.length > 0) {
+        nwcUriOutput.value = connections[0].uri || '';
+        renderNwcQr(nwcUriOutput.value);
+      } else if (currentValue) {
+        renderNwcQr(currentValue);
+      } else {
+        renderNwcQr('');
+      }
+
+      return connections;
     }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        await loadNwcConnections();
+      } catch (err) {
+        console.error('NWC init failed', err);
+        renderNwcQr('');
+      }
+    });
 
     async function createNwcConnection() {
       const payload = {
@@ -1067,11 +1088,16 @@ main.card .headerRow {
           credentials: 'include',
           body: JSON.stringify(payload),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || data.error || 'Failed to create NWC connection');
 
-        if (nwcUriOutput) nwcUriOutput.value = data.connection?.uri || '';
-        renderNwcQr(data.connection?.uri || '');
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || data.error || 'Failed to create NWC connection');
+        }
+
+        const uri = data.connection?.uri || '';
+        if (nwcUriOutput) nwcUriOutput.value = uri;
+        renderNwcQr(uri);
+
         await loadNwcConnections();
         setStatus('NWC connection created.');
       } catch (err) {
@@ -2410,24 +2436,9 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
 
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      await navigator.serviceWorker.register('/service-worker.js');
-      console.log('Service Worker registered');
-    } catch (err) {
-      console.error('Service Worker registration failed', err);
-    }
-  });
+  
 }
 
-window.addEventListener('load', async () => {
-  await loadNostrStatus();
-  try {
-    await loadNwcConnections();
-  } catch (err) {
-    console.error('loadNwcConnections failed', err);
-  }
-});
 
 </script>
 
@@ -3084,6 +3095,13 @@ window.addEventListener('load', async () => {
   }
 
 })();
+</script>
+
+
+
+
+
+<script>
 </script>
 
 </body>

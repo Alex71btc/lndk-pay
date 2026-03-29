@@ -4513,7 +4513,15 @@ async def api_admin_nwc_connections_create(
         max_payment_sat=payload.max_payment_sat,
     )
 
-    return {"ok": True, "connection": {**item, "uri": build_nwc_uri(item)}}
+    await reload_nwc_runtime()
+    return {"ok": True, "connection": {
+        **item,
+        "uri": build_nwc_uri(item),
+        "limits": item.get("limits", {
+            "max_payment_sat": 1000,
+            "daily_budget_sat": 5000
+        })
+    }}
 
 
 @app.post("/api/admin/nwc/connections/{connection_id}/toggle")
@@ -4525,7 +4533,15 @@ async def api_admin_nwc_connections_toggle(connection_id: str, request: Starlett
     except KeyError:
         raise HTTPException(status_code=404, detail="NWC connection not found")
 
-    return {"ok": True, "connection": {**item, "uri": build_nwc_uri(item)}}
+    await reload_nwc_runtime()
+    return {"ok": True, "connection": {
+        **item,
+        "uri": build_nwc_uri(item),
+        "limits": item.get("limits", {
+            "max_payment_sat": 1000,
+            "daily_budget_sat": 5000
+        })
+    }}
 
 
 @app.delete("/api/admin/nwc/connections/{connection_id}")
@@ -4537,9 +4553,10 @@ async def api_admin_nwc_connections_delete(connection_id: str, request: Starlett
     except KeyError:
         raise HTTPException(status_code=404, detail="NWC connection not found")
 
+    await reload_nwc_runtime()
     return {"ok": True}
 
 # ===== END ZAP EVENTS =====
 
 
-from .nwc_runtime import start_nwc_runtime
+from .nwc_runtime import start_nwc_runtime, reload_nwc_runtime

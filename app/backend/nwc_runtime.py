@@ -9,6 +9,10 @@ import websockets
 
 from .nwc import load_connections
 
+_nwc_tasks: dict[str, asyncio.Task] = {}
+_nwc_started = False
+_nwc_runtime_lock = asyncio.Lock()
+
 
 def _build_subscription_id(conn: dict[str, Any]) -> str:
     return f"nwc_{conn.get('id', 'unknown')}"
@@ -119,7 +123,6 @@ async def _send_nwc_success(
     content = _build_nwc_success_content(result_type, result)
     await _send_nwc_response_event(ws, request_event, content)
 
-
 async def _send_nwc_error(
     ws,
     request_event: dict[str, Any],
@@ -166,6 +169,7 @@ async def _send_nwc_subscription(ws, conn: dict[str, Any]) -> None:
 
 async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any]) -> None:
     from .app import _nip04_decrypt, _pay_bolt11_invoice
+    import bolt11
 
     event_id = str(event.get("id") or "")
     event_pubkey = str(event.get("pubkey") or "").strip().lower()
@@ -218,6 +222,7 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
     )
 
     permissions = matched.get("permissions") or {}
+    limits = matched.get("limits") or {}
 
     if method == "pay_invoice":
         if not bool(permissions.get("pay_invoice", False)):
@@ -227,6 +232,37 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         invoice = str(params.get("invoice") or "").strip()
         if not invoice:
             await _send_nwc_error(ws, event, "INVALID_REQUEST", "Missing invoice")
+            return
+
+        max_payment_sat = int(limits.get("max_payment_sat") or 0)
+
+        try:
+            decoded = bolt11.decode(invoice)
+        except Exception as exc:
+            print(f"[NWC] request {event_id}: invoice decode failed: {exc}", flush=True)
+            await _send_nwc_error(ws, event, "INVALID_REQUEST", f"Invalid invoice: {exc}")
+            return
+
+        invoice_sat = 0
+        try:
+            amount_msat = getattr(decoded, "amount_msat", None)
+            amount = getattr(decoded, "amount", None)
+
+            if amount_msat is not None:
+                invoice_sat = int(amount_msat) // 1000
+            elif amount is not None:
+                invoice_sat = int(amount)
+        except Exception:
+            invoice_sat = 0
+
+        if invoice_sat <= 0:
+            await _send_nwc_error(ws, event, "INVALID_REQUEST", "Invoice amount missing or invalid")
+            return
+
+        if max_payment_sat > 0 and invoice_sat > max_payment_sat:
+            msg = f"Invoice amount {invoice_sat} sats exceeds connection limit of {max_payment_sat} sats"
+            print(f"[NWC] request {event_id}: limit exceeded: {msg}", flush=True)
+            await _send_nwc_error(ws, event, "RESTRICTED", msg)
             return
 
         try:
@@ -248,6 +284,15 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
                 result["payment_hash"] = str(payment_hash)
             if fee_sat is not None:
                 result["fees_paid"] = int(fee_sat) * 1000
+
+        # --- budget check ---
+        amount_sat = decoded_invoice.get("amount_sat") if "decoded_invoice" in locals() else None
+        if amount_sat:
+            ok, err = _check_and_update_budget(conn, amount_sat)
+            if not ok:
+                print(f"[NWC] request {event_id}: {err}", flush=True)
+                await _send_nwc_error(ws, event, "QUOTA_EXCEEDED", err)
+                return
 
         print(f"[NWC] request {event_id}: payment success result={result}", flush=True)
         await _send_nwc_success(ws, event, "pay_invoice", result)
@@ -347,6 +392,60 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
     print(f"[NWC] unhandled relay message on {conn.get('name')}: {data!r}", flush=True)
 
 
+
+def _now_ts():
+    import time
+    return int(time.time())
+
+
+def _period_key(period: str):
+    import datetime
+    now = datetime.datetime.utcnow()
+
+    if period == "day":
+        return now.strftime("%Y-%m-%d")
+    if period == "week":
+        return f"{now.year}-W{now.isocalendar().week}"
+    if period == "month":
+        return now.strftime("%Y-%m")
+
+    return "unknown"
+
+
+def _check_and_update_budget(conn: dict, amount_sat: int) -> tuple[bool, str | None]:
+    limits = conn.get("limits", {}) or {}
+    usage = conn.setdefault("usage", {})
+
+    # single payment limit
+    max_single = limits.get("max_payment_sat")
+    if max_single and amount_sat > max_single:
+        return False, f"Invoice amount {amount_sat} sats exceeds single payment limit of {max_single} sats"
+
+    for period in ["day", "week", "month"]:
+        limit_key = f"{period}_budget_sat"
+        limit_val = limits.get(limit_key)
+        if not limit_val:
+            continue
+
+        period_key = _period_key(period)
+        period_usage = usage.setdefault(period, {})
+        current = period_usage.get(period_key, 0)
+
+        if current + amount_sat > limit_val:
+            return False, f"{period} budget exceeded ({current + amount_sat} > {limit_val} sats)"
+
+    # update usage
+    for period in ["day", "week", "month"]:
+        limit_key = f"{period}_budget_sat"
+        if not limits.get(limit_key):
+            continue
+
+        period_key = _period_key(period)
+        usage.setdefault(period, {})
+        usage[period][period_key] = usage[period].get(period_key, 0) + amount_sat
+
+    return True, None
+
 async def nwc_connection_loop(conn: dict[str, Any]) -> None:
     relay = str(conn.get("relay_url") or "").strip()
     name = str(conn.get("name") or "NWC Connection").strip()
@@ -373,8 +472,24 @@ async def nwc_connection_loop(conn: dict[str, Any]) -> None:
             await asyncio.sleep(5)
 
 
-async def start_nwc_runtime() -> None:
-    print("[NWC] runtime starting...", flush=True)
+async def _stop_all_nwc_tasks() -> None:
+    global _nwc_tasks
+
+    for conn_id, task in list(_nwc_tasks.items()):
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
+    _nwc_tasks = {}
+
+
+async def _start_nwc_tasks() -> None:
+    global _nwc_tasks
 
     try:
         connections = load_connections()
@@ -391,13 +506,29 @@ async def start_nwc_runtime() -> None:
         print("[NWC] no enabled connections, runtime idle", flush=True)
         return
 
-    tasks = []
     for conn in enabled:
+        conn_id = str(conn.get("id") or "")
         print(
             f"[NWC] scheduling connection: "
             f"name={conn.get('name')} relay={conn.get('relay_url')} client_pubkey={conn.get('client_pubkey')}",
             flush=True,
         )
-        tasks.append(asyncio.create_task(nwc_connection_loop(conn)))
+        task = asyncio.create_task(nwc_connection_loop(conn))
+        if conn_id:
+            _nwc_tasks[conn_id] = task
 
-    await asyncio.gather(*tasks)
+
+async def reload_nwc_runtime() -> None:
+    async with _nwc_runtime_lock:
+        print("[NWC] reload requested", flush=True)
+        await _stop_all_nwc_tasks()
+        await _start_nwc_tasks()
+        print("[NWC] reload complete", flush=True)
+
+
+async def start_nwc_runtime() -> None:
+    print("[NWC] runtime starting (clean)...", flush=True)
+    async with _nwc_runtime_lock:
+        await _stop_all_nwc_tasks()
+        await _start_nwc_tasks()
+
