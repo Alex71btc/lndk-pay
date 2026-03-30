@@ -634,7 +634,7 @@ async def _cancel_nwc_task(task: asyncio.Task) -> None:
 async def _stop_all_nwc_tasks() -> None:
     global _nwc_tasks
 
-    for conn_id, task in list(_nwc_tasks.items()):
+    for task in list(_nwc_tasks.values()):
         await _cancel_nwc_task(task)
 
     _nwc_tasks = {}
@@ -656,17 +656,20 @@ async def _start_nwc_tasks() -> None:
             _nwc_tasks[conn_id] = task
 
 
+async def _restart_nwc_tasks() -> None:
+    await _stop_all_nwc_tasks()
+    await _start_nwc_tasks()
+
+
 async def reload_nwc_runtime() -> None:
     async with _nwc_runtime_lock:
         _log("reload requested")
-        await _stop_all_nwc_tasks()
-        await _start_nwc_tasks()
+        await _restart_nwc_tasks()
         _log("reload complete")
 
 
 async def start_nwc_runtime() -> None:
     _log("runtime starting (clean)...")
     async with _nwc_runtime_lock:
-        await _stop_all_nwc_tasks()
-        await _start_nwc_tasks()
+        await _restart_nwc_tasks()
 
