@@ -1007,16 +1007,48 @@ main.card .headerRow {
     }
 
 let nwcUnlockTimer = null;
+let nwcUnlockCountdownTimer = null;
+
+function formatNwcCountdown(totalSeconds) {
+  const secs = Math.max(0, Number(totalSeconds) || 0);
+  const minutes = Math.floor(secs / 60);
+  const seconds = secs % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function stopNwcAutoLockCountdown() {
+  if (nwcUnlockCountdownTimer) {
+    clearInterval(nwcUnlockCountdownTimer);
+    nwcUnlockCountdownTimer = null;
+  }
+}
 
 function startNwcAutoLock(seconds) {
   if (nwcUnlockTimer) {
     clearTimeout(nwcUnlockTimer);
+    nwcUnlockTimer = null;
   }
 
+  stopNwcAutoLockCountdown();
+
+  let remaining = Math.max(0, Number(seconds) || 0);
+  setStatus(String(window.__t('toast.nwc_unlocked_countdown')).replace('{time}', formatNwcCountdown(remaining)));
+
+  nwcUnlockCountdownTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      stopNwcAutoLockCountdown();
+      return;
+    }
+    setStatus(String(window.__t('toast.nwc_unlocked_countdown')).replace('{time}', formatNwcCountdown(remaining)));
+  }, 1000);
+
   nwcUnlockTimer = setTimeout(() => {
+    stopNwcAutoLockCountdown();
     setNwcUnlockedState(false);
     setStatus(window.__t('toast.nwc_locked'));
-  }, seconds * 1000);
+    nwcUnlockTimer = null;
+  }, remaining * 1000);
 }
 
     function openNwcUnlockModal() {
@@ -1743,27 +1775,47 @@ function errorToMessage(error) {
 
 
 async function loadNostrStatus() {
+  const t = (key, fallback) => {
+    try {
+      return (window.__t && window.__t(key)) || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
   try {
     const res = await fetch('/api/admin/nostr-status', { credentials: 'same-origin' });
-    if (!res.ok) return;
+    if (!res.ok) {
+      if (nostrServerStatus) nostrServerStatus.textContent = t('label.error', 'Error');
+      if (nostrNotifyStatus) nostrNotifyStatus.textContent = t('label.error', 'Error');
+      return;
+    }
+
     const data = await res.json();
 
     if (nostrServerStatus) {
-      nostrServerStatus.textContent = data.server_key_configured ? window.__t('label.configured') : window.__t('label.missing');
+      nostrServerStatus.textContent = data.server_key_configured
+        ? t('label.configured', 'Configured')
+        : t('label.missing', 'Missing');
     }
+
     if (nostrServerPubkey) {
       nostrServerPubkey.textContent = data.server_npub || data.server_pubkey_hex || '';
     }
+
     if (nostrNotifyStatus) {
       nostrNotifyStatus.textContent = data.notify_key_configured
-        ? `${window.__t('label.configured_prefix')} ${data.notify_nsec_masked || ''}`
-        : 'Missing';
+        ? `${t('label.configured', 'Configured')}: ${data.notify_nsec_masked || ''}`
+        : t('label.missing', 'Missing');
     }
+
     if (nostrNotifyPubkey) {
       nostrNotifyPubkey.textContent = data.notify_npub || data.notify_pubkey_hex || '';
     }
   } catch (err) {
     console.error('loadNostrStatus failed', err);
+    if (nostrServerStatus) nostrServerStatus.textContent = 'Error';
+    if (nostrNotifyStatus) nostrNotifyStatus.textContent = 'Error';
   }
 }
 
@@ -2636,6 +2688,11 @@ if ('serviceWorker' in navigator) {
     applyLangUI(); if (window.applyTranslations) window.applyTranslations();
   });
 })();
+
+window.addEventListener('load', () => {
+  loadNostrStatus().catch(err => console.error('late loadNostrStatus failed', err));
+});
+
 </script>
 
 
@@ -2808,6 +2865,7 @@ if ('serviceWorker' in navigator) {
       "hint.nwc_unlock_modal": "Gib dein Pay-Passwort ein. NWC wird nach kurzer Zeit automatisch wieder gesperrt.",
       "ph.nwc_unlock_password": "Pay-Passwort",
       "toast.nwc_unlocked": "NWC entsperrt (Auto-Lock in 3 Minuten).",
+      "toast.nwc_unlocked_countdown": "NWC entsperrt (Auto-Lock in {time})",
       "toast.nwc_locked": "NWC gesperrt.",
       "hint.nwc_locked": "NWC ist gesperrt.",
       "hint.nwc_no_connections": "Noch keine NWC-Verbindungen vorhanden.",
@@ -3022,6 +3080,7 @@ if ('serviceWorker' in navigator) {
       "hint.nwc_unlock_modal": "Enter your Pay password. NWC will auto-lock after a short time.",
       "ph.nwc_unlock_password": "Pay password",
       "toast.nwc_unlocked": "NWC unlocked (auto-lock in 3 minutes).",
+      "toast.nwc_unlocked_countdown": "NWC unlocked (auto-lock in {time})",
       "toast.nwc_locked": "NWC locked.",
 
       "toast.nwc_unlocked": "NWC unlocked (auto-lock in 3 minutes).",
