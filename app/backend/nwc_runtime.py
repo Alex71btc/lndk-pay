@@ -514,6 +514,18 @@ async def _handle_event_message(ws, conn: dict[str, Any], data: list[Any]) -> No
     await _handle_request_event(ws, conn, event)
 
 
+def _handle_eose_message(conn: dict[str, Any], data: list[Any]) -> None:
+    _log(f"EOSE on {conn.get('name')}: {data!r}")
+
+
+def _handle_notice_message(conn: dict[str, Any], data: list[Any]) -> None:
+    _log(f"NOTICE on {conn.get('name')}: {data!r}")
+
+
+def _handle_ok_message(conn: dict[str, Any], data: list[Any]) -> None:
+    _log(f"OK on {conn.get('name')}: {data!r}")
+
+
 async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
     try:
         data = json.loads(msg)
@@ -532,15 +544,15 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
         return
 
     if msg_type == "EOSE":
-        _log(f"EOSE on {conn.get('name')}: {data!r}")
+        _handle_eose_message(conn, data)
         return
 
     if msg_type == "NOTICE":
-        _log(f"NOTICE on {conn.get('name')}: {data!r}")
+        _handle_notice_message(conn, data)
         return
 
     if msg_type == "OK":
-        _log(f"OK on {conn.get('name')}: {data!r}")
+        _handle_ok_message(conn, data)
         return
 
     _log(f"unhandled relay message on {conn.get('name')}: {data!r}")
