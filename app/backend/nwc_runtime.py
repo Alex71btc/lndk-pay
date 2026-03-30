@@ -14,6 +14,14 @@ _nwc_started = False
 _nwc_runtime_lock = asyncio.Lock()
 
 
+def _log(message: str) -> None:
+    print(f"[NWC] {message}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Small helpers
+# ---------------------------------------------------------------------------
+
 def _build_subscription_id(conn: dict[str, Any]) -> str:
     return f"nwc_{conn.get('id', 'unknown')}"
 
@@ -57,6 +65,11 @@ def _get_server_privkey() -> str:
         or ""
     ).strip().lower()
 
+
+# ---------------------------------------------------------------------------
+# Budget helpers
+# ---------------------------------------------------------------------------
+
 def _current_budget_period_key(period: str) -> str:
     from datetime import datetime, timezone
 
@@ -78,9 +91,9 @@ def _check_and_update_budget(conn: dict[str, Any], amount_sat: int) -> tuple[boo
     period = str(limits.get("budget_period") or "none").strip().lower()
     budget_amount_sat = int(limits.get("budget_amount_sat") or 0)
 
-    print(
-        f"[NWC] budget check: conn={conn.get('name')} period={period} budget_amount_sat={budget_amount_sat} amount_sat={amount_sat}",
-        flush=True,
+    _log(
+        f"budget check: conn={conn.get('name')} period={period} "
+        f"budget_amount_sat={budget_amount_sat} amount_sat={amount_sat}"
     )
 
     if period == "none" or budget_amount_sat <= 0:
@@ -106,12 +119,14 @@ def _check_and_update_budget(conn: dict[str, Any], amount_sat: int) -> tuple[boo
         new_total,
     )
 
-    print(
-        f"[NWC] budget updated: conn={conn.get('name')} spent={new_total}",
-        flush=True,
-    )
+    _log(f"budget updated: conn={conn.get('name')} spent={new_total}")
 
     return True, None
+
+
+# ---------------------------------------------------------------------------
+# Response payload helpers
+# ---------------------------------------------------------------------------
 
 def _build_nwc_success_content(result_type: str, result: dict[str, Any]) -> str:
     payload = {
@@ -133,6 +148,10 @@ def _build_nwc_error_content(code: str, message: str) -> str:
     }
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
 
+
+# ---------------------------------------------------------------------------
+# Nostr response sending
+# ---------------------------------------------------------------------------
 
 async def _send_nwc_response_event(
     ws,
@@ -163,9 +182,9 @@ async def _send_nwc_response_event(
     signed = _sign_nostr_event(response_event)
     await ws.send(json.dumps(["EVENT", signed]))
 
-    print(
-        f"[NWC] response sent: request_event_id={request_event_id} response_event_id={signed.get('id')}",
-        flush=True,
+    _log(
+        f"response sent: request_event_id={request_event_id} "
+        f"response_event_id={signed.get('id')}"
     )
 
 
@@ -178,6 +197,7 @@ async def _send_nwc_success(
     content = _build_nwc_success_content(result_type, result)
     await _send_nwc_response_event(ws, request_event, content)
 
+
 async def _send_nwc_error(
     ws,
     request_event: dict[str, Any],
@@ -188,6 +208,10 @@ async def _send_nwc_error(
     await _send_nwc_response_event(ws, request_event, content)
 
 
+# ---------------------------------------------------------------------------
+# Relay setup helpers
+# ---------------------------------------------------------------------------
+
 async def _publish_nwc_info_event(ws, conn: dict[str, Any]) -> None:
     from .app import _sign_nostr_event
 
@@ -195,10 +219,7 @@ async def _publish_nwc_info_event(ws, conn: dict[str, Any]) -> None:
     signed = _sign_nostr_event(event)
 
     await ws.send(json.dumps(["EVENT", signed]))
-    print(
-        f"[NWC] published info event: {conn.get('name')} event_id={signed.get('id')}",
-        flush=True,
-    )
+    _log(f"published info event: {conn.get('name')} event_id={signed.get('id')}")
 
 
 async def _send_nwc_subscription(ws, conn: dict[str, Any]) -> None:
@@ -215,12 +236,15 @@ async def _send_nwc_subscription(ws, conn: dict[str, Any]) -> None:
     ]
 
     await ws.send(json.dumps(req))
-    print(
-        f"[NWC] subscribed: {conn.get('name')} "
-        f"sub_id={sub_id} wallet_service_pubkey={wallet_service_pubkey}",
-        flush=True,
+    _log(
+        f"subscribed: {conn.get('name')} "
+        f"sub_id={sub_id} wallet_service_pubkey={wallet_service_pubkey}"
     )
 
+
+# ---------------------------------------------------------------------------
+# Request handling
+# ---------------------------------------------------------------------------
 
 async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any]) -> None:
     from .app import _nip04_decrypt, _pay_bolt11_invoice
@@ -233,47 +257,46 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
 
     wallet_service_pubkey = _extract_first_p_tag(tags)
     if not wallet_service_pubkey:
-        print(f"[NWC] request {event_id}: missing p-tag", flush=True)
+        _log(f"request {event_id}: missing p-tag")
         await _send_nwc_error(ws, event, "INVALID_REQUEST", "Missing p-tag")
         return
 
     matched = _find_matching_connection(event_pubkey, wallet_service_pubkey)
     if not matched:
-        print(
-            f"[NWC] request {event_id}: no matching enabled connection for client={event_pubkey}",
-            flush=True,
+        _log(
+            f"request {event_id}: no matching enabled connection for client={event_pubkey}"
         )
         await _send_nwc_error(ws, event, "UNAUTHORIZED", "No matching enabled connection")
         return
 
     server_privkey = _get_server_privkey()
     if not server_privkey:
-        print(f"[NWC] request {event_id}: missing server private key", flush=True)
+        _log(f"request {event_id}: missing server private key")
         await _send_nwc_error(ws, event, "INTERNAL", "Missing server private key")
         return
 
     try:
         plaintext = _nip04_decrypt(server_privkey, event_pubkey, content)
     except Exception as exc:
-        print(f"[NWC] request {event_id}: decrypt failed: {exc}", flush=True)
+        _log(f"request {event_id}: decrypt failed: {exc}")
         await _send_nwc_error(ws, event, "DECRYPT_FAILED", str(exc))
         return
 
-    print(f"[NWC] request {event_id}: decrypted={plaintext[:500]}", flush=True)
+    _log(f"request {event_id}: decrypted={plaintext[:500]}")
 
     try:
         payload = json.loads(plaintext)
     except Exception as exc:
-        print(f"[NWC] request {event_id}: invalid json after decrypt: {exc}", flush=True)
+        _log(f"request {event_id}: invalid json after decrypt: {exc}")
         await _send_nwc_error(ws, event, "INVALID_REQUEST", f"Invalid JSON: {exc}")
         return
 
     method = str(payload.get("method") or "").strip()
     params = payload.get("params") or {}
 
-    print(
-        f"[NWC] request {event_id}: matched_connection={matched.get('name')} method={method} params={params}",
-        flush=True,
+    _log(
+        f"request {event_id}: matched_connection={matched.get('name')} "
+        f"method={method} params={params}"
     )
 
     permissions = matched.get("permissions") or {}
@@ -294,7 +317,7 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         try:
             decoded = bolt11.decode(invoice)
         except Exception as exc:
-            print(f"[NWC] request {event_id}: invoice decode failed: {exc}", flush=True)
+            _log(f"request {event_id}: invoice decode failed: {exc}")
             await _send_nwc_error(ws, event, "INVALID_REQUEST", f"Invalid invoice: {exc}")
             return
 
@@ -316,19 +339,19 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
 
         if max_payment_sat > 0 and invoice_sat > max_payment_sat:
             msg = f"Invoice amount {invoice_sat} sats exceeds connection limit of {max_payment_sat} sats"
-            print(f"[NWC] request {event_id}: limit exceeded: {msg}", flush=True)
+            _log(f"request {event_id}: limit exceeded: {msg}")
             await _send_nwc_error(ws, event, "RESTRICTED", msg)
             return
         ok, err = _check_and_update_budget(matched, invoice_sat)
         if not ok:
-            print(f"[NWC] request {event_id}: budget exceeded: {err}", flush=True)
+            _log(f"request {event_id}: budget exceeded: {err}")
             await _send_nwc_error(ws, event, "QUOTA_EXCEEDED", err)
             return
 
         try:
             pay_result = await _pay_bolt11_invoice(payment_request=invoice)
         except Exception as exc:
-            print(f"[NWC] request {event_id}: payment failed: {exc}", flush=True)
+            _log(f"request {event_id}: payment failed: {exc}")
             await _send_nwc_error(ws, event, "PAYMENT_FAILED", str(exc))
             return
 
@@ -346,7 +369,7 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
                 result["fees_paid"] = int(fee_sat) * 1000
 
 
-        print(f"[NWC] request {event_id}: payment success result={result}", flush=True)
+        _log(f"request {event_id}: payment success result={result}")
         await _send_nwc_success(ws, event, "pay_invoice", result)
         return
 
@@ -378,22 +401,26 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
     await _send_nwc_error(ws, event, "NOT_IMPLEMENTED", f"Unsupported method: {method}")
 
 
+# ---------------------------------------------------------------------------
+# Relay message handling
+# ---------------------------------------------------------------------------
+
 async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
     try:
         data = json.loads(msg)
     except Exception:
-        print(f"[NWC] non-json message on {conn.get('name')}: {msg[:300]}", flush=True)
+        _log(f"non-json message on {conn.get('name')}: {msg[:300]}")
         return
 
     if not isinstance(data, list) or not data:
-        print(f"[NWC] unexpected message format on {conn.get('name')}: {data!r}", flush=True)
+        _log(f"unexpected message format on {conn.get('name')}: {data!r}")
         return
 
     msg_type = data[0]
 
     if msg_type == "EVENT":
         if len(data) < 3 or not isinstance(data[2], dict):
-            print(f"[NWC] malformed EVENT on {conn.get('name')}: {data!r}", flush=True)
+            _log(f"malformed EVENT on {conn.get('name')}: {data!r}")
             return
 
         sub_id = data[1]
@@ -405,60 +432,61 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
         tags = event.get("tags") or []
         content = str(event.get("content") or "")
 
-        print(
-            f"[NWC] EVENT on {conn.get('name')}: "
-            f"sub_id={sub_id} kind={kind} event_id={event_id} pubkey={pubkey}",
-            flush=True,
+        _log(
+            f"EVENT on {conn.get('name')}: "
+            f"sub_id={sub_id} kind={kind} event_id={event_id} pubkey={pubkey}"
         )
 
         expected_client_pubkey = str(conn.get("client_pubkey") or "").strip().lower()
         if pubkey != expected_client_pubkey:
-            print(
-                f"[NWC] ignoring EVENT on {conn.get('name')}: "
-                f"unexpected client pubkey {pubkey} != {expected_client_pubkey}",
-                flush=True,
+            _log(
+                f"ignoring EVENT on {conn.get('name')}: "
+                f"unexpected client pubkey {pubkey} != {expected_client_pubkey}"
             )
             return
 
-        print(
-            f"[NWC] accepted request event on {conn.get('name')}: "
-            f"tags={tags} content_preview={content[:300]}",
-            flush=True,
+        _log(
+            f"accepted request event on {conn.get('name')}: "
+            f"tags={tags} content_preview={content[:300]}"
         )
 
         await _handle_request_event(ws, conn, event)
         return
 
     if msg_type == "EOSE":
-        print(f"[NWC] EOSE on {conn.get('name')}: {data!r}", flush=True)
+        _log(f"EOSE on {conn.get('name')}: {data!r}")
         return
 
     if msg_type == "NOTICE":
-        print(f"[NWC] NOTICE on {conn.get('name')}: {data!r}", flush=True)
+        _log(f"NOTICE on {conn.get('name')}: {data!r}")
         return
 
     if msg_type == "OK":
-        print(f"[NWC] OK on {conn.get('name')}: {data!r}", flush=True)
+        _log(f"OK on {conn.get('name')}: {data!r}")
         return
 
-    print(f"[NWC] unhandled relay message on {conn.get('name')}: {data!r}", flush=True)
+    _log(f"unhandled relay message on {conn.get('name')}: {data!r}")
 
 
 
+
+# ---------------------------------------------------------------------------
+# Connection loop
+# ---------------------------------------------------------------------------
 
 async def nwc_connection_loop(conn: dict[str, Any]) -> None:
     relay = str(conn.get("relay_url") or "").strip()
     name = str(conn.get("name") or "NWC Connection").strip()
 
     if not relay:
-        print(f"[NWC] skipping {name}: no relay_url configured", flush=True)
+        _log(f"skipping {name}: no relay_url configured")
         return
 
     while True:
         try:
-            print(f"[NWC] connecting: {name} -> {relay}", flush=True)
+            _log(f"connecting: {name} -> {relay}")
             async with websockets.connect(relay, ping_interval=20, ping_timeout=20) as ws:
-                print(f"[NWC] connected: {name} -> {relay}", flush=True)
+                _log(f"connected: {name} -> {relay}")
 
                 await _publish_nwc_info_event(ws, conn)
                 await _send_nwc_subscription(ws, conn)
@@ -468,9 +496,13 @@ async def nwc_connection_loop(conn: dict[str, Any]) -> None:
                     await handle_nwc_message(ws, conn, msg)
 
         except Exception as e:
-            print(f"[NWC] reconnecting {name} ({relay}) after error: {e}", flush=True)
+            _log(f"reconnecting {name} ({relay}) after error: {e}")
             await asyncio.sleep(5)
 
+
+# ---------------------------------------------------------------------------
+# Runtime lifecycle
+# ---------------------------------------------------------------------------
 
 async def _stop_all_nwc_tasks() -> None:
     global _nwc_tasks
@@ -494,24 +526,24 @@ async def _start_nwc_tasks() -> None:
     try:
         connections = load_connections()
     except Exception as e:
-        print(f"[NWC] failed to load connections: {e}", flush=True)
+        _log(f"failed to load connections: {e}")
         return
 
-    print(f"[NWC] loaded connections: {len(connections)}", flush=True)
+    _log(f"loaded connections: {len(connections)}")
 
     enabled = [c for c in connections if bool(c.get("enabled", True))]
-    print(f"[NWC] enabled connections: {len(enabled)}", flush=True)
+    _log(f"enabled connections: {len(enabled)}")
 
     if not enabled:
-        print("[NWC] no enabled connections, runtime idle", flush=True)
+        _log("no enabled connections, runtime idle")
         return
 
     for conn in enabled:
         conn_id = str(conn.get("id") or "")
-        print(
-            f"[NWC] scheduling connection: "
-            f"name={conn.get('name')} relay={conn.get('relay_url')} client_pubkey={conn.get('client_pubkey')}",
-            flush=True,
+        _log(
+            f"scheduling connection: "
+            f"name={conn.get('name')} relay={conn.get('relay_url')} "
+            f"client_pubkey={conn.get('client_pubkey')}"
         )
         task = asyncio.create_task(nwc_connection_loop(conn))
         if conn_id:
@@ -520,14 +552,14 @@ async def _start_nwc_tasks() -> None:
 
 async def reload_nwc_runtime() -> None:
     async with _nwc_runtime_lock:
-        print("[NWC] reload requested", flush=True)
+        _log("reload requested")
         await _stop_all_nwc_tasks()
         await _start_nwc_tasks()
-        print("[NWC] reload complete", flush=True)
+        _log("reload complete")
 
 
 async def start_nwc_runtime() -> None:
-    print("[NWC] runtime starting (clean)...", flush=True)
+    _log("runtime starting (clean)...")
     async with _nwc_runtime_lock:
         await _stop_all_nwc_tasks()
         await _start_nwc_tasks()
