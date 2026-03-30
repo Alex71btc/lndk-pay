@@ -317,6 +317,41 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
 # Method handlers
 # ---------------------------------------------------------------------------
 
+def _extract_invoice_amount_sat(decoded: Any) -> int:
+    try:
+        amount_msat = getattr(decoded, "amount_msat", None)
+        amount = getattr(decoded, "amount", None)
+
+        if amount_msat is not None:
+            return int(amount_msat) // 1000
+        if amount is not None:
+            return int(amount)
+    except Exception:
+        return 0
+
+    return 0
+
+
+def _build_pay_invoice_result(pay_result: Any) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+
+    if not isinstance(pay_result, dict):
+        return result
+
+    payment_preimage = pay_result.get("payment_preimage")
+    payment_hash = pay_result.get("payment_hash")
+    fee_sat = pay_result.get("fee_sat")
+
+    if payment_preimage:
+        result["preimage"] = str(payment_preimage)
+    if payment_hash:
+        result["payment_hash"] = str(payment_hash)
+    if fee_sat is not None:
+        result["fees_paid"] = int(fee_sat) * 1000
+
+    return result
+
+
 async def _handle_pay_invoice_request(
     ws,
     event: dict[str, Any],
@@ -348,17 +383,7 @@ async def _handle_pay_invoice_request(
         await _send_nwc_error(ws, event, "INVALID_REQUEST", f"Invalid invoice: {exc}")
         return
 
-    invoice_sat = 0
-    try:
-        amount_msat = getattr(decoded, "amount_msat", None)
-        amount = getattr(decoded, "amount", None)
-
-        if amount_msat is not None:
-            invoice_sat = int(amount_msat) // 1000
-        elif amount is not None:
-            invoice_sat = int(amount)
-    except Exception:
-        invoice_sat = 0
+    invoice_sat = _extract_invoice_amount_sat(decoded)
 
     if invoice_sat <= 0:
         await _send_nwc_error(ws, event, "INVALID_REQUEST", "Invoice amount missing or invalid")
@@ -383,18 +408,7 @@ async def _handle_pay_invoice_request(
         await _send_nwc_error(ws, event, "PAYMENT_FAILED", str(exc))
         return
 
-    result: dict[str, Any] = {}
-    if isinstance(pay_result, dict):
-        payment_preimage = pay_result.get("payment_preimage")
-        payment_hash = pay_result.get("payment_hash")
-        fee_sat = pay_result.get("fee_sat")
-
-        if payment_preimage:
-            result["preimage"] = str(payment_preimage)
-        if payment_hash:
-            result["payment_hash"] = str(payment_hash)
-        if fee_sat is not None:
-            result["fees_paid"] = int(fee_sat) * 1000
+    result = _build_pay_invoice_result(pay_result)
 
     _log(f"request {event_id}: payment success result={result}")
     await _send_nwc_success(ws, event, "pay_invoice", result)
