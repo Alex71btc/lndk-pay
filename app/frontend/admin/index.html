@@ -2823,9 +2823,10 @@ if ('serviceWorker' in navigator) {
   document.addEventListener("DOMContentLoaded", () => {
     const deBtn = document.getElementById("langBtnDe");
     const enBtn = document.getElementById("langBtnEn");
-    if (deBtn) deBtn.onclick = () => { setLang("de"); if (window.applyTranslations) window.applyTranslations(); };
-    if (enBtn) enBtn.onclick = () => { setLang("en"); if (window.applyTranslations) window.applyTranslations(); };
-    applyLangUI(); if (window.applyTranslations) window.applyTranslations();
+    if (deBtn) deBtn.onclick = () => { setLang("de"); };
+    if (enBtn) enBtn.onclick = () => { setLang("en"); };
+    applyLangUI();
+    if (window.applyTranslations) window.applyTranslations();
   });
 })();
 
