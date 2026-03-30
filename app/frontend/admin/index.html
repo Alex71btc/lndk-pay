@@ -1372,17 +1372,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (btn) btn.disabled = true;
 
   try {
-    const res = await fetch('/api/admin/nwc/connections', {
+    const data = await sendNwcRequest('/api/admin/nwc/connections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(payload),
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || data.error || 'Failed to create NWC connection');
-    }
 
     const uri = data.connection?.uri || '';
     if (nwcUriOutput) nwcUriOutput.value = uri;
