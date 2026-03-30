@@ -2722,13 +2722,49 @@ document.getElementById('cfCreateAliasBtn').addEventListener('click', async () =
       }
     });
     
-checkPaySession();
-setCurrentOffer('');
-renderHistory();
+function initAdminPageUi() {
+  setCurrentOffer('');
+  renderHistory();
 
-requestAnimationFrame(() => {
-  renderOfferQr(getActiveValue());
-});
+  requestAnimationFrame(() => {
+    renderOfferQr(getActiveValue());
+  });
+
+  document.getElementById('loadIdentityBtn')?.addEventListener('click', async () => {
+    await loadIdentityConfig();
+  });
+
+  document.getElementById('saveIdentityBtn')?.addEventListener('click', async () => {
+    await saveIdentityConfig();
+  });
+
+  document.getElementById('saveNostrNotifyKeyBtn')?.addEventListener('click', async () => {
+    await saveNostrNotifyKey();
+  });
+
+  document.getElementById('generateNostrServerKeyBtn')?.addEventListener('click', async () => {
+    await generateNostrServerKey();
+  });
+
+  identityResultOutput?.addEventListener('click', async () => {
+    await copyText(identityResultOutput.value, window.__t('toast.identity_result_copied'));
+  });
+
+  document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+    } catch {}
+    window.location.href = '/pay-login';
+  });
+}
+
+async function initAdminPageData() {
+  await checkPaySession();
+}
 
 async function checkPaySession() {
   try {
@@ -2745,37 +2781,10 @@ async function checkPaySession() {
   }
 }
 
-document.getElementById('loadIdentityBtn')?.addEventListener('click', async () => {
-  await loadIdentityConfig();
+document.addEventListener('DOMContentLoaded', async () => {
+  initAdminPageUi();
+  await initAdminPageData();
 });
-
-document.getElementById('saveIdentityBtn')?.addEventListener('click', async () => {
-  await saveIdentityConfig();
-});
-
-document.getElementById('saveNostrNotifyKeyBtn')?.addEventListener('click', async () => {
-  await saveNostrNotifyKey();
-});
-
-document.getElementById('generateNostrServerKeyBtn')?.addEventListener('click', async () => {
-  await generateNostrServerKey();
-});
-
-identityResultOutput?.addEventListener('click', async () => {
-  await copyText(identityResultOutput.value, window.__t('toast.identity_result_copied'));
-});
-
-document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-  try {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-      cache: 'no-store'
-    });
-  } catch {}
-  window.location.href = '/pay-login';
-});
-
 
 if ('serviceWorker' in navigator) {
   
