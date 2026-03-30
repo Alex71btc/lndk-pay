@@ -458,6 +458,31 @@ async def _handle_get_info_request(
     await _send_nwc_success(ws, event, "get_info", result)
 
 
+def _get_virtual_nwc_balance_msat(conn: dict[str, Any]) -> int:
+    limits = conn.get("limits") or {}
+    usage = conn.get("usage") or {}
+
+    budget_period = str(limits.get("budget_period") or "none").strip().lower()
+    budget_amount_sat = int(limits.get("budget_amount_sat") or 0)
+    max_payment_sat = int(limits.get("max_payment_sat") or 0)
+
+    if budget_period != "none" and budget_amount_sat > 0:
+        current_period_key = _current_budget_period_key(budget_period)
+        stored_period_key = str(usage.get("period_key") or "")
+        spent_sat = int(usage.get("spent_sat") or 0)
+
+        if stored_period_key != current_period_key:
+            spent_sat = 0
+
+        remaining_sat = max(budget_amount_sat - spent_sat, 0)
+        return remaining_sat * 1000
+
+    if max_payment_sat > 0:
+        return max_payment_sat * 1000
+
+    return 0
+
+
 async def _handle_get_balance_request(
     ws,
     event: dict[str, Any],
@@ -470,7 +495,7 @@ async def _handle_get_balance_request(
         return
 
     result = {
-        "balance": 0,
+        "balance": _get_virtual_nwc_balance_msat(matched),
     }
     await _send_nwc_success(ws, event, "get_balance", result)
 
