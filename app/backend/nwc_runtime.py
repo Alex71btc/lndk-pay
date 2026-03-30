@@ -313,6 +313,10 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
     await _send_nwc_error(ws, event, "NOT_IMPLEMENTED", f"Unsupported method: {method}")
 
 
+# ---------------------------------------------------------------------------
+# Method handlers
+# ---------------------------------------------------------------------------
+
 async def _handle_pay_invoice_request(
     ws,
     event: dict[str, Any],
