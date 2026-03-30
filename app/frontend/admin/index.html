@@ -1176,6 +1176,85 @@ function startNwcAutoLock(seconds) {
       renderNwcQr('');
     }
 
+    function buildNwcConnectionItemHtml(item) {
+      const perms = item.permissions || {};
+      const limits = item.limits || {};
+      const state = item.enabled ? window.__t('label.enabled') : window.__t('label.disabled');
+      const yes = window.__t('label.yes');
+      const no = window.__t('label.no');
+      const uri = item.uri || '';
+      const relay = item.relay_url || '';
+      const maxSat = limits.max_payment_sat || '';
+      const budgetPeriod = limits.budget_period || 'none';
+      const budgetAmount = limits.budget_amount_sat || 0;
+      const budgetSpent = item.budget_spent_sat || 0;
+      const budgetRemaining = item.budget_remaining_sat;
+
+      return `
+        <div class="historyItem">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:700;">${item.name || 'NWC Connection'}</div>
+              <div class="historyMeta">${state} • ${window.__t('label.relay')}: <span class="mono">${relay}</span></div>
+            </div>
+            <div class="historyMeta">${window.__t('label.max')}: ${maxSat} sats</div>
+          </div>
+          ${budgetAmount > 0 ? `
+            <div class="historyMeta">
+              ${window.__t('label.budget')}: ${budgetSpent} / ${budgetAmount} ${window.__t('label.sats')}
+              ${budgetRemaining !== null ? `• ${window.__t('label.remaining')}: ${budgetRemaining} ${window.__t('label.sats')}` : ''}
+              ${budgetPeriod !== 'none' ? `• ${window.__t(`label.period_${budgetPeriod}`)}` : ''}
+            </div>
+          ` : ''}
+          <div class="hint" style="margin-top:8px;">
+            get_info: ${perms.get_info ? yes : no} •
+            get_balance: ${perms.get_balance ? yes : no} •
+            pay_invoice: ${perms.pay_invoice ? yes : no}
+          </div>
+          <div
+            class="valueBox mono copyable"
+            style="margin-top:10px;"
+            data-nwc-action="copy-uri"
+            data-nwc-uri="${encodeURIComponent(uri || '')}"
+          >
+            ${uri || ''}
+          </div>
+
+          <div class="historyActions">
+            <button
+              class="secondary"
+              type="button"
+              data-nwc-action="copy-uri"
+              data-nwc-uri="${encodeURIComponent(uri || '')}"
+            >${window.__t('btn.nwc_copy_uri')}</button>
+
+            <button
+              class="secondary"
+              type="button"
+              data-nwc-action="show-qr"
+              data-nwc-uri="${encodeURIComponent(uri || '')}"
+            >
+              <span data-i18n="btn.nwc_show_qr">${window.__t('btn.nwc_show_qr')}</span>
+            </button>
+
+            <button
+              class="secondary"
+              type="button"
+              data-nwc-action="toggle"
+              data-nwc-id="${item.id || ''}"
+            >${item.enabled ? window.__t('btn.disable') : window.__t('btn.enable')}</button>
+
+            <button
+              class="danger"
+              type="button"
+              data-nwc-action="delete"
+              data-nwc-id="${item.id || ''}"
+            >${window.__t('btn.delete')}</button>
+          </div>
+        </div>
+      `;
+    }
+
     function renderNwcConnections(items) {
       if (!nwcConnectionsList) return;
       const list = Array.isArray(items) ? items : [];
@@ -1185,85 +1264,7 @@ function startNwcAutoLock(seconds) {
         return;
       }
 
-      nwcConnectionsList.innerHTML = list.map(item => {
-        const perms = item.permissions || {};
-        const limits = item.limits || {};
-        const state = item.enabled ? window.__t('label.enabled') : window.__t('label.disabled');
-        const yes = window.__t('label.yes');
-        const no = window.__t('label.no');
-        const uri = item.uri || '';
-        const relay = item.relay_url || '';
-        const maxSat = limits.max_payment_sat || '';
-        const budgetPeriod = limits.budget_period || 'none';
-        const budgetAmount = limits.budget_amount_sat || 0;
-        const budgetSpent = item.budget_spent_sat || 0;
-        const budgetRemaining = item.budget_remaining_sat; 
-        
-        return `
-          <div class="historyItem">
-            <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div>
-                <div style="font-weight:700;">${item.name || 'NWC Connection'}</div>
-                <div class="historyMeta">${state} • ${window.__t('label.relay')}: <span class="mono">${relay}</span></div>
-              </div>
-              <div class="historyMeta">${window.__t('label.max')}: ${maxSat} sats</div>
-            </div>
-            ${budgetAmount > 0 ? `
-              <div class="historyMeta">
-                ${window.__t('label.budget')}: ${budgetSpent} / ${budgetAmount} ${window.__t('label.sats')}
-                ${budgetRemaining !== null ? `• ${window.__t('label.remaining')}: ${budgetRemaining} ${window.__t('label.sats')}` : ''}
-                ${budgetPeriod !== 'none' ? `• ${window.__t(`label.period_${budgetPeriod}`)}` : ''}
-              </div>
-            ` : ''}
-            <div class="hint" style="margin-top:8px;">
-              get_info: ${perms.get_info ? yes : no} •
-              get_balance: ${perms.get_balance ? yes : no} •
-              pay_invoice: ${perms.pay_invoice ? yes : no}
-            </div>
-<div
-  class="valueBox mono copyable"
-  style="margin-top:10px;"
-  data-nwc-action="copy-uri"
-  data-nwc-uri="${encodeURIComponent(uri || '')}"
->
-  ${uri || ''}
-</div>
-
-<div class="historyActions">
-  <button
-    class="secondary"
-    type="button"
-    data-nwc-action="copy-uri"
-    data-nwc-uri="${encodeURIComponent(uri || '')}"
-  >${window.__t('btn.nwc_copy_uri')}</button>
-
-<button
-  class="secondary"
-  type="button"
-  data-nwc-action="show-qr"
-  data-nwc-uri="${encodeURIComponent(uri || '')}"
->
-  <span data-i18n="btn.nwc_show_qr">${window.__t('btn.nwc_show_qr')}</span>
-</button>
-
-  <button
-    class="secondary"
-    type="button"
-    data-nwc-action="toggle"
-    data-nwc-id="${item.id || ''}"
-  >${item.enabled ? window.__t('btn.disable') : window.__t('btn.enable')}</button>
-
-  <button
-    class="danger"
-    type="button"
-    data-nwc-action="delete"
-    data-nwc-id="${item.id || ''}"
-  >${window.__t('btn.delete')}</button>
-</div>
-
-          </div>
-        `;
-      }).join('');
+      nwcConnectionsList.innerHTML = list.map(buildNwcConnectionItemHtml).join('');
     }
 
     async function loadNwcConnections() {
@@ -1346,7 +1347,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return data;
     }
 
-      async function createNwcConnection() {
+    async function createNwcConnection() {
   const payload = {
     name: (nwcNameInput?.value || '').trim() || 'NWC Connection',
     relay_url: (nwcRelayInput?.value || '').trim() || 'wss://relay.getalby.com/v1',
