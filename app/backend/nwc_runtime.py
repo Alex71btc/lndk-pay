@@ -480,6 +480,41 @@ async def _handle_get_balance_request(
 # Relay message handling
 # ---------------------------------------------------------------------------
 
+async def _handle_event_message(ws, conn: dict[str, Any], data: list[Any]) -> None:
+    if len(data) < 3 or not isinstance(data[2], dict):
+        _log(f"malformed EVENT on {conn.get('name')}: {data!r}")
+        return
+
+    sub_id = data[1]
+    event = data[2]
+
+    event_id = str(event.get("id") or "")
+    pubkey = str(event.get("pubkey") or "").strip().lower()
+    kind = event.get("kind")
+    tags = event.get("tags") or []
+    content = str(event.get("content") or "")
+
+    _log(
+        f"EVENT on {conn.get('name')}: "
+        f"sub_id={sub_id} kind={kind} event_id={event_id} pubkey={pubkey}"
+    )
+
+    expected_client_pubkey = str(conn.get("client_pubkey") or "").strip().lower()
+    if pubkey != expected_client_pubkey:
+        _log(
+            f"ignoring EVENT on {conn.get('name')}: "
+            f"unexpected client pubkey {pubkey} != {expected_client_pubkey}"
+        )
+        return
+
+    _log(
+        f"accepted request event on {conn.get('name')}: "
+        f"tags={tags} content_preview={content[:300]}"
+    )
+
+    await _handle_request_event(ws, conn, event)
+
+
 async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
     try:
         data = json.loads(msg)
@@ -494,38 +529,7 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
     msg_type = data[0]
 
     if msg_type == "EVENT":
-        if len(data) < 3 or not isinstance(data[2], dict):
-            _log(f"malformed EVENT on {conn.get('name')}: {data!r}")
-            return
-
-        sub_id = data[1]
-        event = data[2]
-
-        event_id = str(event.get("id") or "")
-        pubkey = str(event.get("pubkey") or "").strip().lower()
-        kind = event.get("kind")
-        tags = event.get("tags") or []
-        content = str(event.get("content") or "")
-
-        _log(
-            f"EVENT on {conn.get('name')}: "
-            f"sub_id={sub_id} kind={kind} event_id={event_id} pubkey={pubkey}"
-        )
-
-        expected_client_pubkey = str(conn.get("client_pubkey") or "").strip().lower()
-        if pubkey != expected_client_pubkey:
-            _log(
-                f"ignoring EVENT on {conn.get('name')}: "
-                f"unexpected client pubkey {pubkey} != {expected_client_pubkey}"
-            )
-            return
-
-        _log(
-            f"accepted request event on {conn.get('name')}: "
-            f"tags={tags} content_preview={content[:300]}"
-        )
-
-        await _handle_request_event(ws, conn, event)
+        await _handle_event_message(ws, conn, data)
         return
 
     if msg_type == "EOSE":
