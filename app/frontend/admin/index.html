@@ -1030,6 +1030,7 @@ main.card .headerRow {
       }
     }
 
+let nwcConnectionsCache = [];
 let nwcUnlockTimer = null;
 let nwcUnlockCountdownTimer = null;
 
@@ -1161,6 +1162,8 @@ function startNwcAutoLock(seconds) {
         const maxSat = limits.max_payment_sat || '';
         const budgetPeriod = limits.budget_period || 'none';
         const budgetAmount = limits.budget_amount_sat || 0;
+        const budgetSpent = item.budget_spent_sat || 0;
+        const budgetRemaining = item.budget_remaining_sat; 
         
         return `
           <div class="historyItem">
@@ -1171,7 +1174,13 @@ function startNwcAutoLock(seconds) {
               </div>
               <div class="historyMeta">${window.__t('label.max')}: ${maxSat} sats</div>
             </div>
-
+            ${budgetAmount > 0 ? `
+              <div class="historyMeta">
+                ${window.__t('label.budget')}: ${budgetSpent} / ${budgetAmount} ${window.__t('label.sats')}
+                ${budgetRemaining !== null ? `• ${window.__t('label.remaining')}: ${budgetRemaining} ${window.__t('label.sats')}` : ''}
+                ${budgetPeriod !== 'none' ? `• ${window.__t(`label.period_${budgetPeriod}`)}` : ''}
+              </div>
+            ` : ''}
             <div class="hint" style="margin-top:8px;">
               get_info: ${perms.get_info ? yes : no} •
               get_balance: ${perms.get_balance ? yes : no} •
@@ -1237,6 +1246,7 @@ function startNwcAutoLock(seconds) {
       }
 
       const connections = data.connections || [];
+      nwcConnectionsCache = connections;
       renderNwcConnections(connections);
 
       const currentValue = (nwcUriOutput?.value || '').trim();
@@ -1252,7 +1262,11 @@ function startNwcAutoLock(seconds) {
       setNwcUnlockedState(true);
       return connections;
     }
-
+function rerenderDynamicUi() {
+  if (Array.isArray(nwcConnectionsCache)) {
+    renderNwcConnections(nwcConnectionsCache);
+  }
+}
 document.addEventListener('DOMContentLoaded', async () => {
   setNwcUnlockedState(false);
 
@@ -2711,6 +2725,7 @@ if ('serviceWorker' in navigator) {
   function setLang(lang) {
     localStorage.setItem(KEY, lang);
     applyLangUI(); if (window.applyTranslations) window.applyTranslations();
+    rerenderDynamicUi();
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -2908,6 +2923,12 @@ window.addEventListener('load', () => {
       "label.disabled": "Deaktiviert",
       "label.relay": "Relay",
       "label.max": "Limit",
+      "label.budget": "Budget",
+      "label.remaining": "Verbleibend",
+      "label.sats": "Sats",
+      "label.period_day": "pro Tag",
+      "label.period_week": "pro Woche",
+      "label.period_month": "pro Monat",
       "label.yes": "ja",
       "label.no": "nein",
       "btn.enable": "Aktivieren",
@@ -3133,6 +3154,12 @@ window.addEventListener('load', () => {
       "label.disabled": "Disabled",
       "label.relay": "relay",
       "label.max": "max",
+      "label.budget": "Budget",
+      "label.remaining": "Remaining",
+      "label.sats": "sats",
+      "label.period_day": "per day",
+      "label.period_week": "per week",
+      "label.period_month": "per month",
       "label.yes": "yes",
       "label.no": "no",
       "btn.enable": "Enable",

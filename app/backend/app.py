@@ -4576,6 +4576,19 @@ async def api_admin_nwc_lock(request: StarletteRequest):
     resp.delete_cookie(key=NWC_COOKIE_NAME, path="/")
     return resp
 
+def _augment_nwc_budget_info(item: dict[str, Any]) -> dict[str, Any]:
+    limits = item.get("limits") or {}
+    usage = item.get("usage") or {}
+
+    budget_limit_sat = int(limits.get("budget_amount_sat") or 0)
+    budget_spent_sat = int(usage.get("spent_sat") or 0)
+    budget_remaining_sat = max(budget_limit_sat - budget_spent_sat, 0) if budget_limit_sat > 0 else None
+
+    item["budget_limit_sat"] = budget_limit_sat
+    item["budget_spent_sat"] = budget_spent_sat
+    item["budget_remaining_sat"] = budget_remaining_sat
+
+    return item
 
 @app.get("/api/admin/nwc/connections")
 async def api_admin_nwc_connections(request: StarletteRequest):
@@ -4586,6 +4599,7 @@ async def api_admin_nwc_connections(request: StarletteRequest):
     out = []
     for item in items:
         item_copy = dict(item)
+        item_copy = _augment_nwc_budget_info(item_copy)
         item_copy["uri"] = build_nwc_uri(item_copy)
         item_copy["client_secret_masked"] = (
             item_copy.get("client_secret", "")[:8] + "…" if item_copy.get("client_secret") else ""
