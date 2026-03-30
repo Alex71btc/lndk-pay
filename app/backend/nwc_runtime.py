@@ -526,6 +526,10 @@ def _handle_ok_message(conn: dict[str, Any], data: list[Any]) -> None:
     _log(f"OK on {conn.get('name')}: {data!r}")
 
 
+def _handle_unhandled_message(conn: dict[str, Any], data: list[Any]) -> None:
+    _log(f"unhandled relay message on {conn.get('name')}: {data!r}")
+
+
 async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
     try:
         data = json.loads(msg)
@@ -537,7 +541,7 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
         _log(f"unexpected message format on {conn.get('name')}: {data!r}")
         return
 
-    msg_type = data[0]
+    msg_type = str(data[0])
 
     if msg_type == "EVENT":
         await _handle_event_message(ws, conn, data)
