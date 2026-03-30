@@ -247,8 +247,6 @@ async def _send_nwc_subscription(ws, conn: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any]) -> None:
-    from .app import _nip04_decrypt
-
     event_id = str(event.get("id") or "")
     event_pubkey = str(event.get("pubkey") or "").strip().lower()
     tags = event.get("tags") or []
@@ -274,20 +272,15 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         await _send_nwc_error(ws, event, "INTERNAL", "Missing server private key")
         return
 
-    try:
-        plaintext = _nip04_decrypt(server_privkey, event_pubkey, content)
-    except Exception as exc:
-        _log(f"request {event_id}: decrypt failed: {exc}")
-        await _send_nwc_error(ws, event, "DECRYPT_FAILED", str(exc))
-        return
-
-    _log(f"request {event_id}: decrypted={plaintext[:500]}")
-
-    try:
-        payload = json.loads(plaintext)
-    except Exception as exc:
-        _log(f"request {event_id}: invalid json after decrypt: {exc}")
-        await _send_nwc_error(ws, event, "INVALID_REQUEST", f"Invalid JSON: {exc}")
+    payload, parse_error = _parse_request_payload(
+        event_id=event_id,
+        event_pubkey=event_pubkey,
+        content=content,
+        server_privkey=server_privkey,
+    )
+    if parse_error:
+        code, message = parse_error.split("::", 1)
+        await _send_nwc_error(ws, event, code, message)
         return
 
     method = str(payload.get("method") or "").strip()
@@ -311,6 +304,38 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         return
 
     await _send_nwc_error(ws, event, "NOT_IMPLEMENTED", f"Unsupported method: {method}")
+
+
+# ---------------------------------------------------------------------------
+# Request parsing helpers
+# ---------------------------------------------------------------------------
+
+def _parse_request_payload(
+    event_id: str,
+    event_pubkey: str,
+    content: str,
+    server_privkey: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    from .app import _nip04_decrypt
+
+    try:
+        plaintext = _nip04_decrypt(server_privkey, event_pubkey, content)
+    except Exception as exc:
+        _log(f"request {event_id}: decrypt failed: {exc}")
+        return None, f"DECRYPT_FAILED::{exc}"
+
+    _log(f"request {event_id}: decrypted={plaintext[:500]}")
+
+    try:
+        payload = json.loads(plaintext)
+    except Exception as exc:
+        _log(f"request {event_id}: invalid json after decrypt: {exc}")
+        return None, f"INVALID_REQUEST::Invalid JSON: {exc}"
+
+    if not isinstance(payload, dict):
+        return None, "INVALID_REQUEST::Invalid request payload"
+
+    return payload, None
 
 
 # ---------------------------------------------------------------------------
