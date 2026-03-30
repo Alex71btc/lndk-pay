@@ -127,19 +127,16 @@ def build_nwc_uri(item: dict[str, Any]) -> str:
 
 def toggle_nwc_connection(connection_id: str) -> dict[str, Any]:
     items = list_nwc_connections()
-    updated: dict[str, Any] | None = None
+    index = _find_connection_index(items, connection_id)
 
-    for item in items:
-        if item.get("id") == connection_id:
-            item["enabled"] = not bool(item.get("enabled", True))
-            updated = item
-            break
-
-    if updated is None:
+    if index < 0:
         raise KeyError("NWC connection not found")
 
+    item = items[index]
+    item["enabled"] = not bool(item.get("enabled", True))
+
     _save_raw(items)
-    return updated
+    return item
 
 
 def delete_nwc_connection(connection_id: str) -> None:
@@ -154,22 +151,19 @@ def delete_nwc_connection(connection_id: str) -> None:
 
 def update_nwc_connection_usage(connection_id: str, period_key: str, spent_sat: int) -> dict[str, Any]:
     items = list_nwc_connections()
-    updated: dict[str, Any] | None = None
+    index = _find_connection_index(items, connection_id)
 
-    for item in items:
-        if item.get("id") == connection_id:
-            item["usage"] = {
-                "period_key": str(period_key),
-                "spent_sat": int(spent_sat),
-            }
-            updated = item
-            break
-
-    if updated is None:
+    if index < 0:
         raise KeyError("NWC connection not found")
 
+    item = items[index]
+    item["usage"] = {
+        "period_key": str(period_key),
+        "spent_sat": int(spent_sat),
+    }
+
     _save_raw(items)
-    return updated
+    return item
 
 
 def load_connections() -> list[dict[str, Any]]:
