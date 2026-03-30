@@ -247,8 +247,7 @@ async def _send_nwc_subscription(ws, conn: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any]) -> None:
-    from .app import _nip04_decrypt, _pay_bolt11_invoice
-    import bolt11
+    from .app import _nip04_decrypt
 
     event_id = str(event.get("id") or "")
     event_pubkey = str(event.get("pubkey") or "").strip().lower()
@@ -300,77 +299,9 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
     )
 
     permissions = matched.get("permissions") or {}
-    limits = matched.get("limits") or {}
 
     if method == "pay_invoice":
-        if not bool(permissions.get("pay_invoice", False)):
-            await _send_nwc_error(ws, event, "RESTRICTED", "pay_invoice not allowed")
-            return
-
-        invoice = str(params.get("invoice") or "").strip()
-        if not invoice:
-            await _send_nwc_error(ws, event, "INVALID_REQUEST", "Missing invoice")
-            return
-
-        max_payment_sat = int(limits.get("max_payment_sat") or 0)
-
-        try:
-            decoded = bolt11.decode(invoice)
-        except Exception as exc:
-            _log(f"request {event_id}: invoice decode failed: {exc}")
-            await _send_nwc_error(ws, event, "INVALID_REQUEST", f"Invalid invoice: {exc}")
-            return
-
-        invoice_sat = 0
-        try:
-            amount_msat = getattr(decoded, "amount_msat", None)
-            amount = getattr(decoded, "amount", None)
-
-            if amount_msat is not None:
-                invoice_sat = int(amount_msat) // 1000
-            elif amount is not None:
-                invoice_sat = int(amount)
-        except Exception:
-            invoice_sat = 0
-
-        if invoice_sat <= 0:
-            await _send_nwc_error(ws, event, "INVALID_REQUEST", "Invoice amount missing or invalid")
-            return
-
-        if max_payment_sat > 0 and invoice_sat > max_payment_sat:
-            msg = f"Invoice amount {invoice_sat} sats exceeds connection limit of {max_payment_sat} sats"
-            _log(f"request {event_id}: limit exceeded: {msg}")
-            await _send_nwc_error(ws, event, "RESTRICTED", msg)
-            return
-        ok, err = _check_and_update_budget(matched, invoice_sat)
-        if not ok:
-            _log(f"request {event_id}: budget exceeded: {err}")
-            await _send_nwc_error(ws, event, "QUOTA_EXCEEDED", err)
-            return
-
-        try:
-            pay_result = await _pay_bolt11_invoice(payment_request=invoice)
-        except Exception as exc:
-            _log(f"request {event_id}: payment failed: {exc}")
-            await _send_nwc_error(ws, event, "PAYMENT_FAILED", str(exc))
-            return
-
-        result: dict[str, Any] = {}
-        if isinstance(pay_result, dict):
-            payment_preimage = pay_result.get("payment_preimage")
-            payment_hash = pay_result.get("payment_hash")
-            fee_sat = pay_result.get("fee_sat")
-
-            if payment_preimage:
-                result["preimage"] = str(payment_preimage)
-            if payment_hash:
-                result["payment_hash"] = str(payment_hash)
-            if fee_sat is not None:
-                result["fees_paid"] = int(fee_sat) * 1000
-
-
-        _log(f"request {event_id}: payment success result={result}")
-        await _send_nwc_success(ws, event, "pay_invoice", result)
+        await _handle_pay_invoice_request(ws, event, matched, params)
         return
 
     if method == "get_info":
@@ -399,6 +330,89 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         return
 
     await _send_nwc_error(ws, event, "NOT_IMPLEMENTED", f"Unsupported method: {method}")
+
+
+async def _handle_pay_invoice_request(
+    ws,
+    event: dict[str, Any],
+    matched: dict[str, Any],
+    params: dict[str, Any],
+) -> None:
+    from .app import _pay_bolt11_invoice
+    import bolt11
+
+    event_id = str(event.get("id") or "")
+    permissions = matched.get("permissions") or {}
+    limits = matched.get("limits") or {}
+
+    if not bool(permissions.get("pay_invoice", False)):
+        await _send_nwc_error(ws, event, "RESTRICTED", "pay_invoice not allowed")
+        return
+
+    invoice = str(params.get("invoice") or "").strip()
+    if not invoice:
+        await _send_nwc_error(ws, event, "INVALID_REQUEST", "Missing invoice")
+        return
+
+    max_payment_sat = int(limits.get("max_payment_sat") or 0)
+
+    try:
+        decoded = bolt11.decode(invoice)
+    except Exception as exc:
+        _log(f"request {event_id}: invoice decode failed: {exc}")
+        await _send_nwc_error(ws, event, "INVALID_REQUEST", f"Invalid invoice: {exc}")
+        return
+
+    invoice_sat = 0
+    try:
+        amount_msat = getattr(decoded, "amount_msat", None)
+        amount = getattr(decoded, "amount", None)
+
+        if amount_msat is not None:
+            invoice_sat = int(amount_msat) // 1000
+        elif amount is not None:
+            invoice_sat = int(amount)
+    except Exception:
+        invoice_sat = 0
+
+    if invoice_sat <= 0:
+        await _send_nwc_error(ws, event, "INVALID_REQUEST", "Invoice amount missing or invalid")
+        return
+
+    if max_payment_sat > 0 and invoice_sat > max_payment_sat:
+        msg = f"Invoice amount {invoice_sat} sats exceeds connection limit of {max_payment_sat} sats"
+        _log(f"request {event_id}: limit exceeded: {msg}")
+        await _send_nwc_error(ws, event, "RESTRICTED", msg)
+        return
+
+    ok, err = _check_and_update_budget(matched, invoice_sat)
+    if not ok:
+        _log(f"request {event_id}: budget exceeded: {err}")
+        await _send_nwc_error(ws, event, "QUOTA_EXCEEDED", err)
+        return
+
+    try:
+        pay_result = await _pay_bolt11_invoice(payment_request=invoice)
+    except Exception as exc:
+        _log(f"request {event_id}: payment failed: {exc}")
+        await _send_nwc_error(ws, event, "PAYMENT_FAILED", str(exc))
+        return
+
+    result: dict[str, Any] = {}
+    if isinstance(pay_result, dict):
+        payment_preimage = pay_result.get("payment_preimage")
+        payment_hash = pay_result.get("payment_hash")
+        fee_sat = pay_result.get("fee_sat")
+
+        if payment_preimage:
+            result["preimage"] = str(payment_preimage)
+        if payment_hash:
+            result["payment_hash"] = str(payment_hash)
+        if fee_sat is not None:
+            result["fees_paid"] = int(fee_sat) * 1000
+
+    _log(f"request {event_id}: payment success result={result}")
+    await _send_nwc_success(ws, event, "pay_invoice", result)
 
 
 # ---------------------------------------------------------------------------
