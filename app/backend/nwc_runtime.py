@@ -598,6 +598,28 @@ async def nwc_connection_loop(conn: dict[str, Any]) -> None:
 # Runtime lifecycle
 # ---------------------------------------------------------------------------
 
+def _get_enabled_connections() -> list[dict[str, Any]]:
+    try:
+        connections = load_connections()
+    except Exception as e:
+        _log(f"failed to load connections: {e}")
+        return []
+
+    _log(f"loaded connections: {len(connections)}")
+
+    enabled = [c for c in connections if bool(c.get("enabled", True))]
+    _log(f"enabled connections: {len(enabled)}")
+    return enabled
+
+
+def _log_scheduled_connection(conn: dict[str, Any]) -> None:
+    _log(
+        f"scheduling connection: "
+        f"name={conn.get('name')} relay={conn.get('relay_url')} "
+        f"client_pubkey={conn.get('client_pubkey')}"
+    )
+
+
 async def _stop_all_nwc_tasks() -> None:
     global _nwc_tasks
 
@@ -617,28 +639,14 @@ async def _stop_all_nwc_tasks() -> None:
 async def _start_nwc_tasks() -> None:
     global _nwc_tasks
 
-    try:
-        connections = load_connections()
-    except Exception as e:
-        _log(f"failed to load connections: {e}")
-        return
-
-    _log(f"loaded connections: {len(connections)}")
-
-    enabled = [c for c in connections if bool(c.get("enabled", True))]
-    _log(f"enabled connections: {len(enabled)}")
-
+    enabled = _get_enabled_connections()
     if not enabled:
         _log("no enabled connections, runtime idle")
         return
 
     for conn in enabled:
         conn_id = str(conn.get("id") or "")
-        _log(
-            f"scheduling connection: "
-            f"name={conn.get('name')} relay={conn.get('relay_url')} "
-            f"client_pubkey={conn.get('client_pubkey')}"
-        )
+        _log_scheduled_connection(conn)
         task = asyncio.create_task(nwc_connection_loop(conn))
         if conn_id:
             _nwc_tasks[conn_id] = task
