@@ -933,7 +933,7 @@ if (mode === 'invoice') {
         return;
       }
 
-      const response = await fetch(`/api/lnurl/address/${encodeURIComponent(fallbackAddress)}`);
+      const response = await fetch(`/api/lnurl/address/${encodeURIComponent(fallbackAddress)}`, { cache: 'no-store' });
       const data = await response.json();
 
       if (!response.ok) {
@@ -944,14 +944,14 @@ if (mode === 'invoice') {
     }
 
     async function loadSetupState() {
-      const statusResponse = await fetch('/api/setup/status');
+      const statusResponse = await fetch('/api/setup/status', { cache: 'no-store' });
       const statusData = await statusResponse.json();
 
       if (!statusResponse.ok) {
         throw new Error(statusData?.detail || 'Setup-Status konnte nicht geladen werden');
       }
 
-      const configResponse = await fetch('/api/setup/config');
+      const configResponse = await fetch('/api/setup/config', { cache: 'no-store' });
       const configData = await configResponse.json();
 
       if (!configResponse.ok) {
@@ -1057,7 +1057,7 @@ async function saveSetup() {
 }
     async function loadPublicInfo() {
       try {
-        const response = await fetch('/api/info');
+        const response = await fetch('/api/info', { cache: 'no-store' });
         const data = await response.json();
 
         if (!response.ok) {
@@ -1186,7 +1186,7 @@ function renderAliasList(items) {
 
     async function loadAliases() {
       try {
-        const response = await fetch('/api/alias');
+        const response = await fetch('/api/alias', { cache: 'no-store' });
         const data = await response.json();
 
         if (!response.ok) {
