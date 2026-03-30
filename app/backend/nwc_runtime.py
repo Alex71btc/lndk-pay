@@ -298,35 +298,16 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         f"method={method} params={params}"
     )
 
-    permissions = matched.get("permissions") or {}
-
     if method == "pay_invoice":
         await _handle_pay_invoice_request(ws, event, matched, params)
         return
 
     if method == "get_info":
-        if not bool(permissions.get("get_info", False)):
-            await _send_nwc_error(ws, event, "RESTRICTED", "get_info not allowed")
-            return
-
-        result = {
-            "alias": "BOLT12 Pay",
-            "network": "mainnet",
-            "block_height": 0,
-            "methods": ["pay_invoice", "get_info", "get_balance"],
-        }
-        await _send_nwc_success(ws, event, "get_info", result)
+        await _handle_get_info_request(ws, event, matched)
         return
 
     if method == "get_balance":
-        if not bool(permissions.get("get_balance", False)):
-            await _send_nwc_error(ws, event, "RESTRICTED", "get_balance not allowed")
-            return
-
-        result = {
-            "balance": 0
-        }
-        await _send_nwc_success(ws, event, "get_balance", result)
+        await _handle_get_balance_request(ws, event, matched)
         return
 
     await _send_nwc_error(ws, event, "NOT_IMPLEMENTED", f"Unsupported method: {method}")
@@ -413,6 +394,43 @@ async def _handle_pay_invoice_request(
 
     _log(f"request {event_id}: payment success result={result}")
     await _send_nwc_success(ws, event, "pay_invoice", result)
+
+
+async def _handle_get_info_request(
+    ws,
+    event: dict[str, Any],
+    matched: dict[str, Any],
+) -> None:
+    permissions = matched.get("permissions") or {}
+
+    if not bool(permissions.get("get_info", False)):
+        await _send_nwc_error(ws, event, "RESTRICTED", "get_info not allowed")
+        return
+
+    result = {
+        "alias": "BOLT12 Pay",
+        "network": "mainnet",
+        "block_height": 0,
+        "methods": ["pay_invoice", "get_info", "get_balance"],
+    }
+    await _send_nwc_success(ws, event, "get_info", result)
+
+
+async def _handle_get_balance_request(
+    ws,
+    event: dict[str, Any],
+    matched: dict[str, Any],
+) -> None:
+    permissions = matched.get("permissions") or {}
+
+    if not bool(permissions.get("get_balance", False)):
+        await _send_nwc_error(ws, event, "RESTRICTED", "get_balance not allowed")
+        return
+
+    result = {
+        "balance": 0,
+    }
+    await _send_nwc_success(ws, event, "get_balance", result)
 
 
 # ---------------------------------------------------------------------------
