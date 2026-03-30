@@ -620,18 +620,22 @@ def _log_scheduled_connection(conn: dict[str, Any]) -> None:
     )
 
 
+async def _cancel_nwc_task(task: asyncio.Task) -> None:
+    if not task.done():
+        task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        pass
+
+
 async def _stop_all_nwc_tasks() -> None:
     global _nwc_tasks
 
     for conn_id, task in list(_nwc_tasks.items()):
-        if not task.done():
-            task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            pass
+        await _cancel_nwc_task(task)
 
     _nwc_tasks = {}
 
