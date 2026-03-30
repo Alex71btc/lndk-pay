@@ -1158,6 +1158,24 @@ function startNwcAutoLock(seconds) {
     // NWC rendering
     // ------------------------------------------------------------------
 
+    function syncNwcUriAndQr(connections) {
+      const list = Array.isArray(connections) ? connections : [];
+      const currentValue = (nwcUriOutput?.value || '').trim();
+
+      if (!currentValue && list.length > 0) {
+        if (nwcUriOutput) nwcUriOutput.value = list[0].uri || '';
+        renderNwcQr(nwcUriOutput?.value || '');
+        return;
+      }
+
+      if (currentValue) {
+        renderNwcQr(currentValue);
+        return;
+      }
+
+      renderNwcQr('');
+    }
+
     function renderNwcConnections(items) {
       if (!nwcConnectionsList) return;
       const list = Array.isArray(items) ? items : [];
@@ -1264,16 +1282,7 @@ function startNwcAutoLock(seconds) {
       const connections = data.connections || [];
       nwcConnectionsCache = connections;
       renderNwcConnections(connections);
-
-      const currentValue = (nwcUriOutput?.value || '').trim();
-      if (!currentValue && connections.length > 0) {
-        nwcUriOutput.value = connections[0].uri || '';
-        renderNwcQr(nwcUriOutput.value);
-      } else if (currentValue) {
-        renderNwcQr(currentValue);
-      } else {
-        renderNwcQr('');
-      }
+      syncNwcUriAndQr(connections);
 
       setNwcUnlockedState(true);
       return connections;
