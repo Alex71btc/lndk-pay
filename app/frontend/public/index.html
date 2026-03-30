@@ -831,11 +831,46 @@
     }
 
     async function copyText(value, successMessage) {
+      const text = String(value || '').trim();
+      if (!text) {
+        setStatus(window.__t('toast.nothing_to_copy'), 'error');
+        return;
+      }
+
       try {
-        await navigator.clipboard.writeText(value);
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          throw new Error('Clipboard API unavailable');
+        }
         setStatus(successMessage || window.__t('toast.copied'));
+        return;
       } catch (error) {
-        setStatus(window.__t('toast.copy_failed'), 'error');
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.setAttribute('readonly', '');
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          textarea.style.pointerEvents = 'none';
+          textarea.style.left = '-9999px';
+          document.body.appendChild(textarea);
+          textarea.focus();
+          textarea.select();
+          textarea.setSelectionRange(0, textarea.value.length);
+
+          const ok = document.execCommand('copy');
+          document.body.removeChild(textarea);
+
+          if (!ok) {
+            throw new Error('execCommand copy failed');
+          }
+
+          setStatus(successMessage || window.__t('toast.copied'));
+          return;
+        } catch (fallbackError) {
+          setStatus(window.__t('toast.copy_failed'), 'error');
+        }
       }
     }
 

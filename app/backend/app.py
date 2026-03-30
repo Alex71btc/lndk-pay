@@ -2570,7 +2570,7 @@ async def public_index_page():
           </div>
           <div class="row">
             <button onclick="window.location.href='/{alias_name}'">Open</button>
-            <button class="secondary" onclick="navigator.clipboard.writeText('{alias_name}@{get_lnurl_base_domain()}')">Copy address</button>
+            <button class="secondary" onclick="copyWithToast('{alias_name}@{get_lnurl_base_domain()}', (T[getLang()] || T.en).addressCopied)">Copy address</button>
           </div>
         </div>
         """
@@ -3857,12 +3857,48 @@ async function payBolt11Invoice() {{
   }}
 
   async function copyWithToast(text, message) {{
-    try {{
-      await navigator.clipboard.writeText(text || "");
-      showAliasToast(message, "ok");
-    }} catch (err) {{
-      const t = T[getLang()] || T.en;
+    const value = String(text || "").trim();
+    const t = T[getLang()] || T.en;
+
+    if (!value) {{
       showAliasToast(t.copyFailed, "error");
+      return;
+    }}
+
+    try {{
+      if (navigator.clipboard && window.isSecureContext) {{
+        await navigator.clipboard.writeText(value);
+      }} else {{
+        throw new Error("Clipboard API unavailable");
+      }}
+      showAliasToast(message, "ok");
+      return;
+    }} catch (err) {{
+      try {{
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        textarea.style.pointerEvents = "none";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+
+        if (!ok) {{
+          throw new Error("execCommand copy failed");
+        }}
+
+        showAliasToast(message, "ok");
+        return;
+      }} catch (fallbackErr) {{
+        showAliasToast(t.copyFailed, "error");
+      }}
     }}
   }}
 
