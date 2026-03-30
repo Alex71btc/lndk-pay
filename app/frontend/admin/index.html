@@ -913,6 +913,10 @@ main.card .headerRow {
     const nostrNotifyStatus = document.getElementById('nostrNotifyStatus');
     const nostrNotifyPubkey = document.getElementById('nostrNotifyPubkey');
 
+    // ------------------------------------------------------------------
+    // NWC DOM references
+    // ------------------------------------------------------------------
+
     const nwcNameInput = document.getElementById('nwcNameInput');
     const nwcRelayInput = document.getElementById('nwcRelayInput');
     const nwcMaxPaymentInput = document.getElementById('nwcMaxPaymentInput');
@@ -933,6 +937,10 @@ main.card .headerRow {
     const nwcBudgetPeriod = document.getElementById('nwcBudgetPeriod');
     const nwcBudgetAmount = document.getElementById('nwcBudgetAmount');
     
+    // ------------------------------------------------------------------
+    // NWC state
+    // ------------------------------------------------------------------
+
     let nwcUnlocked = false;
 
 
@@ -986,6 +994,10 @@ main.card .headerRow {
         setStatus(window.__t('toast.copy_failed'), 'error');
       }
     }
+
+    // ------------------------------------------------------------------
+    // NWC helpers
+    // ------------------------------------------------------------------
 
     function renderNwcQr(value) {
       const qrEl = document.getElementById('nwcQr') || document.getElementById('nwcQrBox') || nwcQrBox;
@@ -1142,6 +1154,10 @@ function startNwcAutoLock(seconds) {
     }
 
 
+    // ------------------------------------------------------------------
+    // NWC rendering
+    // ------------------------------------------------------------------
+
     function renderNwcConnections(items) {
       if (!nwcConnectionsList) return;
       const list = Array.isArray(items) ? items : [];
@@ -1294,6 +1310,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderNwcQr('');
   }
 });
+
+    // ------------------------------------------------------------------
+    // NWC actions
+    // ------------------------------------------------------------------
 
       async function createNwcConnection() {
   const payload = {
@@ -1989,6 +2009,10 @@ async function saveIdentityConfig() {
     btn.innerHTML = `<span data-i18n="btn.identity_save">${window.__t('btn.identity_save')}</span>`;
   }
 }
+
+    // ------------------------------------------------------------------
+    // NWC delegated events
+    // ------------------------------------------------------------------
 
 nwcConnectionsList?.addEventListener('click', async (ev) => {
   const target = ev.target.closest('[data-nwc-action]');
