@@ -41,6 +41,13 @@ def _save_raw(items: list[dict[str, Any]]) -> None:
     )
 
 
+def _find_connection_index(items: list[dict[str, Any]], connection_id: str) -> int:
+    for index, item in enumerate(items):
+        if item.get("id") == connection_id:
+            return index
+    return -1
+
+
 def list_nwc_connections() -> list[dict[str, Any]]:
     items = _load_raw()
     cleaned: list[dict[str, Any]] = []
@@ -86,7 +93,7 @@ def create_nwc_connection(
             "get_balance": bool(allow_get_balance),
             "pay_invoice": bool(allow_pay_invoice),
         },
-            "limits": {
+        "limits": {
             "max_payment_sat": int(max_payment_sat),
             "budget_period": str(budget_period or "none").strip().lower(),
             "budget_amount_sat": int(budget_amount_sat or 0),
@@ -143,6 +150,8 @@ def delete_nwc_connection(connection_id: str) -> None:
         raise KeyError("NWC connection not found")
 
     _save_raw(filtered)
+
+
 def update_nwc_connection_usage(connection_id: str, period_key: str, spent_sat: int) -> dict[str, Any]:
     items = list_nwc_connections()
     updated: dict[str, Any] | None = None
@@ -162,5 +171,6 @@ def update_nwc_connection_usage(connection_id: str, period_key: str, spent_sat: 
     _save_raw(items)
     return updated
 
-def load_connections():
+
+def load_connections() -> list[dict[str, Any]]:
     return list_nwc_connections()
