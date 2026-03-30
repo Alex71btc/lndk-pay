@@ -10,7 +10,6 @@ import websockets
 from .nwc import load_connections, update_nwc_connection_usage
 
 _nwc_tasks: dict[str, asyncio.Task] = {}
-_nwc_started = False
 _nwc_runtime_lock = asyncio.Lock()
 
 
