@@ -59,10 +59,9 @@ def list_nwc_connections() -> list[dict[str, Any]]:
 
 
 def get_nwc_connection(connection_id: str) -> dict[str, Any] | None:
-    for item in list_nwc_connections():
-        if item.get("id") == connection_id:
-            return item
-    return None
+    items = list_nwc_connections()
+    index = _find_connection_index(items, connection_id)
+    return items[index] if index >= 0 else None
 
 
 def create_nwc_connection(
@@ -141,12 +140,13 @@ def toggle_nwc_connection(connection_id: str) -> dict[str, Any]:
 
 def delete_nwc_connection(connection_id: str) -> None:
     items = list_nwc_connections()
-    filtered = [item for item in items if item.get("id") != connection_id]
+    index = _find_connection_index(items, connection_id)
 
-    if len(filtered) == len(items):
+    if index < 0:
         raise KeyError("NWC connection not found")
 
-    _save_raw(filtered)
+    del items[index]
+    _save_raw(items)
 
 
 def update_nwc_connection_usage(connection_id: str, period_key: str, spent_sat: int) -> dict[str, Any]:
