@@ -1995,7 +1995,32 @@ async function loadIdentityConfig(alias = '') {
   }
 }
 
+function getIdentityText() {
+  return {
+    saved: 'Identity settings saved.',
+    saveFailed: 'Failed to save identity settings.',
+    loadingFailed: 'Failed to load identity settings.',
+    invalidPubkey: 'Invalid Nostr public key.',
+  };
+}
+
+async function sendIdentityRequest(url, options = {}) {
+  const res = await fetch(url, {
+    credentials: 'include',
+    ...options,
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.detail || data.error || 'Identity request failed');
+  }
+
+  return data;
+}
+
 async function saveIdentityConfig() {
+
   const alias = identityAliasInput.value.trim().toLowerCase();
   const nostrPubkey = identityPubkeyInput.value.trim();
   const relays = identityRelaysInput.value
