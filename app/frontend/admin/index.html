@@ -1108,7 +1108,7 @@ function startNwcAutoLock(seconds) {
     async function unlockNwc() {
       const password = String(nwcUnlockPassword?.value || '').trim();
       if (!password) {
-        setStatus('Please enter your Pay password.', 'error');
+        setStatus(getNwcText().passwordRequired, 'error');
         return;
       }
 
@@ -1125,7 +1125,7 @@ function startNwcAutoLock(seconds) {
 
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.detail || data.error || 'Failed to unlock NWC');
+          throw new Error(data.detail || data.error || getNwcText().unlockFailed);
         }
 
       setNwcUnlockedState(true);
@@ -1134,7 +1134,7 @@ function startNwcAutoLock(seconds) {
       startNwcAutoLock(180); // <-- wichtig
       setStatus(window.__t('toast.nwc_unlocked'));
       } catch (err) {
-        setStatus(err.message || 'Failed to unlock NWC.', 'error', true);
+        setStatus(err.message || getNwcText().unlockFailedGeneric, 'error', true);
       } finally {
         if (btn) btn.disabled = false;
       }
@@ -1347,6 +1347,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       return data;
     }
 
+    function getNwcText() {
+      return {
+        passwordRequired: 'Please enter your Pay password.',
+        unlockFailed: 'Failed to unlock NWC',
+        unlockFailedGeneric: 'Failed to unlock NWC.',
+        maxPaymentRequired: 'Please enter a valid max payment in sats.',
+        budgetRequired: 'Please enter a valid budget in sats.',
+        created: 'NWC connection created.',
+        updated: 'NWC connection updated.',
+        deleted: 'NWC connection deleted.',
+        deleteConfirm: 'Delete this NWC connection?',
+      };
+    }
+
     async function createNwcConnection() {
   const payload = {
     name: (nwcNameInput?.value || '').trim() || 'NWC Connection',
@@ -1360,12 +1374,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   if (!payload.max_payment_sat || payload.max_payment_sat < 1) {
-    setStatus('Please enter a valid max payment in sats.', 'error');
+    setStatus(getNwcText().maxPaymentRequired, 'error');
     return;
   }
 
   if (payload.budget_period !== 'none' && (!payload.budget_amount_sat || payload.budget_amount_sat < 1)) {
-    setStatus('Please enter a valid budget in sats.', 'error');
+    setStatus(getNwcText().budgetRequired, 'error');
     return;
   }
 
@@ -1384,7 +1398,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderNwcQr(uri);
 
     await loadNwcConnections();
-    setStatus('NWC connection created.');
+    setStatus(getNwcText().created);
   } catch (err) {
     setStatus(err.message || 'Failed to create NWC connection.', 'error', true);
   } finally {
@@ -1398,21 +1412,21 @@ document.addEventListener('DOMContentLoaded', async () => {
           method: 'POST',
         });
         await loadNwcConnections();
-        setStatus('NWC connection updated.');
+        setStatus(getNwcText().updated);
       } catch (err) {
         setStatus(err.message || 'Failed to toggle NWC connection.', 'error', true);
       }
     }
 
     async function deleteNwcConnection(id) {
-      if (!confirm('Delete this NWC connection?')) return;
+      if (!confirm(getNwcText().deleteConfirm)) return;
 
       try {
         await sendNwcRequest(`/api/admin/nwc/connections/${encodeURIComponent(id)}`, {
           method: 'DELETE',
         });
         await loadNwcConnections();
-        setStatus('NWC connection deleted.');
+        setStatus(getNwcText().deleted);
       } catch (err) {
         setStatus(err.message || 'Failed to delete NWC connection.', 'error', true);
       }
