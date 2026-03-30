@@ -1284,32 +1284,39 @@ function rerenderDynamicUi() {
   }
 }
 document.addEventListener('DOMContentLoaded', async () => {
-  setNwcUnlockedState(false);
-
-  unlockNwcBtn?.addEventListener('click', openNwcUnlockModal);
-  lockNwcBtn?.addEventListener('click', lockNwc);
-  confirmNwcUnlockBtn?.addEventListener('click', unlockNwc);
-  cancelNwcUnlockBtn?.addEventListener('click', closeNwcUnlockModal);
-
-  nwcUnlockPassword?.addEventListener('keydown', async (ev) => {
-    if (ev.key === 'Enter') {
-      ev.preventDefault();
-      await unlockNwc();
-    }
-  });
-
-  nwcUnlockModal?.addEventListener('click', (ev) => {
-    if (ev.target === nwcUnlockModal) closeNwcUnlockModal();
-  });
-
-  try {
-    await loadNwcConnections();
-    setNwcUnlockedState(false); // 👈 wichtig
-  } catch (err) {
-    console.error('NWC init failed', err);
-    renderNwcQr('');
-  }
+  initNwcUi();
+  await initNwcData();
 });
+
+    function initNwcUi() {
+      setNwcUnlockedState(false);
+
+      unlockNwcBtn?.addEventListener('click', openNwcUnlockModal);
+      lockNwcBtn?.addEventListener('click', lockNwc);
+      confirmNwcUnlockBtn?.addEventListener('click', unlockNwc);
+      cancelNwcUnlockBtn?.addEventListener('click', closeNwcUnlockModal);
+
+      nwcUnlockPassword?.addEventListener('keydown', async (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          await unlockNwc();
+        }
+      });
+
+      nwcUnlockModal?.addEventListener('click', (ev) => {
+        if (ev.target === nwcUnlockModal) closeNwcUnlockModal();
+      });
+    }
+
+    async function initNwcData() {
+      try {
+        await loadNwcConnections();
+        setNwcUnlockedState(false);
+      } catch (err) {
+        console.error('NWC init failed', err);
+        renderNwcQr('');
+      }
+    }
 
     // ------------------------------------------------------------------
     // NWC actions
