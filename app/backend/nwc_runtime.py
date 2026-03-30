@@ -7,7 +7,7 @@ from typing import Any
 
 import websockets
 
-from .nwc import load_connections
+from .nwc import load_connections, update_nwc_connection_usage
 
 _nwc_tasks: dict[str, asyncio.Task] = {}
 _nwc_started = False
@@ -57,6 +57,61 @@ def _get_server_privkey() -> str:
         or ""
     ).strip().lower()
 
+def _current_budget_period_key(period: str) -> str:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    period = (period or "none").strip().lower()
+
+    if period == "day":
+        return now.strftime("%Y-%m-%d")
+    if period == "week":
+        iso = now.isocalendar()
+        return f"{iso.year}-W{iso.week:02d}"
+    if period == "month":
+        return now.strftime("%Y-%m")
+    return ""
+
+
+def _check_and_update_budget(conn: dict[str, Any], amount_sat: int) -> tuple[bool, str | None]:
+    limits = conn.get("limits") or {}
+    period = str(limits.get("budget_period") or "none").strip().lower()
+    budget_amount_sat = int(limits.get("budget_amount_sat") or 0)
+
+    print(
+        f"[NWC] budget check: conn={conn.get('name')} period={period} budget_amount_sat={budget_amount_sat} amount_sat={amount_sat}",
+        flush=True,
+    )
+
+    if period == "none" or budget_amount_sat <= 0:
+        return True, None
+
+    period_key = _current_budget_period_key(period)
+    usage = conn.get("usage") or {}
+
+    current_period_key = str(usage.get("period_key") or "")
+    spent_sat = int(usage.get("spent_sat") or 0)
+
+    if current_period_key != period_key:
+        spent_sat = 0
+
+    new_total = spent_sat + int(amount_sat)
+
+    if new_total > budget_amount_sat:
+        return False, f"Budget exceeded: {new_total} sats > {budget_amount_sat} sats per {period}"
+
+    update_nwc_connection_usage(
+        str(conn.get("id") or ""),
+        period_key,
+        new_total,
+    )
+
+    print(
+        f"[NWC] budget updated: conn={conn.get('name')} spent={new_total}",
+        flush=True,
+    )
+
+    return True, None
 
 def _build_nwc_success_content(result_type: str, result: dict[str, Any]) -> str:
     payload = {
@@ -264,6 +319,11 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
             print(f"[NWC] request {event_id}: limit exceeded: {msg}", flush=True)
             await _send_nwc_error(ws, event, "RESTRICTED", msg)
             return
+        ok, err = _check_and_update_budget(matched, invoice_sat)
+        if not ok:
+            print(f"[NWC] request {event_id}: budget exceeded: {err}", flush=True)
+            await _send_nwc_error(ws, event, "QUOTA_EXCEEDED", err)
+            return
 
         try:
             pay_result = await _pay_bolt11_invoice(payment_request=invoice)
@@ -285,14 +345,6 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
             if fee_sat is not None:
                 result["fees_paid"] = int(fee_sat) * 1000
 
-        # --- budget check ---
-        amount_sat = decoded_invoice.get("amount_sat") if "decoded_invoice" in locals() else None
-        if amount_sat:
-            ok, err = _check_and_update_budget(conn, amount_sat)
-            if not ok:
-                print(f"[NWC] request {event_id}: {err}", flush=True)
-                await _send_nwc_error(ws, event, "QUOTA_EXCEEDED", err)
-                return
 
         print(f"[NWC] request {event_id}: payment success result={result}", flush=True)
         await _send_nwc_success(ws, event, "pay_invoice", result)
@@ -393,58 +445,6 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
 
 
 
-def _now_ts():
-    import time
-    return int(time.time())
-
-
-def _period_key(period: str):
-    import datetime
-    now = datetime.datetime.utcnow()
-
-    if period == "day":
-        return now.strftime("%Y-%m-%d")
-    if period == "week":
-        return f"{now.year}-W{now.isocalendar().week}"
-    if period == "month":
-        return now.strftime("%Y-%m")
-
-    return "unknown"
-
-
-def _check_and_update_budget(conn: dict, amount_sat: int) -> tuple[bool, str | None]:
-    limits = conn.get("limits", {}) or {}
-    usage = conn.setdefault("usage", {})
-
-    # single payment limit
-    max_single = limits.get("max_payment_sat")
-    if max_single and amount_sat > max_single:
-        return False, f"Invoice amount {amount_sat} sats exceeds single payment limit of {max_single} sats"
-
-    for period in ["day", "week", "month"]:
-        limit_key = f"{period}_budget_sat"
-        limit_val = limits.get(limit_key)
-        if not limit_val:
-            continue
-
-        period_key = _period_key(period)
-        period_usage = usage.setdefault(period, {})
-        current = period_usage.get(period_key, 0)
-
-        if current + amount_sat > limit_val:
-            return False, f"{period} budget exceeded ({current + amount_sat} > {limit_val} sats)"
-
-    # update usage
-    for period in ["day", "week", "month"]:
-        limit_key = f"{period}_budget_sat"
-        if not limits.get(limit_key):
-            continue
-
-        period_key = _period_key(period)
-        usage.setdefault(period, {})
-        usage[period][period_key] = usage[period].get(period_key, 0) + amount_sat
-
-    return True, None
 
 async def nwc_connection_loop(conn: dict[str, Any]) -> None:
     relay = str(conn.get("relay_url") or "").strip()

@@ -67,6 +67,8 @@ def create_nwc_connection(
     allow_get_balance: bool,
     allow_pay_invoice: bool,
     max_payment_sat: int,
+    budget_period: str,
+    budget_amount_sat: int,
 ) -> dict[str, Any]:
     now = int(time.time())
     client_secret = secrets.token_hex(32)
@@ -84,8 +86,10 @@ def create_nwc_connection(
             "get_balance": bool(allow_get_balance),
             "pay_invoice": bool(allow_pay_invoice),
         },
-        "limits": {
+            "limits": {
             "max_payment_sat": int(max_payment_sat),
+            "budget_period": str(budget_period or "none").strip().lower(),
+            "budget_amount_sat": int(budget_amount_sat or 0),
         },
         "enabled": True,
         "created_at": now,
@@ -139,6 +143,24 @@ def delete_nwc_connection(connection_id: str) -> None:
         raise KeyError("NWC connection not found")
 
     _save_raw(filtered)
+def update_nwc_connection_usage(connection_id: str, period_key: str, spent_sat: int) -> dict[str, Any]:
+    items = list_nwc_connections()
+    updated: dict[str, Any] | None = None
+
+    for item in items:
+        if item.get("id") == connection_id:
+            item["usage"] = {
+                "period_key": str(period_key),
+                "spent_sat": int(spent_sat),
+            }
+            updated = item
+            break
+
+    if updated is None:
+        raise KeyError("NWC connection not found")
+
+    _save_raw(items)
+    return updated
 
 def load_connections():
     return list_nwc_connections()

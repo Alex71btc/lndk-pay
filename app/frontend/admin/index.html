@@ -726,6 +726,28 @@ main.card .headerRow {
 
       <label class="label" for="nwcMaxPaymentInput" style="margin-top:14px;"><span data-i18n="label.nwc_max_payment">Max payment per invoice (sat)</span></label>
       <input id="nwcMaxPaymentInput" type="number" min="1" step="1" value="50000" data-i18n-placeholder="ph.nwc_max_payment" placeholder="50000" />
+     <label class="label" for="nwcBudgetPeriod" style="margin-top:14px;">
+  <span data-i18n="label.nwc_budget_period">Budget period</span>
+</label>
+<select id="nwcBudgetPeriod">
+  <option value="none" data-i18n="opt.none">None</option>
+  <option value="day" data-i18n="opt.day">Per day</option>
+  <option value="week" data-i18n="opt.week">Per week</option>
+  <option value="month" data-i18n="opt.month">Per month</option>
+</select>
+
+<label class="label" for="nwcBudgetAmount" style="margin-top:14px;">
+  <span data-i18n="label.nwc_budget_amount">Budget (sats)</span>
+</label>
+<input
+  id="nwcBudgetAmount"
+  type="number"
+  min="0"
+  step="1"
+  value="0"
+  data-i18n-placeholder="ph.nwc_budget_amount"
+  placeholder="0"
+/>
 
       <div class="row">
         <label style="display:flex;align-items:center;gap:8px;">
@@ -908,7 +930,9 @@ main.card .headerRow {
     const nwcUnlockPassword = document.getElementById('nwcUnlockPassword');
     const confirmNwcUnlockBtn = document.getElementById('confirmNwcUnlockBtn');
     const cancelNwcUnlockBtn = document.getElementById('cancelNwcUnlockBtn');
-
+    const nwcBudgetPeriod = document.getElementById('nwcBudgetPeriod');
+    const nwcBudgetAmount = document.getElementById('nwcBudgetAmount');
+    
     let nwcUnlocked = false;
 
 
@@ -1135,7 +1159,9 @@ function startNwcAutoLock(seconds) {
         const uri = item.uri || '';
         const relay = item.relay_url || '';
         const maxSat = limits.max_payment_sat || '';
-
+        const budgetPeriod = limits.budget_period || 'none';
+        const budgetAmount = limits.budget_amount_sat || 0;
+        
         return `
           <div class="historyItem">
             <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -1255,49 +1281,56 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-    async function createNwcConnection() {
-      const payload = {
-        name: (nwcNameInput?.value || '').trim() || 'NWC Connection',
-        relay_url: (nwcRelayInput?.value || '').trim() || 'wss://relay.getalby.com/v1',
-        allow_get_info: !!nwcAllowGetInfoInput?.checked,
-        allow_get_balance: !!nwcAllowGetBalanceInput?.checked,
-        allow_pay_invoice: !!nwcAllowPayInvoiceInput?.checked,
-        max_payment_sat: Number(nwcMaxPaymentInput?.value || 0),
-      };
+      async function createNwcConnection() {
+  const payload = {
+    name: (nwcNameInput?.value || '').trim() || 'NWC Connection',
+    relay_url: (nwcRelayInput?.value || '').trim() || 'wss://relay.getalby.com/v1',
+    allow_get_info: !!nwcAllowGetInfoInput?.checked,
+    allow_get_balance: !!nwcAllowGetBalanceInput?.checked,
+    allow_pay_invoice: !!nwcAllowPayInvoiceInput?.checked,
+    max_payment_sat: Number(nwcMaxPaymentInput?.value || 0),
+    budget_period: (nwcBudgetPeriod?.value || 'none'),
+    budget_amount_sat: Number(nwcBudgetAmount?.value || 0),
+  };
 
-      if (!payload.max_payment_sat || payload.max_payment_sat < 1) {
-        setStatus('Please enter a valid max payment in sats.', 'error');
-        return;
-      }
+  if (!payload.max_payment_sat || payload.max_payment_sat < 1) {
+    setStatus('Please enter a valid max payment in sats.', 'error');
+    return;
+  }
 
-      const btn = document.getElementById('createNwcConnectionBtn');
-      if (btn) btn.disabled = true;
+  if (payload.budget_period !== 'none' && (!payload.budget_amount_sat || payload.budget_amount_sat < 1)) {
+    setStatus('Please enter a valid budget in sats.', 'error');
+    return;
+  }
 
-      try {
-        const res = await fetch('/api/admin/nwc/connections', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(payload),
-        });
+  const btn = document.getElementById('createNwcConnectionBtn');
+  if (btn) btn.disabled = true;
 
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.detail || data.error || 'Failed to create NWC connection');
-        }
+  try {
+    const res = await fetch('/api/admin/nwc/connections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
 
-        const uri = data.connection?.uri || '';
-        if (nwcUriOutput) nwcUriOutput.value = uri;
-        renderNwcQr(uri);
-
-        await loadNwcConnections();
-        setStatus('NWC connection created.');
-      } catch (err) {
-        setStatus(err.message || 'Failed to create NWC connection.', 'error', true);
-      } finally {
-        if (btn) btn.disabled = false;
-      }
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || 'Failed to create NWC connection');
     }
+
+    const uri = data.connection?.uri || '';
+    if (nwcUriOutput) nwcUriOutput.value = uri;
+    renderNwcQr(uri);
+
+    await loadNwcConnections();
+    setStatus('NWC connection created.');
+  } catch (err) {
+    setStatus(err.message || 'Failed to create NWC connection.', 'error', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
     async function toggleNwcConnection(id) {
       try {
@@ -2890,6 +2923,13 @@ window.addEventListener('load', () => {
       "toast.nwc_autolocked": "NWC automatisch gesperrt.",
       "toast.nwc_unlock_failed": "NWC-Entsperrung fehlgeschlagen.",
       "toast.nwc_unlock_password_required": "Bitte Pay-Passwort eingeben.",
+      "label.nwc_budget_period": "Budget-Zeitraum",
+      "label.nwc_budget_amount": "Budget (sats)",
+      "ph.nwc_budget_amount": "0",
+      "opt.none": "Keins",
+      "opt.day": "Pro Tag",
+      "opt.week": "Pro Woche",
+      "opt.month": "Pro Monat",   
       "title.cloudflare": "Alias / Cloudflare BIP353",
       "label.record_name": "Record Name",
       "label.offer_lno": "Offer (lno...)",
@@ -3102,6 +3142,13 @@ window.addEventListener('load', () => {
       "toast.nwc_autolocked": "NWC auto-locked.",
       "toast.nwc_unlock_failed": "Failed to unlock NWC.",
       "toast.nwc_unlock_password_required": "Please enter your Pay password.",
+      "label.nwc_budget_period": "Budget period",
+      "label.nwc_budget_amount": "Budget (sats)",
+      "ph.nwc_budget_amount": "0",
+      "opt.none": "None",
+      "opt.day": "Per day",
+      "opt.week": "Per week",
+      "opt.month": "Per month",
       "title.cloudflare": "Alias / Cloudflare BIP353",
       "label.record_name": "Record name",
       "label.offer_lno": "Offer (lno...)",

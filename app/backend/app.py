@@ -520,6 +520,8 @@ class PayLoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=300)
     totp_code: Optional[str] = Field(default="")
 
+from typing import Literal
+
 class NwcConnectionCreateRequest(BaseModel):
     name: str = "NWC Connection"
     relay_url: str = "wss://relay.getalby.com/v1"
@@ -527,7 +529,8 @@ class NwcConnectionCreateRequest(BaseModel):
     allow_get_balance: bool = True
     allow_pay_invoice: bool = True
     max_payment_sat: int = Field(default=100000, ge=1, le=100000000)
-
+    budget_period: Literal["none", "day", "week", "month"] = "none"
+    budget_amount_sat: int = Field(default=0, ge=0, le=1000000000)
 
 
 
@@ -4607,23 +4610,25 @@ async def api_admin_nwc_connections_create(
         )
 
     item = create_nwc_connection(
-        wallet_service_pubkey=wallet_service_pubkey,
-        name=payload.name,
-        relay_url=payload.relay_url,
-        allow_get_info=payload.allow_get_info,
-        allow_get_balance=payload.allow_get_balance,
-        allow_pay_invoice=payload.allow_pay_invoice,
-        max_payment_sat=payload.max_payment_sat,
-    )
-
+    wallet_service_pubkey=wallet_service_pubkey,
+    name=payload.name,
+    relay_url=payload.relay_url,
+    allow_get_info=payload.allow_get_info,
+    allow_get_balance=payload.allow_get_balance,
+    allow_pay_invoice=payload.allow_pay_invoice,
+    max_payment_sat=payload.max_payment_sat,
+    budget_period=payload.budget_period,
+    budget_amount_sat=payload.budget_amount_sat,
+)
     await reload_nwc_runtime()
     return {"ok": True, "connection": {
         **item,
         "uri": build_nwc_uri(item),
         "limits": item.get("limits", {
-            "max_payment_sat": 1000,
-            "daily_budget_sat": 5000
-        })
+        "max_payment_sat": 1000,
+        "budget_period": "none",
+        "budget_amount_sat": 0,
+    })
     }}
 
 
