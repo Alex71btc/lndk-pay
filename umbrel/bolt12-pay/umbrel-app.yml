@@ -4,41 +4,35 @@ name: BOLT12 Pay
 icon: https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/icon_v2.png
 tagline: First self-hosted BIP353 Lightning Address & BOLT12 Offer app for LND nodes
 category: finance
-version: "0.2.65"
+version: 0.2.71
 port: 8091
 description: >-
-  ⚡ BOLT12 Pay is the first self-hosted app bringing BIP353 Lightning Addresses
-  and native BOLT12 Offer creation and payments to LND nodes.
+  Self-hosted Lightning payment and identity server with native BOLT12 support.
 
-  If you own a domain, BOLT12 Pay turns it into a powerful Lightning Address
-  and Nostr Zap server with full control over identities, payments, and notifications.
 
-  🔥 Features
+  Create and receive payments using next-generation BOLT12 offers, Lightning Address (BIP353), and LNURL — all from your own node.
 
-  ⚡ BIP353 Lightning Addresses
-  - Publish human-readable Lightning aliases for your domain
-  - Cloudflare-powered automatic DNS publishing
-  - No third-party services required
 
-  ⚡ BOLT12 Offers (experimental)
-  - Create and pay BOLT12 Offers on LND via LNDK
-  - One of the first real-world Offer implementations for LND
+  Includes Nostr identity (NIP-05), Zap support, and real-time notifications, with seamless fallback between BOLT12, LNURL, and BOLT11 for maximum compatibility.
 
-  ⚡ Lightning Address / LNURL
-  - Fully self-hosted LNURL server
-  - Compatible with all standard wallets
 
-  ⚡ Nostr Integration
-  - NIP-05 support
-  - Zap receiving + publishing
-  - Encrypted DM notifications
-  - Multi-relay support
+  Designed for sovereign Bitcoin users who want full control over their Lightning infrastructure, identities, and payments.
 
-  ⚙️ Self-hosted by design
-  - Full control over keys, relays, and identities
 
-  🚨 Experimental
-  - BOLT12 support on LND is cutting-edge and evolving
+  FEATURES
+    - BOLT12 Offers – Create and pay offers via LNDK
+    - Lightning Address – BIP353 + LNURL server
+    - BOLT11 Fallback – Maximum wallet compatibility
+    - Nostr Identity – NIP-05 support
+    - Zaps & Notifications – LN addresses with Zap support + DM notifications
+    - Nostr Wallet Connect (NWC) - Zap wallet for Nostr Clients like Amethyst
+    - Multi-Relay Support – Works across multiple relays
+    - Cloudflare DNS – Optional automatic publishing
+    - Self-Hosted – Full control on Umbrel
+    - Mobile-Friendly UI – Clean and optimized UX
+
+  NOTE
+    - BOLT12 support on LND is still evolving and considered experimental.
 developer: Alex71btc
 website: https://github.com/Alex71btc/lndk-pay
 submitter: Alex71btc
@@ -52,21 +46,16 @@ gallery:
   - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/4.png
   - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/5.png
 releaseNotes: |
-  Major UI update with full bilingual support (EN/DE) and improved UX.
+  Improves first-run reliability and deployment safety.
 
-  • Full English + German interface with live language switching
-  • All UI texts, toasts, and status messages translated
-  • Offer History now uses language-aware timestamps (auto-switch)
-  • Fixed QR code initialization and refresh issues
-  • Improved payment summaries for BOLT12, BOLT11 and LNURL
-  • Cleaner Nostr Identity and Cloudflare BIP353 UI
-  • Removed hardcoded strings and unified translation system
-  • Unified toast system across all actions 
-  • Tap-to-copy for QR codes, strings, and buttons
-  • Fixed button states during actions (Create Offer, Save Identity)
+  • Fixes fresh-install startup by bundling safe default config files in the image
+  • Prevents missing-config crashes on new deployments with empty app data
+  • Separates runtime config from image build context for safer secret handling
+  • Improves mobile clipboard fallback and NWC usability
 dependencies:
   - lightning
 path: ""
 defaultUsername: ""
 defaultPassword: ""
 torOnly: false
+
