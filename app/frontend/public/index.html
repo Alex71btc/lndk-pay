@@ -881,18 +881,20 @@
     }
 
     function setActiveBox(mode) {
-       addressBox.classList.toggle('active', mode === 'address');
-       fallbackAddressBox.classList.toggle('active', mode === 'fallback');
-       offerBox.classList.toggle('active', mode === 'offer');
-       if (invoiceBox) {
-       invoiceBox.classList.toggle('active', mode === 'invoice');
+      addressBox.classList.toggle('active', mode === 'address');
+      fallbackAddressBox.classList.toggle('active', mode === 'fallback');
+      offerBox.classList.toggle('active', mode === 'offer');
+
+      if (invoiceBox) {
+        invoiceBox.classList.toggle('active', mode === 'invoice');
       }
     }
+
     function getActiveQrValue() {
       if (activeQrMode === 'invoice') return currentInvoice;
       if (activeQrMode === 'offer') return currentOffer;
       if (activeQrMode === 'fallback') return currentLnurl || fallbackAddress;
-    return currentAddress;
+      return currentAddress;
     }
 
     function renderQrForValue(value, mode) {
@@ -905,17 +907,17 @@
       activeQrMode = mode;
       setActiveBox(mode);
 
-if (mode === 'invoice') {
-  qrModeBadge.textContent = 'QR: BOLT11 Rechnung';
-} else if (mode === 'offer') {
-  qrModeBadge.textContent = 'QR: Offer';
-} else if (mode === 'fallback') {
-  qrModeBadge.textContent = 'QR: LNURL';
-} else {
-  qrModeBadge.textContent = 'QR: BOLT12 Adresse';
-}
- 
-     qrValueText.textContent = value;
+      if (mode === 'invoice') {
+        qrModeBadge.textContent = 'QR: BOLT11 Rechnung';
+      } else if (mode === 'offer') {
+        qrModeBadge.textContent = 'QR: Offer';
+      } else if (mode === 'fallback') {
+        qrModeBadge.textContent = 'QR: LNURL';
+      } else {
+        qrModeBadge.textContent = 'QR: BOLT12 Adresse';
+      }
+
+      qrValueText.textContent = value;
 
       new QRCode(qrBox, {
         text: value,
@@ -1274,14 +1276,12 @@ function renderAliasList(items) {
         aliasAmountInput.value = '';
 
         await loadAliases();
-      if (typeof window.__applyRuntimeAliasList === "function") {
-        setTimeout(window.__applyRuntimeAliasList, 0);
-        setTimeout(window.__applyRuntimeAliasList, 50);
-      }
-      if (typeof window.__applyRuntimeAliasList === "function") {
-        setTimeout(window.__applyRuntimeAliasList, 0);
-        setTimeout(window.__applyRuntimeAliasList, 50);
-      }
+
+        if (typeof window.__applyRuntimeAliasList === "function") {
+          setTimeout(window.__applyRuntimeAliasList, 0);
+          setTimeout(window.__applyRuntimeAliasList, 50);
+        }
+
         setStatus(`Alias ${data.address} angelegt.`);
       } catch (error) {
         setStatus(`Alias-Fehler: ${error?.message || error}`, 'error', true);
@@ -1309,24 +1309,24 @@ function renderAliasList(items) {
         setStatus(`Publish-Fehler: ${error?.message || error}`, 'error', true);
       }
     }
-async function refreshAliasOffer(name) {
-  try {
-    const response = await fetch(`/api/alias/${encodeURIComponent(name)}/refresh-offer`, {
-      method: 'POST'
-    });
+    async function refreshAliasOffer(name) {
+      try {
+        const response = await fetch(`/api/alias/${encodeURIComponent(name)}/refresh-offer`, {
+          method: 'POST'
+        });
 
-    const data = await response.json();
+        const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data?.detail || 'Offer konnte nicht erneuert werden');
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Offer konnte nicht erneuert werden');
+        }
+
+        await loadAliases();
+        setStatus(`Offer für ${data.address} erneuert.`);
+      } catch (error) {
+        setStatus(`Refresh-Fehler: ${error?.message || error}`, 'error', true);
+      }
     }
-
-    await loadAliases();
-    setStatus(`Offer für ${data.address} erneuert.`);
-  } catch (error) {
-    setStatus(`Refresh-Fehler: ${error?.message || error}`, 'error', true);
-  }
-}
 
     async function deleteAlias(name) {
       if (!confirm(`Alias ${name} wirklich löschen?`)) {
@@ -1397,141 +1397,143 @@ async function refreshAliasOffer(name) {
     async function copyAliasOffer(offer) {
       await copyText(offer, 'Offer kopiert.');
     }
+
     async function createInvoice() {
-  const amountValue = invoiceAmountInput.value.trim();
-  const memoValue = invoiceMemoInput.value.trim() || 'bolt12-pay compat';
+      const amountValue = invoiceAmountInput.value.trim();
+      const memoValue = invoiceMemoInput.value.trim() || 'bolt12-pay compat';
 
-  if (!amountValue) {
-    setStatus('Bitte Betrag für BOLT11 Rechnung eingeben.', 'error');
-    return;
-  }
+      if (!amountValue) {
+        setStatus('Bitte Betrag für BOLT11 Rechnung eingeben.', 'error');
+        return;
+      }
 
-  createInvoiceBtn.disabled = true;
-  createInvoiceBtn.textContent = 'Erzeuge...';
+      createInvoiceBtn.disabled = true;
+      createInvoiceBtn.textContent = 'Erzeuge...';
 
-  try {
-    const response = await fetch('/api/create-invoice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount_sat: Number(amountValue),
-        memo: memoValue,
-        expiry: 3600
-      })
-    });
+      try {
+        const response = await fetch('/api/create-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount_sat: Number(amountValue),
+            memo: memoValue,
+            expiry: 3600
+          })
+        });
 
-    const data = await response.json();
+        const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data?.detail || 'BOLT11 Rechnung konnte nicht erzeugt werden');
+        if (!response.ok) {
+          throw new Error(data?.detail || 'BOLT11 Rechnung konnte nicht erzeugt werden');
+        }
+
+        currentInvoice = data.payment_request || '';
+        invoiceBox.textContent = currentInvoice || 'Keine Rechnung';
+        renderQrForValue(currentInvoice, 'invoice');
+
+        setStatus('BOLT11 Rechnung erfolgreich erzeugt.');
+      } catch (error) {
+        setStatus(`Invoice-Fehler: ${error?.message || error}`, 'error', true);
+      } finally {
+        createInvoiceBtn.disabled = false;
+        createInvoiceBtn.textContent = 'BOLT11 Rechnung erzeugen';
+      }
     }
 
-    currentInvoice = data.payment_request || '';
-    invoiceBox.textContent = currentInvoice || 'Keine Rechnung';
-    renderQrForValue(currentInvoice, 'invoice');
+    async function copyInvoice() {
+      if (!currentInvoice) {
+        setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+        return;
+      }
 
-    setStatus('BOLT11 Rechnung erfolgreich erzeugt.');
-  } catch (error) {
-    setStatus(`Invoice-Fehler: ${error?.message || error}`, 'error', true);
-  } finally {
-    createInvoiceBtn.disabled = false;
-    createInvoiceBtn.textContent = 'BOLT11 Rechnung erzeugen';
-  }
-}
-
-async function copyInvoice() {
-  if (!currentInvoice) {
-    setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
-    return;
-  }
-
-  await copyText(currentInvoice, 'BOLT11 Rechnung kopiert.');
-}
-
-function showInvoiceQr() {
-  if (!currentInvoice) {
-    setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
-    return;
-  }
-
-  renderQrForValue(currentInvoice, 'invoice');
-  setStatus('BOLT11 QR angezeigt.');
-}
-function aliasPublicUrl(name) {
-  return `${window.location.origin}/${encodeURIComponent(name)}`;
-}
-
-function openAliasPage(name) {
-  window.open(aliasPublicUrl(name), '_blank');
-}
-
-async function copyAliasPageLink(name) {
-  const url = aliasPublicUrl(name);
-  await copyText(url, `Alias-Link ${url} kopiert.`);
-}
-
-async function editAlias(name, currentDescription, currentAmount) {
-  const newDescription = prompt('Neue Beschreibung:', currentDescription || '');
-  if (newDescription === null) return;
-
-  const amountInput = prompt(
-    'Neuer Betrag in sats (leer = variabel):',
-    currentAmount == null || currentAmount === '' ? '' : String(currentAmount)
-  );
-  if (amountInput === null) return;
-
-  const trimmedAmount = amountInput.trim();
-
-  const payload = {
-    description: newDescription.trim() || 'Lightning payment',
-    amount_sat: trimmedAmount === '' ? null : Number(trimmedAmount)
-  };
-
-  if (trimmedAmount !== '' && (!Number.isFinite(payload.amount_sat) || payload.amount_sat < 1)) {
-    setStatus('Ungültiger Betrag.', 'error');
-    return;
-  }
-
-  try {
-    const response = await fetch(`/api/alias/${encodeURIComponent(name)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data?.detail || 'Alias konnte nicht bearbeitet werden');
+      await copyText(currentInvoice, 'BOLT11 Rechnung kopiert.');
     }
 
-    await loadAliases();
-    setStatus(`Alias ${data.address} aktualisiert.`);
-  } catch (error) {
-    setStatus(`Edit-Fehler: ${error?.message || error}`, 'error', true);
-  }
-}
+    function showInvoiceQr() {
+      if (!currentInvoice) {
+        setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+        return;
+      }
 
-async function payInvoiceWithWebln() {
-  if (!currentInvoice) {
-    setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
-    return;
-  }
+      renderQrForValue(currentInvoice, 'invoice');
+      setStatus('BOLT11 QR angezeigt.');
+    }
 
-  if (!window.webln?.enable || !window.webln?.sendPayment) {
-    setStatus('WebLN / Alby nicht verfügbar.', 'error');
-    return;
-  }
+    function aliasPublicUrl(name) {
+      return `${window.location.origin}/${encodeURIComponent(name)}`;
+    }
 
-  try {
-    await window.webln.enable();
-    await window.webln.sendPayment(currentInvoice);
-    setStatus('BOLT11 Rechnung an Alby / WebLN übergeben.');
-  } catch (error) {
-    console.warn('WebLN invoice payment failed:', error);
-    setStatus(`WebLN-Fehler: ${error?.message || error}`, 'error', true);
-  }
-}
+    function openAliasPage(name) {
+      window.open(aliasPublicUrl(name), '_blank');
+    }
+
+    async function copyAliasPageLink(name) {
+      const url = aliasPublicUrl(name);
+      await copyText(url, `Alias-Link ${url} kopiert.`);
+    }
+
+    async function editAlias(name, currentDescription, currentAmount) {
+      const newDescription = prompt('Neue Beschreibung:', currentDescription || '');
+      if (newDescription === null) return;
+
+      const amountInput = prompt(
+        'Neuer Betrag in sats (leer = variabel):',
+        currentAmount == null || currentAmount === '' ? '' : String(currentAmount)
+      );
+      if (amountInput === null) return;
+
+      const trimmedAmount = amountInput.trim();
+
+      const payload = {
+        description: newDescription.trim() || 'Lightning payment',
+        amount_sat: trimmedAmount === '' ? null : Number(trimmedAmount)
+      };
+
+      if (trimmedAmount !== '' && (!Number.isFinite(payload.amount_sat) || payload.amount_sat < 1)) {
+        setStatus('Ungültiger Betrag.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/alias/${encodeURIComponent(name)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Alias konnte nicht bearbeitet werden');
+        }
+
+        await loadAliases();
+        setStatus(`Alias ${data.address} aktualisiert.`);
+      } catch (error) {
+        setStatus(`Edit-Fehler: ${error?.message || error}`, 'error', true);
+      }
+    }
+
+    async function payInvoiceWithWebln() {
+      if (!currentInvoice) {
+        setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+        return;
+      }
+
+      if (!window.webln?.enable || !window.webln?.sendPayment) {
+        setStatus('WebLN / Alby nicht verfügbar.', 'error');
+        return;
+      }
+
+      try {
+        await window.webln.enable();
+        await window.webln.sendPayment(currentInvoice);
+        setStatus('BOLT11 Rechnung an Alby / WebLN übergeben.');
+      } catch (error) {
+        console.warn('WebLN invoice payment failed:', error);
+        setStatus(`WebLN-Fehler: ${error?.message || error}`, 'error', true);
+      }
+    }
 
     window.publishAlias = publishAlias;
     window.refreshAliasOffer = refreshAliasOffer;
@@ -1825,6 +1827,9 @@ installBtn.addEventListener('click', async () => {
   </script>
 
 <script>
+// ------------------------------------------------------------------
+// Language switch runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__publicLangEnhancerInstalled) return;
   window.__publicLangEnhancerInstalled = true;
@@ -1908,6 +1913,9 @@ installBtn.addEventListener('click', async () => {
 </script>
 
 <script>
+// ------------------------------------------------------------------
+// Translation runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__publicI18nInstalled) return;
   window.__publicI18nInstalled = true;
@@ -2092,6 +2100,9 @@ installBtn.addEventListener('click', async () => {
 </script>
 
 <script>
+// ------------------------------------------------------------------
+// DNS option runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__dnsI18nInstalled) return;
   window.__dnsI18nInstalled = true;
@@ -2123,6 +2134,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// Offer section runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__runtimeBlock1Installed) return;
   window.__runtimeBlock1Installed = true;
@@ -2261,6 +2275,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// BOLT11 section runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__runtimeBlock2Bolt11Installed) return;
   window.__runtimeBlock2Bolt11Installed = true;
@@ -2393,6 +2410,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// Quick amount hint runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__runtimeBlock1HintFixInstalled) return;
   window.__runtimeBlock1HintFixInstalled = true;
@@ -2456,6 +2476,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// Quick amount label runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__runtimeQuickAmountInstalled) return;
   window.__runtimeQuickAmountInstalled = true;
@@ -2519,6 +2542,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// LNURL section runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__runtimeLnurlInstalled) return;
   window.__runtimeLnurlInstalled = true;
@@ -2624,6 +2650,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// Alias static runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__runtimeAliasStaticInstalled) return;
   window.__runtimeAliasStaticInstalled = true;
@@ -2749,6 +2778,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// Alias list runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__runtimeAliasListInstalled) return;
   window.__runtimeAliasListInstalled = true;
@@ -2945,6 +2977,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// Alias fetch hook runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__aliasFetchHookInstalled) return;
   window.__aliasFetchHookInstalled = true;
@@ -2972,6 +3007,9 @@ installBtn.addEventListener('click', async () => {
 
 
 <script>
+// ------------------------------------------------------------------
+// Toast translation runtime
+// ------------------------------------------------------------------
 (function () {
   if (window.__runtimeToastInstalled) return;
   window.__runtimeToastInstalled = true;
