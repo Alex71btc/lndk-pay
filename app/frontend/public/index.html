@@ -880,6 +880,9 @@
       return `${value.slice(0, left)}...${value.slice(-right)}`;
     }
 
+    // ------------------------------------------------------------------
+    // QR helpers
+    // ------------------------------------------------------------------
     function setActiveBox(mode) {
       addressBox.classList.toggle('active', mode === 'address');
       fallbackAddressBox.classList.toggle('active', mode === 'fallback');
@@ -1237,6 +1240,9 @@ function renderAliasList(items) {
       }
     }
 
+    // ------------------------------------------------------------------
+    // Alias CRUD
+    // ------------------------------------------------------------------
     async function createAlias() {
       const name = aliasNameInput.value.trim().toLowerCase();
       const description = aliasDescriptionInput.value.trim() || 'Lightning payment';
@@ -1402,6 +1408,9 @@ function renderAliasList(items) {
       await copyText(offer, 'Offer kopiert.');
     }
 
+    // ------------------------------------------------------------------
+    // Invoice helpers
+    // ------------------------------------------------------------------
     async function createInvoice() {
       const amountValue = invoiceAmountInput.value.trim();
       const memoValue = invoiceMemoInput.value.trim() || 'bolt12-pay compat';
