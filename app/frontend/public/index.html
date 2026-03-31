@@ -897,6 +897,17 @@
       return currentAddress;
     }
 
+    function getQrModeBadgeText(mode) {
+      const labels = {
+        invoice: 'QR: BOLT11 Rechnung',
+        offer: 'QR: Offer',
+        fallback: 'QR: LNURL',
+        address: 'QR: BOLT12 Adresse'
+      };
+
+      return labels[mode] || labels.address;
+    }
+
     function renderQrForValue(value, mode) {
       qrBox.innerHTML = '';
 
@@ -906,17 +917,7 @@
 
       activeQrMode = mode;
       setActiveBox(mode);
-
-      if (mode === 'invoice') {
-        qrModeBadge.textContent = 'QR: BOLT11 Rechnung';
-      } else if (mode === 'offer') {
-        qrModeBadge.textContent = 'QR: Offer';
-      } else if (mode === 'fallback') {
-        qrModeBadge.textContent = 'QR: LNURL';
-      } else {
-        qrModeBadge.textContent = 'QR: BOLT12 Adresse';
-      }
-
+      qrModeBadge.textContent = getQrModeBadgeText(mode);
       qrValueText.textContent = value;
 
       new QRCode(qrBox, {
@@ -1374,6 +1375,9 @@ function renderAliasList(items) {
       }
     }
 
+    // ------------------------------------------------------------------
+    // Alias helpers
+    // ------------------------------------------------------------------
     function showAliasAddressQr(name, address) {
       renderQrForValue(address, 'fallback');
       setStatus(`Adress-QR für Alias ${name} angezeigt.`);
