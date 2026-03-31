@@ -1555,7 +1555,7 @@ function renderAliasList(items) {
       }
 
       if (!window.webln?.enable || !window.webln?.sendPayment) {
-        setStatus('WebLN / Alby nicht verfügbar.', 'error');
+        tStatus('toast.webln_unavailable', 'error');
         return;
       }
 
@@ -1584,7 +1584,7 @@ function renderAliasList(items) {
    document.getElementById('copyActiveBtn').addEventListener('click', async () => {
       const value = getActiveQrValue();
       if (!value) {
-        setStatus('Noch kein aktiver Inhalt vorhanden.', 'error');
+        tStatus('toast.no_active_content', 'error');
         return;
       }
 
@@ -1611,7 +1611,7 @@ function renderAliasList(items) {
       const customAddress = fallbackAddressInput.value.trim().toLowerCase();
 
       if (!isLightningAddress(customAddress)) {
-        setStatus('Bitte gültige Lightning Address eingeben.', 'error');
+        tStatus('toast.invalid_lightning_address', 'error');
         return;
       }
 
@@ -1622,7 +1622,7 @@ function renderAliasList(items) {
       try {
         await loadLnurlFallback();
         renderQrForValue(currentLnurl || fallbackAddress, 'fallback');
-        setStatus('LNURL Alias gespeichert und QR aktualisiert.');
+        tStatus('toast.lnurl_alias_saved');
       } catch (error) {
         currentLnurl = '';
         setStatus(`LNURL konnte nicht geladen werden: ${error?.message || error}`, 'error', true);
@@ -1653,7 +1653,7 @@ addressBox.addEventListener('click', async () => {
 
     offerBox.addEventListener('click', async () => {
       if (!currentOffer) {
-        setStatus('Noch kein Offer vorhanden.', 'error');
+        tStatus('toast.no_offer_yet', 'error');
         return;
       }
       renderQrForValue(currentOffer, 'offer');
@@ -1706,7 +1706,7 @@ document.addEventListener('click', function (e) {
 
       createOfferBtn.disabled = true;
       createOfferBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Creating...' : 'Erzeuge...';
-      setStatus('Erzeuge neues Offer...', 'warn');
+      tStatus('toast.creating_offer', 'warn');
 
       try {
         const response = await fetch('/api/create-offer', {
@@ -1725,7 +1725,7 @@ document.addEventListener('click', function (e) {
         offerBox.textContent = currentOffer;
         renderQrForValue(currentOffer, 'offer');
 
-        setStatus('Neues Offer erfolgreich erzeugt.');
+        tStatus('toast.offer_created');
       } catch (error) {
         console.error('Create offer error:', error);
         setStatus(`Fehler: ${error?.message || error}`, 'error', true);
@@ -1770,7 +1770,7 @@ walletOpenBtn.addEventListener('click', async () => {
     try {
       window.location.href = lightningUrl;
     } catch {
-      setStatus('Konnte Wallet / WebLN nicht öffnen.', 'error');
+      tStatus('toast.wallet_open_failed', 'error');
     }
   }
 });
@@ -3086,6 +3086,14 @@ installBtn.addEventListener('click', async () => {
       "toast.invoice_created": "BOLT11 Rechnung erfolgreich erzeugt.",
       "toast.no_invoice_yet": "Noch keine BOLT11 Rechnung vorhanden.",
       "toast.invalid_amount": "Ungültiger Betrag.",
+      "toast.webln_unavailable": "WebLN / Alby nicht verfügbar.",
+      "toast.no_active_content": "Noch kein aktiver Inhalt vorhanden.",
+      "toast.invalid_lightning_address": "Bitte gültige Lightning Address eingeben.",
+      "toast.lnurl_alias_saved": "LNURL Alias gespeichert und QR aktualisiert.",
+      "toast.no_offer_yet": "Noch kein Offer vorhanden.",
+      "toast.creating_offer": "Erzeuge neues Offer...",
+      "toast.offer_created": "Neues Offer erfolgreich erzeugt.",
+      "toast.wallet_open_failed": "Konnte Wallet / WebLN nicht öffnen.",
 
       "toast.offer_copied": "Offer kopiert.",
       "toast.link_copied": "Link kopiert.",
@@ -3125,6 +3133,14 @@ installBtn.addEventListener('click', async () => {
       "toast.invoice_created": "BOLT11 invoice created successfully.",
       "toast.no_invoice_yet": "No BOLT11 invoice has been created yet.",
       "toast.invalid_amount": "Invalid amount.",
+      "toast.webln_unavailable": "WebLN / Alby is not available.",
+      "toast.no_active_content": "No active content is available yet.",
+      "toast.invalid_lightning_address": "Please enter a valid Lightning Address.",
+      "toast.lnurl_alias_saved": "LNURL alias saved and QR updated.",
+      "toast.no_offer_yet": "No offer has been created yet.",
+      "toast.creating_offer": "Creating new offer...",
+      "toast.offer_created": "New offer created successfully.",
+      "toast.wallet_open_failed": "Could not open wallet / WebLN.",
 
       "toast.offer_copied": "Offer copied.",
       "toast.link_copied": "Link copied.",
@@ -3204,6 +3220,22 @@ installBtn.addEventListener('click', async () => {
     "No BOLT11 invoice has been created yet.": "toast.no_invoice_yet",
     "Ungültiger Betrag.": "toast.invalid_amount",
     "Invalid amount.": "toast.invalid_amount",
+    "WebLN / Alby nicht verfügbar.": "toast.webln_unavailable",
+    "WebLN / Alby is not available.": "toast.webln_unavailable",
+    "Noch kein aktiver Inhalt vorhanden.": "toast.no_active_content",
+    "No active content is available yet.": "toast.no_active_content",
+    "Bitte gültige Lightning Address eingeben.": "toast.invalid_lightning_address",
+    "Please enter a valid Lightning Address.": "toast.invalid_lightning_address",
+    "LNURL Alias gespeichert und QR aktualisiert.": "toast.lnurl_alias_saved",
+    "LNURL alias saved and QR updated.": "toast.lnurl_alias_saved",
+    "Noch kein Offer vorhanden.": "toast.no_offer_yet",
+    "No offer has been created yet.": "toast.no_offer_yet",
+    "Erzeuge neues Offer...": "toast.creating_offer",
+    "Creating new offer...": "toast.creating_offer",
+    "Neues Offer erfolgreich erzeugt.": "toast.offer_created",
+    "New offer created successfully.": "toast.offer_created",
+    "Konnte Wallet / WebLN nicht öffnen.": "toast.wallet_open_failed",
+    "Could not open wallet / WebLN.": "toast.wallet_open_failed",
 
     "Offer kopiert.": "toast.offer_copied",
     "Offer copied.": "toast.offer_copied",
