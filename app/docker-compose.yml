@@ -1,0 +1,49 @@
+services:
+  bolt12-pay:
+    build: .
+    container_name: bolt12-pay
+    restart: unless-stopped
+    ports:
+      - "8091:8081"
+    env_file:
+      - ./.env
+    environment:
+      APP_DATA_DIR: /data
+      PAY_UI_SESSION_TTL: ${PAY_UI_SESSION_TTL:-1800}
+
+      LNDK_CLI: /usr/local/bin/lndk-cli
+      LNDK_NETWORK: bitcoin
+      LNDK_GRPC_HOST: ${LNDK_GRPC_HOST}
+      LNDK_GRPC_PORT: ${LNDK_GRPC_PORT:-7000}
+      LNDK_CERT_PATH: /secrets/tls.cert
+      LNDK_MACAROON_PATH: /secrets/admin.macaroon
+      LNDK_TIMEOUT_SECONDS: ${LNDK_TIMEOUT_SECONDS:-30}
+      ALLOW_PAY_OFFER: "true"
+
+      LND_REST_URL: ${LND_REST_URL}
+      LND_TLS_CERT_PATH: /secrets/tls.cert
+      LND_MACAROON_PATH: /secrets/admin.macaroon
+      LND_REST_INSECURE: ${LND_REST_INSECURE:-false}
+
+      LNURL_MIN_SENDABLE_MSAT: ${LNURL_MIN_SENDABLE_MSAT:-1000}
+      LNURL_MAX_SENDABLE_MSAT: ${LNURL_MAX_SENDABLE_MSAT:-1000000000}
+      LNURL_COMMENT_ALLOWED: ${LNURL_COMMENT_ALLOWED:-120}
+      LNURL_ALIAS_MODE: ${LNURL_ALIAS_MODE:-shared}
+      LNURL_SHARED_DESCRIPTION: ${LNURL_SHARED_DESCRIPTION:-LNURL payment}
+      LNURL_DEFAULT_DESCRIPTION: ${LNURL_DEFAULT_DESCRIPTION:-Lightning payment}
+      LNURL_ALIAS_MAP: ""
+
+
+      APP_CONFIG_PATH: /data/config.json
+      CONFIG_JSON_PATH: /data/config.json
+      SECRETS_JSON_PATH: /data/config/secrets.json
+      CORS_ORIGINS: "*"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    volumes:
+      - ./secrets:/secrets:ro
+      - bolt12_pay_data:/data
+
+volumes:
+  bolt12_pay_data:
