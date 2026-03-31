@@ -1,20 +1,26 @@
 .git
+.gitignore
 .env
 .env.*
 data/config.json
 data/config/secrets.json
-**/__pycache__/
-**/*.pyc
-**/*.pyo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# backups
+*.bak
+*.bak.*
+*~
+
+# dev junk
+Projekt*
+devtools/
+
+# secrets
 *.pem
 *.key
 *.crt
 *.macaroon
-*.bak
-*.bak.*
-*~
-Projekt*
-devtools/
-frontend/public/index.html.*
-backend/*.bak*
-backend/**/*.bak*

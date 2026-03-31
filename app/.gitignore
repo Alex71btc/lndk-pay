@@ -1,17 +1,28 @@
-patch_*.py
+# Runtime data
 data/
-*.json
-devtools/
+data/config.json
+data/config/secrets.json
 
-# backups
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Dev / backups
 *.bak
-*.bak2
+*.bak.*
 *.before*
 *.safe
 *~
 
-# temp html exports
-Projekt*
+# Local tools
+devtools/
+
+# Temp html backups
 frontend/public/index.html.*
-data/config.json
-data/config/secrets.json
+
+# Misc
+patch_*.py

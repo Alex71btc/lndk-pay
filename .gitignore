@@ -1,31 +1,40 @@
-*.current-broken
-*.bak.*
-.venv/
+# Python
 __pycache__/
 *.pyc
+.venv/
+app/.venv/
+
+# Environment
 .env
-target/
+.env.*
+
+# Secrets
 secrets/
 app/secrets/
 *.pem
+*.key
+*.crt
 *.macaroon
-*.bak
-cookies.txt
-deploy/docker-compose.local.yml
-app/docker-compose.yml
-app/docker-compose.yml
+
+# Runtime config
+config.json
+app/data/config.json
 app/data/config/secrets.json
-app/data/config/*.local.json
-_chatgpt_backups/
-*.bak*
-patch_*.py
-app/data/config/config.json
-app/data/config/*.json
-!app/data/config/*.example.json
-# Backups
+
+
+# Backups / temp
+*.bak
+*.bak.*
+*.old
+*~
+*.current-broken
 *.tar.gz
 *.zip
 backup/
 backups/
-*.bak
-*.old
+_chatgpt_backups/
+patch_*.py
+
+# Editor / misc
+cookies.txt
+target/
