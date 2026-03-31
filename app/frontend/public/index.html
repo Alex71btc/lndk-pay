@@ -277,10 +277,17 @@
     }
 
     .qrBox img,
-    .qrBox canvas {
+    .qrBox canvas,
+    .qrBox table {
       display: block;
       max-width: 100%;
       height: auto;
+      margin: 0 auto;
+    }
+
+    .qrBox > * {
+      margin-left: auto;
+      margin-right: auto;
     }
 
     .tiny {
@@ -655,11 +662,7 @@
         <button class="secondary" id="applyFallbackBtn" type="button">LNURL Alias setzen</button>
       </div>
 
-      <div class="hint">
-        <span id="lnurlIntroText">Standardmäßig zeigt der QR die BIP353 Address als primären Einstieg. Das aktuelle BOLT12 Offer und LNURL Fallback können separat angezeigt werden. Das UI erzeugt aus der Lightning Address einen</span>
-        <span class="mono">lnurl1...</span>-QR. Ob eine Wallet ihn wirklich zahlen kann, hängt davon ab,
-        <span id="lnurlEndpointText">ob auf der Domain ein echter LNURL-pay-Endpunkt mit passender Antwort läuft.</span>
-      </div>
+      <div class="hint" id="lnurlHintText"></div>
 
       <label class="label" style="margin-top:14px;" id="lnurlCurrentOfferLabel">Aktuelles Offer</label>
       <div id="offerBox" class="valueBox mono copyable" title="Antippen = kopieren + QR auf Offer umschalten">
@@ -1164,15 +1167,55 @@ async function saveSetup() {
     }
 
 function renderAliasList(items) {
-  if (!items || items.length === 0) {
-    const noAliasesText =
-      (typeof window.__t === 'function' && window.__t('state.no_aliases') !== 'state.no_aliases')
-        ? window.__t('state.no_aliases')
-        : ((localStorage.getItem('app_lang') || 'de') === 'en'
-            ? 'No aliases created yet.'
-            : 'Noch keine Aliase angelegt.');
+  const lang = localStorage.getItem('app_lang') || 'de';
+  const L = lang === 'en'
+    ? {
+        no_aliases: 'No aliases created yet.',
+        description: 'Description:',
+        amount: 'Amount:',
+        variable: 'variable',
+        dns: 'DNS:',
+        public_page: 'Public page:',
+        offer: 'Offer:',
+        published: 'Published',
+        draft: 'Draft',
+        publish: 'Publish',
+        edit: 'Edit',
+        renew_offer: 'Renew offer',
+        open: 'Open',
+        copy_link: 'Copy link',
+        address_qr: 'Address QR',
+        copy_address: 'Copy address',
+        offer_qr: 'Offer QR',
+        copy_offer: 'Copy offer',
+        delete: 'Delete',
+        delete_dns: 'Delete + DNS'
+      }
+    : {
+        no_aliases: 'Noch keine Aliase angelegt.',
+        description: 'Beschreibung:',
+        amount: 'Betrag:',
+        variable: 'variabel',
+        dns: 'DNS:',
+        public_page: 'Öffentliche Seite:',
+        offer: 'Offer:',
+        published: 'veröffentlicht',
+        draft: 'Entwurf',
+        publish: 'Veröffentlichen',
+        edit: 'Bearbeiten',
+        renew_offer: 'Offer erneuern',
+        open: 'Öffnen',
+        copy_link: 'Link kopieren',
+        address_qr: 'Adresse QR',
+        copy_address: 'Adresse kopieren',
+        offer_qr: 'Offer QR',
+        copy_offer: 'Offer kopieren',
+        delete: 'Löschen',
+        delete_dns: 'Löschen + DNS'
+      };
 
-    aliasList.innerHTML = `<div class="hint">${noAliasesText}</div>`;
+  if (!items || items.length === 0) {
+    aliasList.innerHTML = `<div class="hint">${L.no_aliases}</div>`;
 
     window.__rerenderAliasEmptyState = function () {
       const aliasList = document.getElementById('aliasList');
@@ -1188,14 +1231,7 @@ function renderAliasList(items) {
 
       if (!onlyHint && hasRealAlias) return;
 
-      const noAliasesText =
-        (typeof window.__t === 'function' && window.__t('state.no_aliases') !== 'state.no_aliases')
-          ? window.__t('state.no_aliases')
-          : ((localStorage.getItem('app_lang') || 'de') === 'en'
-              ? 'No aliases created yet.'
-              : 'Noch keine Aliase angelegt.');
-
-      aliasList.innerHTML = `<div class="hint">${noAliasesText}</div>`;
+      aliasList.innerHTML = `<div class="hint">${L.no_aliases}</div>`;
     };
 
     return;
@@ -1207,22 +1243,22 @@ function renderAliasList(items) {
         <div>
           <div class="aliasTitle mono">${item.address}</div>
           <div class="aliasMeta">
-            Beschreibung: ${item.description || '-'}<br />
-            Betrag: ${item.amount_sat ? `${item.amount_sat} sats` : 'variabel'}<br />
-            DNS: ${item.dns_name ? `<span class="mono">${item.dns_name}</span>` : '-'}<br />
-            Öffentliche Seite: <span class="mono">${aliasPublicUrl(item.name)}</span><br />
-            Offer: ${item.last_offer ? `<span class="mono offerPreview">${shortenMiddle(item.last_offer)}</span>` : '-'}
+            ${L.description} ${item.description || '-'}<br />
+            ${L.amount} ${item.amount_sat ? `${item.amount_sat} sats` : L.variable}<br />
+            ${L.dns} ${item.dns_name ? `<span class="mono">${item.dns_name}</span>` : '-'}<br />
+            ${L.public_page} <span class="mono">${aliasPublicUrl(item.name)}</span><br />
+            ${L.offer} ${item.last_offer ? `<span class="mono offerPreview">${shortenMiddle(item.last_offer)}</span>` : '-'}
           </div>
         </div>
         <div>
           <span class="aliasStatus ${item.published ? 'published' : 'draft'}">
-            ${item.published ? 'veröffentlicht' : 'Entwurf'}
+            ${item.published ? L.published : L.draft}
           </span>
         </div>
       </div>
 
       <div class="aliasActions">
-        <button class="secondary" type="button" onclick="publishAlias('${item.name}')">Veröffentlichen</button>
+        <button class="secondary" type="button" onclick="publishAlias('${item.name}')">${L.publish}</button>
         <button
   class="secondary aliasEditBtn"
   type="button"
@@ -1230,17 +1266,17 @@ function renderAliasList(items) {
   data-description="${encodeURIComponent(item.description || '')}"
   data-amount="${item.amount_sat == null ? '' : item.amount_sat}"
 >
-  Bearbeiten
+  ${L.edit}
 </button>
-        <button class="secondary" type="button" onclick="refreshAliasOffer('${item.name}')">Offer erneuern</button>
-        <button class="secondary" type="button" onclick="openAliasPage('${item.name}')">Öffnen</button>
-        <button class="secondary" type="button" onclick="copyAliasPageLink('${item.name}')">Link kopieren</button>
-        <button class="secondary" type="button" onclick="showAliasAddressQr('${item.name}', '${item.address}')">Adresse QR</button>
-        <button class="secondary" type="button" onclick="copyAliasAddress('${item.address}')">Adresse kopieren</button>
-        ${item.last_offer ? `<button class="secondary" type="button" onclick="showAliasOfferQr('${item.name}', '${item.last_offer}')">Offer QR</button>` : ''}
-        ${item.last_offer ? `<button class="secondary" type="button" onclick="copyAliasOffer('${item.last_offer}')">Offer kopieren</button>` : ''}
-        <button class="danger" type="button" onclick="deleteAlias('${item.name}')">Löschen</button>
-        ${item.dns_name ? `<button class="danger" type="button" onclick="deleteAliasWithDns('${item.name}')">Löschen + DNS</button>` : ''}
+        <button class="secondary" type="button" onclick="refreshAliasOffer('${item.name}')">${L.renew_offer}</button>
+        <button class="secondary" type="button" onclick="openAliasPage('${item.name}')">${L.open}</button>
+        <button class="secondary" type="button" onclick="copyAliasPageLink('${item.name}')">${L.copy_link}</button>
+        <button class="secondary" type="button" onclick="showAliasAddressQr('${item.name}', '${item.address}')">${L.address_qr}</button>
+        <button class="secondary" type="button" onclick="copyAliasAddress('${item.address}')">${L.copy_address}</button>
+        ${item.last_offer ? `<button class="secondary" type="button" onclick="showAliasOfferQr('${item.name}', '${item.last_offer}')">${L.offer_qr}</button>` : ''}
+        ${item.last_offer ? `<button class="secondary" type="button" onclick="copyAliasOffer('${item.last_offer}')">${L.copy_offer}</button>` : ''}
+        <button class="danger" type="button" onclick="deleteAlias('${item.name}')">${L.delete}</button>
+        ${item.dns_name ? `<button class="danger" type="button" onclick="deleteAliasWithDns('${item.name}')">${L.delete_dns}</button>` : ''}
       </div>
     </div>
   `).join('');
@@ -1284,7 +1320,7 @@ function renderAliasList(items) {
       }
 
       createAliasBtn.disabled = true;
-      createAliasBtn.textContent = 'Lege an...';
+      createAliasBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Creating...' : 'Lege an...';
 
       try {
         const response = await fetch('/api/alias', {
@@ -1315,7 +1351,7 @@ function renderAliasList(items) {
         setStatus(`Alias-Fehler: ${error?.message || error}`, 'error', true);
       } finally {
         createAliasBtn.disabled = false;
-        createAliasBtn.textContent = 'Alias anlegen';
+        createAliasBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Create alias' : 'Alias anlegen';
       }
     }
 
@@ -1442,7 +1478,7 @@ function renderAliasList(items) {
       }
 
       createInvoiceBtn.disabled = true;
-      createInvoiceBtn.textContent = 'Erzeuge...';
+      createInvoiceBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Creating...' : 'Erzeuge...';
 
       try {
         const response = await fetch('/api/create-invoice', {
@@ -1470,7 +1506,7 @@ function renderAliasList(items) {
         setStatus(`Invoice-Fehler: ${error?.message || error}`, 'error', true);
       } finally {
         createInvoiceBtn.disabled = false;
-        createInvoiceBtn.textContent = 'BOLT11 Rechnung erzeugen';
+        createInvoiceBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Create BOLT11 invoice' : 'BOLT11 Rechnung erzeugen';
       }
     }
 
@@ -2548,16 +2584,8 @@ installBtn.addEventListener('click', async () => {
   window.__applyRuntimeQuickAmount = applyRuntimeQuickAmount;
 
   function bindQuickAmountLangButtons() {
-    ["langBtnDeSetup", "langBtnEnSetup", "langBtnDePay", "langBtnEnPay"].forEach((id) => {
-      const btn = document.getElementById(id);
-      if (!btn || btn.dataset.quickAmountBound === "1") return;
-      btn.dataset.quickAmountBound = "1";
-      btn.addEventListener("click", () => {
-        setTimeout(applyRuntimeQuickAmount, 0);
-        setTimeout(applyRuntimeQuickAmount, 30);
-      });
-    });
-  }
+  // disabled to prevent QR/layout jitter on language toggle
+}
 
   document.addEventListener("DOMContentLoaded", () => {
     bindQuickAmountLangButtons();
@@ -2598,6 +2626,7 @@ installBtn.addEventListener('click', async () => {
       set_alias: "LNURL Alias setzen",
       intro: "Standardmäßig zeigt der QR die BIP353 Address als primären Einstieg. Das aktuelle BOLT12 Offer und LNURL Fallback können separat angezeigt werden. Das UI erzeugt aus der Lightning Address einen",
       endpoint: "ob auf der Domain ein echter LNURL-pay-Endpunkt mit passender Antwort läuft.",
+      hint: "Standardmäßig zeigt der QR die BIP353 Address als primären Einstieg. Das aktuelle BOLT12 Offer und LNURL Fallback können separat angezeigt werden. Das UI erzeugt aus der Lightning Address einen lnurl1... QR. Ob eine Wallet ihn wirklich zahlen kann, hängt davon ab, ob auf der Domain ein echter LNURL-pay-Endpunkt mit passender Antwort läuft.",
       current_offer: "Aktuelles Offer",
       qr_prefix: "Standardmäßig zeigt der QR die BOLT12-Adresse",
       qr_suffix: "Wenn du auf LNURL-Fallback umschaltest, wird stattdessen der LNURL-Inhalt angezeigt."
@@ -2612,7 +2641,8 @@ installBtn.addEventListener('click', async () => {
       set_alias: "Set LNURL alias",
       intro: "By default, the QR shows the BIP353 address as the primary entry point. The current BOLT12 offer and LNURL fallback can be displayed separately. The UI generates a",
       endpoint: "whether the domain exposes a real LNURL-pay endpoint with a valid response.",
-      current_offer: "Current offer",
+      hint: "By default, the QR shows the BIP353 address as the primary entry point. The current BOLT12 offer and LNURL fallback can be displayed separately. The UI generates a lnurl1... QR. Whether a wallet can actually pay it depends on whether the domain exposes a valid LNURL-pay endpoint.",
+      current_offer: "Current Offer",
       qr_prefix: "By default, the QR shows the BOLT12 address",
       qr_suffix: "If you switch to LNURL fallback, the LNURL content is shown instead."
     }
@@ -2627,6 +2657,7 @@ installBtn.addEventListener('click', async () => {
     const optionalLabel = document.getElementById("lnurlFallbackOptionalLabel");
     const addressLabel = document.getElementById("lnurlFallbackAddressLabel");
     const setAliasBtn = document.getElementById("applyFallbackBtn");
+    const hintText = document.getElementById("lnurlHintText");
     const currentOfferLabel = document.getElementById("lnurlCurrentOfferLabel");
     const introText = document.getElementById("lnurlIntroText");
     const endpointText = document.getElementById("lnurlEndpointText");
@@ -2637,9 +2668,8 @@ installBtn.addEventListener('click', async () => {
     if (optionalLabel) optionalLabel.textContent = tx("optional");
     if (addressLabel) addressLabel.textContent = tx("address");
     if (setAliasBtn) setAliasBtn.textContent = tx("set_alias");
+    if (hintText) hintText.textContent = tx("hint");
     if (currentOfferLabel) currentOfferLabel.textContent = tx("current_offer");
-    if (introText) introText.textContent = tx("intro");
-    if (endpointText) endpointText.textContent = tx("endpoint");
     if (qrPrefix) qrPrefix.textContent = tx("qr_prefix");
     if (qrSuffix) qrSuffix.textContent = tx("qr_suffix");
 
@@ -2661,8 +2691,8 @@ installBtn.addEventListener('click', async () => {
       if (!btn || btn.dataset.lnurlBound === "1") return;
       btn.dataset.lnurlBound = "1";
       btn.addEventListener("click", () => {
-        setTimeout(applyRuntimeLnurl, 0);
-        setTimeout(applyRuntimeLnurl, 30);
+        applyRuntimeLnurl();
+        requestAnimationFrame(() => applyRuntimeLnurl());
       });
     });
   }
@@ -2671,14 +2701,6 @@ installBtn.addEventListener('click', async () => {
     bindLnurlLangButtons();
     applyRuntimeLnurl();
   });
-  window.addEventListener("load", () => {
-    bindLnurlLangButtons();
-    applyRuntimeLnurl();
-  });
-  setTimeout(() => {
-    bindLnurlLangButtons();
-    applyRuntimeLnurl();
-  }, 0);
 })();
 </script>
 
@@ -2774,8 +2796,8 @@ installBtn.addEventListener('click', async () => {
       if (!btn || btn.dataset.aliasBound === "1") return;
       btn.dataset.aliasBound = "1";
       btn.addEventListener("click", () => {
-        setTimeout(applyRuntimeAliasStatic, 0);
-        setTimeout(applyRuntimeAliasStatic, 30);
+        applyRuntimeAliasStatic();
+        requestAnimationFrame(() => applyRuntimeAliasStatic());
       });
     });
   }
@@ -2786,8 +2808,6 @@ installBtn.addEventListener('click', async () => {
     btn.dataset.aliasFixBound = "1";
 
     btn.addEventListener("click", () => {
-      setTimeout(applyRuntimeAliasStatic, 50);
-      setTimeout(applyRuntimeAliasStatic, 200);
     });
   }
 
@@ -2934,7 +2954,9 @@ installBtn.addEventListener('click', async () => {
       const btn = document.getElementById(id);
       if (!btn || btn.dataset.aliasListBound === "1") return;
       btn.dataset.aliasListBound = "1";
-      btn.addEventListener("click", scheduleAliasListApply);
+      btn.addEventListener("click", () => {
+        setTimeout(applyRuntimeAliasList, 0);
+      });
     });
   }
 
@@ -2945,8 +2967,6 @@ installBtn.addEventListener('click', async () => {
 
     btn.addEventListener("click", () => {
       scheduleAliasListApply();
-      setTimeout(applyRuntimeAliasList, 1800);
-      setTimeout(applyRuntimeAliasList, 2500);
     });
   }
 
@@ -2978,11 +2998,6 @@ installBtn.addEventListener('click', async () => {
         scheduleAliasListApply();
 
         if (["Bearbeiten", "Edit", "Veröffentlichen", "Publish", "Löschen + DNS", "Delete + DNS"].includes(txt)) {
-          setTimeout(applyRuntimeAliasList, 1800);
-          setTimeout(applyRuntimeAliasList, 2500);
-          setTimeout(applyRuntimeAliasList, 3500);
-          setTimeout(applyRuntimeAliasList, 5000);
-          setTimeout(applyRuntimeAliasList, 7000);
         }
       }
     });
@@ -3017,25 +3032,6 @@ installBtn.addEventListener('click', async () => {
 (function () {
   if (window.__aliasFetchHookInstalled) return;
   window.__aliasFetchHookInstalled = true;
-
-  const oldFetch = window.fetch;
-
-  window.fetch = async function (...args) {
-    const res = await oldFetch.apply(this, args);
-
-    try {
-      if (typeof window.__applyRuntimeAliasList === "function") {
-        // nach API call mehrfach nachziehen
-        setTimeout(window.__applyRuntimeAliasList, 50);
-        setTimeout(window.__applyRuntimeAliasList, 200);
-        setTimeout(window.__applyRuntimeAliasList, 600);
-        setTimeout(window.__applyRuntimeAliasList, 1200);
-        setTimeout(window.__applyRuntimeAliasList, 2500);
-      }
-    } catch (e) {}
-
-    return res;
-  };
 })();
 </script>
 
@@ -3062,19 +3058,19 @@ installBtn.addEventListener('click', async () => {
       "toast.setup_error_prefix": "Setup-Fehler",
       "toast.public_loaded_lnurl_failed_prefix": "Public Daten geladen. LNURL optional fehlgeschlagen",
       "toast.load_failed_prefix": "Laden fehlgeschlagen",
-
-      "toast.offer_creating": "Erzeuge neues Offer...",
       "toast.offer_created": "Neues Offer erfolgreich erzeugt.",
       "toast.alias_updated": "Alias aktualisiert.",
 
       "toast.bolt12_address_copied": "BOLT12 Adresse kopiert.",
       "toast.lnurl_copied": "LNURL kopiert.",
       "toast.no_preset": "Kein Preset",
-      "toast.lnurl_saved_qr_updated": "LNURL Alias gespeichert und QR aktualisiert.",
 
       "toast.min_amount_21": "Mindestbetrag gesetzt: 21 sats.",
       "toast.min_amount_1000": "Mindestbetrag gesetzt: 1000 sats.",
       "toast.min_amount_10000": "Mindestbetrag gesetzt: 10000 sats.",
+
+      "toast.offer_creating": "Erzeuge neues Offer...",
+      "toast.lnurl_saved_qr_updated": "LNURL Alias gespeichert und QR aktualisiert.",
 
       "toast.bolt11_amount_required": "Bitte Betrag für BOLT11 Rechnung eingeben.",
       "toast.no_bolt11_invoice": "Noch keine BOLT11 Rechnung vorhanden.",
@@ -3109,19 +3105,19 @@ installBtn.addEventListener('click', async () => {
       "toast.setup_error_prefix": "Setup error",
       "toast.public_loaded_lnurl_failed_prefix": "Public data loaded. Optional LNURL failed",
       "toast.load_failed_prefix": "Load failed",
-
-      "toast.offer_creating": "Creating new offer...",
       "toast.offer_created": "New offer created successfully.",
       "toast.alias_updated": "Alias updated.",
 
       "toast.bolt12_address_copied": "BOLT12 address copied.",
       "toast.lnurl_copied": "LNURL copied.",
       "toast.no_preset": "No preset",
-      "toast.lnurl_saved_qr_updated": "LNURL alias saved and QR updated.",
 
       "toast.min_amount_21": "Minimum amount set: 21 sats.",
       "toast.min_amount_1000": "Minimum amount set: 1000 sats.",
       "toast.min_amount_10000": "Minimum amount set: 10000 sats.",
+
+      "toast.offer_creating": "Creating new offer...",
+      "toast.lnurl_saved_qr_updated": "LNURL alias saved and QR updated.",
 
       "toast.bolt11_amount_required": "Please enter an amount for the BOLT11 invoice.",
       "toast.no_bolt11_invoice": "No BOLT11 invoice available yet.",
@@ -3168,9 +3164,6 @@ installBtn.addEventListener('click', async () => {
     "Kopieren fehlgeschlagen.": "toast.copy_failed",
     "Copy failed.": "toast.copy_failed",
 
-    "Erzeuge neues Offer...": "toast.offer_creating",
-    "Creating new offer...": "toast.offer_creating",
-
     "Neues Offer erfolgreich erzeugt.": "toast.offer_created",
     "New offer created successfully.": "toast.offer_created",
 
@@ -3183,9 +3176,6 @@ installBtn.addEventListener('click', async () => {
     "Kein Preset": "toast.no_preset",
     "No preset": "toast.no_preset",
 
-    "LNURL Alias gespeichert und QR aktualisiert.": "toast.lnurl_saved_qr_updated",
-    "LNURL alias saved and QR updated.": "toast.lnurl_saved_qr_updated",
-
     "Mindestbetrag gesetzt: 21 sats.": "toast.min_amount_21",
     "Minimum amount set: 21 sats.": "toast.min_amount_21",
 
@@ -3194,6 +3184,12 @@ installBtn.addEventListener('click', async () => {
 
     "Mindestbetrag gesetzt: 10000 sats.": "toast.min_amount_10000",
     "Minimum amount set: 10000 sats.": "toast.min_amount_10000",
+
+    "Erzeuge neues Offer...": "toast.offer_creating",
+    "Creating new offer...": "toast.offer_creating",
+
+    "LNURL Alias gespeichert und QR aktualisiert.": "toast.lnurl_saved_qr_updated",
+    "LNURL alias saved and QR updated.": "toast.lnurl_saved_qr_updated",
 
     "Bitte Betrag für BOLT11 Rechnung eingeben.": "toast.bolt11_amount_required",
     "Please enter an amount for the BOLT11 invoice.": "toast.bolt11_amount_required",
@@ -3256,6 +3252,8 @@ installBtn.addEventListener('click', async () => {
   function normalizeMessage(msg) {
     if (typeof msg !== "string") return msg;
     const m = msg.trim();
+
+    if (m.startsWith("toast.")) return tx(m);
 
     if (directMap[m]) return tx(directMap[m]);
 
