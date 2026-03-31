@@ -1,0 +1,29 @@
+{
+  "public_bolt12_address": "",
+  "public_lnurl_address": "",
+  "lnurl_base_domain": "",
+  "lnurl_base_url": "",
+  "dns_mode": "cloudflare",
+  "ui_password_hash": "",
+  "cloudflare": {
+    "enabled": true,
+    "zone_name": "",
+    "zone_id": "",
+    "api_token": ""
+  },
+  "aliases": {},
+  "identity_map": {},
+  "pending_zaps": {},
+  "nostr_server_privkey": "",
+  "nostr_notify_nsec": "",
+  "nostr": {
+    "default_relays": [
+      "wss://relay.primal.net",
+      "wss://relay.damus.io",
+      "wss://nos.lol",
+      "wss://relay.getalby.com/v1",
+      "wss://offchain.pub",
+      "wss://relay.alex71btc.com"
+    ]
+  }
+}

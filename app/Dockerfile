@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend ./backend
 COPY frontend ./frontend
 COPY assets /app/assets
+COPY defaults /app/defaults
 COPY entrypoint.sh /app/entrypoint.sh
 
 RUN chmod +x /app/entrypoint.sh
