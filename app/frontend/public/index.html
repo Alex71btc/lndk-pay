@@ -816,6 +816,15 @@
     // ------------------------------------------------------------------
     // Status and clipboard helpers
     // ------------------------------------------------------------------
+    function tStatus(key, type = 'ok', persist = false) {
+      const message =
+        typeof window.__t === 'function'
+          ? (window.__t(key) || key)
+          : key;
+
+      setStatus(message, type, persist);
+    }
+
     function setStatus(message, type = 'ok', persist = false) {
       statusBar.textContent = message;
       statusBar.className = `statusBar show ${type}`;
@@ -1261,7 +1270,7 @@ function renderAliasList(items) {
       const amountValue = aliasAmountInput.value.trim();
 
       if (!name) {
-        setStatus('Bitte Alias-Namen eingeben.', 'error');
+        tStatus('toast.alias_name_required', 'error');
         return;
       }
 
@@ -1428,7 +1437,7 @@ function renderAliasList(items) {
       const memoValue = invoiceMemoInput.value.trim() || 'bolt12-pay compat';
 
       if (!amountValue) {
-        setStatus('Bitte Betrag für BOLT11 Rechnung eingeben.', 'error');
+        tStatus('toast.invoice_amount_required', 'error');
         return;
       }
 
@@ -1456,7 +1465,7 @@ function renderAliasList(items) {
         invoiceBox.textContent = currentInvoice || 'Keine Rechnung';
         renderQrForValue(currentInvoice, 'invoice');
 
-        setStatus('BOLT11 Rechnung erfolgreich erzeugt.');
+        tStatus('toast.invoice_created');
       } catch (error) {
         setStatus(`Invoice-Fehler: ${error?.message || error}`, 'error', true);
       } finally {
@@ -1467,7 +1476,7 @@ function renderAliasList(items) {
 
     async function copyInvoice() {
       if (!currentInvoice) {
-        setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+        tStatus('toast.no_invoice_yet', 'error');
         return;
       }
 
@@ -1476,7 +1485,7 @@ function renderAliasList(items) {
 
     function showInvoiceQr() {
       if (!currentInvoice) {
-        setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+        tStatus('toast.no_invoice_yet', 'error');
         return;
       }
 
@@ -1515,7 +1524,7 @@ function renderAliasList(items) {
       };
 
       if (trimmedAmount !== '' && (!Number.isFinite(payload.amount_sat) || payload.amount_sat < 1)) {
-        setStatus('Ungültiger Betrag.', 'error');
+        tStatus('toast.invalid_amount', 'error');
         return;
       }
 
@@ -1541,7 +1550,7 @@ function renderAliasList(items) {
 
     async function payInvoiceWithWebln() {
       if (!currentInvoice) {
-        setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+        tStatus('toast.no_invoice_yet', 'error');
         return;
       }
 
@@ -1727,7 +1736,7 @@ document.addEventListener('click', function (e) {
     });
 invoiceBox.addEventListener('click', async () => {
   if (!currentInvoice) {
-    setStatus('Noch keine BOLT11 Rechnung vorhanden.', 'error');
+    tStatus('toast.no_invoice_yet', 'error');
     return;
   }
 
@@ -3073,6 +3082,10 @@ installBtn.addEventListener('click', async () => {
       "toast.bolt11_qr_shown": "BOLT11 QR angezeigt.",
       "toast.bolt11_invoice_copied": "BOLT11 Rechnung kopiert.",
       "toast.alias_name_required": "Bitte Alias-Namen eingeben.",
+      "toast.invoice_amount_required": "Bitte Betrag für BOLT11 Rechnung eingeben.",
+      "toast.invoice_created": "BOLT11 Rechnung erfolgreich erzeugt.",
+      "toast.no_invoice_yet": "Noch keine BOLT11 Rechnung vorhanden.",
+      "toast.invalid_amount": "Ungültiger Betrag.",
 
       "toast.offer_copied": "Offer kopiert.",
       "toast.link_copied": "Link kopiert.",
@@ -3108,6 +3121,10 @@ installBtn.addEventListener('click', async () => {
       "toast.bolt11_qr_shown": "BOLT11 QR shown.",
       "toast.bolt11_invoice_copied": "BOLT11 invoice copied.",
       "toast.alias_name_required": "Please enter an alias name.",
+      "toast.invoice_amount_required": "Please enter an amount for the BOLT11 invoice.",
+      "toast.invoice_created": "BOLT11 invoice created successfully.",
+      "toast.no_invoice_yet": "No BOLT11 invoice has been created yet.",
+      "toast.invalid_amount": "Invalid amount.",
 
       "toast.offer_copied": "Offer copied.",
       "toast.link_copied": "Link copied.",
@@ -3179,6 +3196,14 @@ installBtn.addEventListener('click', async () => {
 
     "Bitte Alias-Namen eingeben.": "toast.alias_name_required",
     "Please enter an alias name.": "toast.alias_name_required",
+    "Bitte Betrag für BOLT11 Rechnung eingeben.": "toast.invoice_amount_required",
+    "Please enter an amount for the BOLT11 invoice.": "toast.invoice_amount_required",
+    "BOLT11 Rechnung erfolgreich erzeugt.": "toast.invoice_created",
+    "BOLT11 invoice created successfully.": "toast.invoice_created",
+    "Noch keine BOLT11 Rechnung vorhanden.": "toast.no_invoice_yet",
+    "No BOLT11 invoice has been created yet.": "toast.no_invoice_yet",
+    "Ungültiger Betrag.": "toast.invalid_amount",
+    "Invalid amount.": "toast.invalid_amount",
 
     "Offer kopiert.": "toast.offer_copied",
     "Offer copied.": "toast.offer_copied",
