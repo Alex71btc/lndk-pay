@@ -977,6 +977,9 @@
       cloudflareFields.hidden = setupDnsMode.value !== 'cloudflare';
     }
 
+    // ------------------------------------------------------------------
+    // Data loading helpers
+    // ------------------------------------------------------------------
     async function loadLnurlFallback() {
       if (!fallbackAddress) {
         currentLnurl = '';
