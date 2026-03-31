@@ -813,6 +813,9 @@
     fallbackAddressBox.textContent = fallbackAddress;
     fallbackAddressInput.value = fallbackAddress;
 
+    // ------------------------------------------------------------------
+    // Status and clipboard helpers
+    // ------------------------------------------------------------------
     function setStatus(message, type = 'ok', persist = false) {
       statusBar.textContent = message;
       statusBar.className = `statusBar show ${type}`;
