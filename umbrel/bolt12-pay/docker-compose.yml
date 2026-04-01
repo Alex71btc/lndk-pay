@@ -46,7 +46,7 @@ services:
       - ${UMBREL_ROOT}/app-data/lightning/data/lnd:/lnd:ro
 
   lndk:
-    image: alex71btc/lndk:stable
+    image: alex71btc/lndk:stable-good-20260401
     restart: unless-stopped
     entrypoint:
       - /bin/sh
