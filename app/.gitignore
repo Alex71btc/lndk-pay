@@ -28,3 +28,9 @@ frontend/public/index.html.*
 patch_*.py
 
 backend/app.py.backup-*
+
+# local backup files
+*.before-*
+*.bak-*
+*.backup-*
+*.safe
