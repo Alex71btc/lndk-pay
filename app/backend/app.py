@@ -1148,24 +1148,6 @@ def _resolve_lnurl_alias(username: str) -> dict[str, Any]:
     raise HTTPException(status_code=404, detail=f"LNURL alias not found: {user}")
 
 
-def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
-    args = _base_command() + ["create-offer", "--description", payload.description]
-
-    effective_amount_sat = payload.amount if payload.amount is not None else 1
-    args += ["--amount", str(effective_amount_sat * 1000)]
-
-    if payload.issuer:
-        args += ["--issuer", payload.issuer]
-    if payload.expiry is not None:
-        args += ["--expiry", str(payload.expiry)]
-    if payload.quantity is not None:
-        args += ["--quantity", str(payload.quantity)]
-
-    raw_output = _run_command(args)
-    offer = _extract_offer(raw_output)
-    return OfferResponse(offer=offer, raw_output=raw_output)
-
-
 def _lnurl_callback_url(username: str) -> str:
     return f"{get_lnurl_base_url()}/api/lnurl/callback/{username}"
 
