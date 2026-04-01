@@ -26,3 +26,5 @@ frontend/public/index.html.*
 
 # Misc
 patch_*.py
+
+backend/app.py.backup-*
