@@ -945,64 +945,6 @@ def _encode_lnurl(url: str) -> str:
 def _lnurl_metadata_for_alias(alias: dict[str, Any]) -> str:
     return _lnurl_metadata_json(alias["identifier"], alias["description"])
 
-
-def _lightning_address_to_lnurlp_url(address: str) -> str:
-    clean = address.strip().lower()
-    if not HRN_RE.match(clean):
-        raise HTTPException(status_code=400, detail="Invalid lightning address format")
-    user, domain = clean.split("@", 1)
-    return f"https://{domain}/.well-known/lnurlp/{user}"
-
-def _extract_lnurl_metadata_info(metadata_raw: Any) -> dict[str, Any]:
-    text_plain = ""
-    image_data_url = ""
-    entries: list[Any] = []
-
-    if isinstance(metadata_raw, str):
-        try:
-            entries = json.loads(metadata_raw)
-        except Exception:
-            entries = []
-    elif isinstance(metadata_raw, list):
-        entries = metadata_raw
-
-    for item in entries:
-        if not isinstance(item, list) or len(item) != 2:
-            continue
-        k, v = item[0], item[1]
-        if k == "text/plain" and isinstance(v, str):
-            text_plain = v
-        elif isinstance(k, str) and k.startswith("image/") and isinstance(v, str):
-            if ";base64" in k:
-                mime = k.split(";")[0]
-                image_data_url = f"data:{mime};base64,{v}"
-            else:
-                image_data_url = f"data:{k},{v}"
-
-    return {
-        "text_plain": text_plain,
-        "image_data_url": image_data_url,
-        "raw": metadata_raw,
-    }
-
-
-async def _fetch_lnurl_metadata_from_url(url: str) -> dict[str, Any]:
-    try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
-            resp = await client.get(url)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"LNURL metadata request failed: {exc}") from exc
-
-    try:
-        data = resp.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail="LNURL metadata returned invalid JSON")
-
-    if resp.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"LNURL metadata error: {data}")
-
-    return data
-
 def _resolve_bip353_address(address: str) -> str:
     if not HRN_RE.match(address):
         raise HTTPException(status_code=400, detail="Invalid human-readable address format")
