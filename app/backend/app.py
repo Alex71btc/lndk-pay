@@ -566,12 +566,6 @@ def _npub_to_hex_pubkey(npub: str) -> str:
     return bytes(decoded).hex()
 
 
-def _get_nostr_pubkey_for_name(name: str) -> str:
-    if not name:
-        return ""
-    return NOSTR_NAME_MAP.get(name.strip().lower(), "")
-
-
 def _get_nostr_pubkey_hex_for_name(name: str) -> str:
     identity = _get_identity_entry(name)
     if identity and identity.get("nostr_pubkey"):
@@ -651,7 +645,9 @@ def _load_nostr_name_map():
 NOSTR_NAME_MAP = _get_setting("NOSTR_NAME_MAP", "nostr", "name_map", default={})
 
 app = FastAPI(
-title="LNDK Backend", version="0.5.0")
+    title="LNDK Backend",
+    version="0.5.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -687,14 +683,6 @@ def _normalize_nostr_pubkey(value: str) -> str:
         raise ValueError("Ungültiger HEX-Pubkey.")
 
     return v.lower()
-
-    if re.fullmatch(r"[0-9a-fA-F]{64}", v):
-        return v.lower()
-
-    if v.startswith("npub"):
-        raise ValueError("Bitte aktuell HEX-Pubkey verwenden; npub-Import machen wir im nächsten Schritt sauber.")
-
-    raise ValueError("Ungültiger Nostr Pubkey. Erwartet 64-stelligen HEX-Pubkey.")
 
 
 def _get_identity_map() -> dict[str, dict]:
@@ -1643,11 +1631,6 @@ async def _resolve_lnurl_bech32_invoice(
         "payment_request": payment_request,
         "metadata": meta,
         "invoice_data": invoice_data,
-    }
-
-    return {
-        "payment_request": payment_request,
-        "payment_hash": payment_hash,
     }
 
 def get_bip353_base_domain():
