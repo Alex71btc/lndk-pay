@@ -4,35 +4,77 @@ name: BOLT12 Pay
 icon: https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/icon_v2.png
 tagline: First self-hosted BIP353 Lightning Address & BOLT12 Offer app for LND nodes
 category: finance
-version: 0.2.71
+version: 0.2.77
 port: 8091
-description: >-
-  Self-hosted Lightning payment and identity server with native BOLT12 support.
+description: >
+  Self-hosted Lightning payments + identity for your own node.
 
+  Create and receive payments using:
+  - BOLT12 Offers (next-gen Lightning)
+  - Lightning Address (BIP353)
+  - LNURL (fallback)
+  - BOLT11 invoices
 
-  Create and receive payments using next-generation BOLT12 offers, Lightning Address (BIP353), and LNURL — all from your own node.
+  No custodians. No external services. Full control.
 
+  ---
 
-  Includes Nostr identity (NIP-05), Zap support, and real-time notifications, with seamless fallback between BOLT12, LNURL, and BOLT11 for maximum compatibility.
+  WHAT YOU CAN DO
 
+  - Create reusable BOLT12 payment requests
+  - Run your own Lightning Address server
+  - Receive payments via LNURL and BOLT11
+  - Use your own domain for payments
+  - Add Nostr identity (NIP-05) and receive Zaps
+  - Optional Cloudflare DNS automation
 
-  Designed for sovereign Bitcoin users who want full control over their Lightning infrastructure, identities, and payments.
+  ---
 
+  WHY THIS APP
 
-  FEATURES
-    - BOLT12 Offers – Create and pay offers via LNDK
-    - Lightning Address – BIP353 + LNURL server
-    - BOLT11 Fallback – Maximum wallet compatibility
-    - Nostr Identity – NIP-05 support
-    - Zaps & Notifications – LN addresses with Zap support + DM notifications
-    - Nostr Wallet Connect (NWC) - Zap wallet for Nostr Clients like Amethyst
-    - Multi-Relay Support – Works across multiple relays
-    - Cloudflare DNS – Optional automatic publishing
-    - Self-Hosted – Full control on Umbrel
-    - Mobile-Friendly UI – Clean and optimized UX
+  Most Lightning Address services are custodial.
 
-  NOTE
-    - BOLT12 support on LND is still evolving and considered experimental.
+  BOLT12 Pay gives you:
+  - full ownership of your node
+  - full control over your domain
+  - a future-proof Lightning setup
+
+  ---
+
+  IMPORTANT (Umbrel)
+
+  BOLT12 requires onion messaging in LND.
+
+  Connect via SSH:
+
+      ssh umbrel@umbrel.local
+
+  Open the config:
+
+      nano ~/umbrel/app-data/lightning/data/lnd/lnd.conf
+
+  Add at the end:
+
+      [protocol]
+      custom-message=513
+      custom-nodeann=39
+      custom-init=39
+
+  Restart Lightning afterwards.
+
+  Without this, BOLT12 will not work.
+
+  ---
+
+  EXPERIMENTAL NOTICE
+
+  - BOLT12 on LND is still evolving
+  - Wallet support may vary
+  - This app uses cutting-edge Lightning features
+
+  ---
+
+  Made for sovereign Bitcoin users.
 developer: Alex71btc
 website: https://github.com/Alex71btc/lndk-pay
 submitter: Alex71btc
@@ -46,16 +88,27 @@ gallery:
   - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/4.png
   - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/5.png
 releaseNotes: |
-  Improves first-run reliability and deployment safety.
+  Adds full BOLT12 support via LNDK.
 
-  • Fixes fresh-install startup by bundling safe default config files in the image
-  • Prevents missing-config crashes on new deployments with empty app data
-  • Separates runtime config from image build context for safer secret handling
-  • Improves mobile clipboard fallback and NWC usability
+  ⚠️ IMPORTANT:
+  BOLT12 requires onion messaging in LND.
+
+  If BOLT12 offers do not work, add the following to your Lightning node config:
+
+    [protocol]
+    custom-message=513
+    custom-nodeann=39
+    custom-init=39
+
+  Then restart your Lightning node.
+
+  Improvements:
+  • Stable LNDK startup handling
+  • Better compatibility after Umbrel reboot
+  • Improved payment reliability
 dependencies:
   - lightning
 path: ""
 defaultUsername: ""
 defaultPassword: ""
 torOnly: false
-
