@@ -13,7 +13,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js">
+
+
+
+
+</script>
 
   <style>
     :root {
@@ -491,6 +496,40 @@
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
 }
 
+
+  /* BOLT12 onion messaging setup warning */
+  .bolt12-onion-warning {
+    margin: 16px 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: rgba(255, 204, 0, 0.12);
+    border: 1px solid rgba(255, 204, 0, 0.42);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .bolt12-onion-warning__title {
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .bolt12-onion-warning__text {
+    margin-bottom: 10px;
+  }
+
+  .bolt12-onion-warning__code {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.18);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
 </style>
 </head>
 <body>
@@ -513,6 +552,32 @@
   <h1 style="margin:0;" data-i18n="setup.title">⚙️ BOLT12 Pay Setup</h1>
 </div>
    <div class="sub" data-i18n="setup.subtitle">Grundkonfiguration für Public URL, Lightning-Adressen und DNS-Modus.</div>
+
+
+<div class="bolt12-onion-warning">
+  <div class="bolt12-onion-warning__title" data-i18n="setup.onionWarningTitle">
+    ⚠️ Hinweis für BOLT12 auf Umbrel
+  </div>
+
+  <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningText">
+    Damit BOLT12 Offers funktionieren, muss Onion Messaging in LND aktiviert sein.
+  </div>
+
+  <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningPath">
+    Öffne diese Datei auf deinem Umbrel:
+  </div>
+
+  <pre class="bolt12-onion-warning__code">/home/umbrel/umbrel/app-data/lightning/data/lnd/lnd.conf</pre>
+
+  <pre class="bolt12-onion-warning__code">[protocol]
+custom-message=513
+custom-nodeann=39
+custom-init=39</pre>
+
+  <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningRestart">
+    Danach die Lightning Node neu starten.
+  </div>
+</div>
 
     <section class="section">
       <label class="label" for="setupBolt12Address" data-i18n="setup.label.bolt12_address">Public BOLT12 Address</label>
@@ -2026,6 +2091,10 @@ installBtn.addEventListener('click', async () => {
       "setup.security.text": "Wenn du diese App aus dem Internet erreichbar machst, schütze Admin-Routen mit Cloudflare Tunnel + Access oder einer vergleichbaren Zugriffskontrolle.",
       "setup.security.routes": "Empfohlen: <span class=\"mono\">/pay</span> und <span class=\"mono\">/pay-login</span> schützen, während notwendige öffentliche Payment-Endpunkte erreichbar bleiben.",
       "setup.security.link": "→ README Setup-Anleitung öffnen",
+      "setup.onionWarningTitle": "⚠️ Hinweis für BOLT12 auf Umbrel",
+      "setup.onionWarningText": "Damit BOLT12 Offers funktionieren, muss Onion Messaging in LND aktiviert sein.",
+      "setup.onionWarningPath": "Öffne diese Datei auf deinem Umbrel:",  
+      "setup.onionWarningRestart": "Danach die Lightning Node neu starten.",  
       "dns.none": "Keine",
       "dns.manual": "Manuell",
       "dns.cloudflare": "Cloudflare",
@@ -2119,6 +2188,10 @@ installBtn.addEventListener('click', async () => {
       "setup.security.text": "If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.",
       "setup.security.routes": "Recommended: protect <span class=\"mono\">/pay</span> and <span class=\"mono\">/pay-login</span>, while keeping required public payment endpoints reachable.",
       "setup.security.link": "→ Open README setup guide",
+      "setup.onionWarningTitle": "⚠️ Important for BOLT12 on Umbrel",
+      "setup.onionWarningText": "For BOLT12 offers to work, onion messaging must be enabled in LND.",
+      "setup.onionWarningPath": "Open this file on your Umbrel:",
+      "setup.onionWarningRestart": "Then restart your Lightning node.",
       "dns.none": "None",
       "dns.manual": "Manual",
       "dns.cloudflare": "Cloudflare",
