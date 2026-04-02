@@ -1,21 +1,73 @@
-# BOLT12 Pay
+# ⚡ BOLT12 Pay
 
-Self-hosted Lightning payment and identity server with native BOLT12 support.
+Self-hosted Lightning payment and identity server with next-generation BOLT12 support.
 
-BOLT12 Pay lets you create and receive payments using next-generation BOLT12 offers, Lightning Address (BIP353), and LNURL — all from your own node.
+## ✨ Features
 
-It also includes Nostr identity support (NIP-05), Zap support, and a clean mobile-friendly UI, with seamless fallback between BOLT12, LNURL, and BOLT11 for maximum compatibility.
+* ⚡ BOLT12 Offers (receive payments)
+* 🔗 Lightning Address (BIP353)
+* 🔄 LNURL support (fallback)
+* 🧾 BOLT11 fallback invoices
+* 🧠 Nostr identity (NIP-05 + Zaps)
+* 📱 QR-based payments
+* ☁️ Optional Cloudflare DNS automation
 
-## Why BOLT12 Pay?
+---
 
-Today’s Lightning ecosystem is fragmented:
+## ⚠️ Important: LND Configuration (Required)
 
-- Lightning Address is popular, but often depends on centralized infrastructure
-- BOLT12 is the future, but tooling and UX are still limited
-- Nostr identity and Lightning payments are increasingly converging
-- Self-hosted users need a sovereign alternative that combines all of the above
+BOLT12 requires **onion messaging** in LND.
 
-BOLT12 Pay is designed to solve that.
+### 1. Open this file on your Umbrel
+
+```
+/home/umbrel/umbrel/app-data/lightning/data/lnd/lnd.conf
+```
+
+### 2. Add:
+
+```
+[protocol]
+custom-message=513
+custom-nodeann=39
+custom-init=39
+```
+
+### 3. Restart Lightning
+
+---
+
+## 🚀 Quick Start (Umbrel)
+
+1. Install **BOLT12 Pay** from the Community App Store
+2. Open the app
+3. Complete setup:
+
+   * Public BOLT12 Address (e.g. [bolt12@yourdomain.com](mailto:bolt12@yourdomain.com))
+   * Lightning Address (e.g. [lnurl@yourdomain.com](mailto:lnurl@yourdomain.com))
+   * Domain / DNS settings
+4. Done 🎉
+
+---
+
+## 🌐 Example
+
+* BOLT12: [bolt12@yourdomain.com](mailto:bolt12@yourdomain.com)
+* LNURL: [lnurl@yourdomain.com](mailto:lnurl@yourdomain.com)
+
+---
+
+## 🔒 Self-hosted
+
+* No custodians
+* Runs on your node
+* Full control
+
+---
+
+## 📜 License
+
+MIT
 
 ## Features
 
@@ -98,20 +150,6 @@ BOLT12 Pay is functional and already usable, but parts of the stack are still cu
 - BOLT12 support on LND is still evolving
 - wallet support for BOLT12 remains inconsistent across the ecosystem
 - some flows still rely on fallback layers for broad compatibility
-
-## Umbrel Community App
-
-BOLT12 Pay is available as an Umbrel Community App.
-
-The Umbrel package lives under:
-
-`umbrel/bolt12-pay`
-
-## Remote Access & Security (Cloudflare Tunnel + Access)
-
-If you expose BOLT12 Pay to the internet, you should **protect the admin interface** using an access-control layer such as Cloudflare Tunnel + Access.
-
-### Why this matters
 
 BOLT12 Pay has two different types of traffic:
 
@@ -218,11 +256,6 @@ Do NOT:
 - **Payment endpoints → public**
 
 This separation is required for a functional self-hosted Lightning service.
-
-
-## License
-
-MIT License
 
 ## Screenshots
 
