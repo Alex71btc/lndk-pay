@@ -574,6 +574,16 @@ custom-message=513
 custom-nodeann=39
 custom-init=39</pre>
 
+  <button
+    type="button"
+    class="btn secondary bolt12-onion-copy-btn"
+    onclick="navigator.clipboard.writeText('[protocol]\ncustom-message=513\ncustom-nodeann=39\ncustom-init=39'); this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopiert' : 'Config copied'); setTimeout(() => { this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopieren' : 'Copy config'); }, 1800);"
+    data-copy-label-de="Konfiguration kopieren"
+    data-copy-label-en="Copy config"
+  >
+    Copy config
+  </button>
+
   <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningRestart">
     Danach die Lightning Node neu starten.
   </div>
@@ -2000,6 +2010,12 @@ installBtn.addEventListener('click', async () => {
     const lang = getLang();
     document.documentElement.setAttribute("lang", lang);
 
+    document.querySelectorAll('.bolt12-onion-copy-btn').forEach((btn) => {
+      btn.textContent = lang === 'de'
+        ? (btn.dataset.copyLabelDe || 'Konfiguration kopieren')
+        : (btn.dataset.copyLabelEn || 'Copy config');
+    });
+
     allLangButtons().forEach(([btn, code]) => {
       const active = lang === code;
       btn.classList.toggle("active", active);
@@ -2093,8 +2109,8 @@ installBtn.addEventListener('click', async () => {
       "setup.security.link": "→ README Setup-Anleitung öffnen",
       "setup.onionWarningTitle": "⚠️ Hinweis für BOLT12 auf Umbrel",
       "setup.onionWarningText": "Damit BOLT12 Offers funktionieren, muss Onion Messaging in LND aktiviert sein.",
-      "setup.onionWarningPath": "Öffne diese Datei auf deinem Umbrel:",  
-      "setup.onionWarningRestart": "Danach die Lightning Node neu starten.",  
+      "setup.onionWarningPath": "Öffne diese Datei auf deinem Umbrel und füge die folgenden Zeilen am Ende der Datei hinzu:",  
+      "setup.onionWarningRestart": "Danach Datei speichern und die Lightning Node neu starten. Ohne das funktionieren BOLT12 Offers nicht.",  
       "dns.none": "Keine",
       "dns.manual": "Manuell",
       "dns.cloudflare": "Cloudflare",
@@ -2190,8 +2206,8 @@ installBtn.addEventListener('click', async () => {
       "setup.security.link": "→ Open README setup guide",
       "setup.onionWarningTitle": "⚠️ Important for BOLT12 on Umbrel",
       "setup.onionWarningText": "For BOLT12 offers to work, onion messaging must be enabled in LND.",
-      "setup.onionWarningPath": "Open this file on your Umbrel:",
-      "setup.onionWarningRestart": "Then restart your Lightning node.",
+      "setup.onionWarningPath": "Open this file on your Umbrel and add the following lines at the end of the file:",
+      "setup.onionWarningRestart": "Then save the file and restart your Lightning node. Without this, BOLT12 offers will not work.",
       "dns.none": "None",
       "dns.manual": "Manual",
       "dns.cloudflare": "Cloudflare",
