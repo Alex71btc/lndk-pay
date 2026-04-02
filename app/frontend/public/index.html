@@ -569,10 +569,6 @@
 
   <pre class="bolt12-onion-warning__code">/home/umbrel/umbrel/app-data/lightning/data/lnd/lnd.conf</pre>
 
-  <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningAdd">
-    Füge am Ende der Datei folgende Zeilen hinzu:
-  </div>
-
   <pre class="bolt12-onion-warning__code">[protocol]
 custom-message=513
 custom-nodeann=39
@@ -582,6 +578,7 @@ custom-init=39</pre>
     Danach die Lightning Node neu starten.
   </div>
 </div>
+
     <section class="section">
       <label class="label" for="setupBolt12Address" data-i18n="setup.label.bolt12_address">Public BOLT12 Address</label>
       <input id="setupBolt12Address" type="text" data-i18n-placeholder="setup.ph.bolt12_address" placeholder="z. B. bolt12@pay.example.com" />
@@ -2096,9 +2093,8 @@ installBtn.addEventListener('click', async () => {
       "setup.security.link": "→ README Setup-Anleitung öffnen",
       "setup.onionWarningTitle": "⚠️ Hinweis für BOLT12 auf Umbrel",
       "setup.onionWarningText": "Damit BOLT12 Offers funktionieren, muss Onion Messaging in LND aktiviert sein.",
-      "setup.onionWarningPath": "1. Öffne diese Datei auf deinem Umbrel:",
-      "setup.onionWarningAdd": "2. Füge am Ende der Datei folgende Zeilen hinzu:",
-      "setup.onionWarningRestart": "3. Datei speichern und Lightning Node neu starten. Ohne das funktionieren BOLT12 Offers nicht."
+      "setup.onionWarningPath": "Öffne diese Datei auf deinem Umbrel:",  
+      "setup.onionWarningRestart": "Danach die Lightning Node neu starten.",  
       "dns.none": "Keine",
       "dns.manual": "Manuell",
       "dns.cloudflare": "Cloudflare",
@@ -2194,9 +2190,8 @@ installBtn.addEventListener('click', async () => {
       "setup.security.link": "→ Open README setup guide",
       "setup.onionWarningTitle": "⚠️ Important for BOLT12 on Umbrel",
       "setup.onionWarningText": "For BOLT12 offers to work, onion messaging must be enabled in LND.",
-      "setup.onionWarningPath": "1. Open this file on your Umbrel:",
-      "setup.onionWarningAdd": "2. Add the following lines at the end of the file:",
-      "setup.onionWarningRestart": "3. Save the file and restart your Lightning node. Without this, BOLT12 offers will not work."
+      "setup.onionWarningPath": "Open this file on your Umbrel:",
+      "setup.onionWarningRestart": "Then restart your Lightning node.",
       "dns.none": "None",
       "dns.manual": "Manual",
       "dns.cloudflare": "Cloudflare",
