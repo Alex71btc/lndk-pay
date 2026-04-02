@@ -18,13 +18,19 @@ Self-hosted Lightning payment and identity server with next-generation BOLT12 su
 
 BOLT12 requires **onion messaging** in LND.
 
-### 1. Open this file on your Umbrel
+### Edit lnd.conf on Umbrel
 
-```
-/home/umbrel/umbrel/app-data/lightning/data/lnd/lnd.conf
-```
+Connect to your Umbrel via SSH:
 
-### 2. Add:
+```bash
+ssh umbrel@umbrel.local
+
+#Then open the LND config file:
+
+```bash
+
+nano ~/umbrel/app-data/lightning/data/lnd/lnd.conf
+### 2. Add the following lines at the end of the file:
 
 ```
 [protocol]
