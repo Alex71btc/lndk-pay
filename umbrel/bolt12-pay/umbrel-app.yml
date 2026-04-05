@@ -4,7 +4,7 @@ name: BOLT12 Pay
 icon: https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/icon_v2.png
 tagline: First self-hosted BIP353 Lightning Address & BOLT12 Offer app for LND nodes
 category: finance
-version: 0.2.77
+version: 0.2.78
 port: 8091
 description: >
   Self-hosted Lightning payments + identity for your own node.
@@ -88,24 +88,12 @@ gallery:
   - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/4.png
   - https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/5.png
 releaseNotes: |
-  Adds full BOLT12 support via LNDK.
+  Improves setup security guidance and fixes translation issues.
 
-  ⚠️ IMPORTANT:
-  BOLT12 requires onion messaging in LND.
-
-  If BOLT12 offers do not work, add the following to your Lightning node config:
-
-    [protocol]
-    custom-message=513
-    custom-nodeann=39
-    custom-init=39
-
-  Then restart your Lightning node.
-
-  Improvements:
-  • Stable LNDK startup handling
-  • Better compatibility after Umbrel reboot
-  • Improved payment reliability
+  • Fix: Setup security section now fully translated (no mixed EN/DE)
+  • Added direct link to Cloudflare Access setup guide
+  • Improved remote access guidance for self-hosted users
+  • Minor UI polish in setup flow
 dependencies:
   - lightning
 path: ""
