@@ -612,18 +612,15 @@ custom-init=39</pre>
         <div data-i18n="setup.security.text">
           If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.
         </div>
-        <div style="margin-top:8px;" data-i18n="setup.security.routes">
-          Recommended: protect <span class="mono">/pay</span> and <span class="mono">/pay-login</span>, while keeping required public payment endpoints reachable.
-        </div>
-        <div style="margin-top:8px;">
-          <a
-            href="https://github.com/Alex71btc/lndk-pay#cloudflare-tunnel--access"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="color:#93c5fd;"
-            data-i18n="setup.security.link"
-          >→ Open README setup guide</a>
-        </div>
+<div class="hint">
+  Recommended: protect <span class="mono">/pay</span> and <span class="mono">/pay-login</span>, while keeping required public payment endpoints reachable.
+  <br>
+  <a
+    href="https://github.com/Alex71btc/lndk-pay?tab=readme-ov-file#recommended-setup-cloudflare-access"
+    target="_blank"
+    rel="noopener noreferrer"
+  >→ Open setup guide (Cloudflare Access / Reverse Proxy)</a>
+</div>
       </div>
 
       <label class="label" for="setupDnsMode" style="margin-top:14px;" data-i18n="setup.label.dns_mode">DNS Mode</label>
@@ -2106,7 +2103,7 @@ installBtn.addEventListener('click', async () => {
       "setup.security.title": "🔐 Remote-Zugriff absichern",
       "setup.security.text": "Wenn du diese App aus dem Internet erreichbar machst, schütze Admin-Routen mit Cloudflare Tunnel + Access oder einer vergleichbaren Zugriffskontrolle.",
       "setup.security.routes": "Empfohlen: <span class=\"mono\">/pay</span> und <span class=\"mono\">/pay-login</span> schützen, während notwendige öffentliche Payment-Endpunkte erreichbar bleiben.",
-      "setup.security.link": "→ README Setup-Anleitung öffnen",
+      "setup.security.link": "→ Setup-Anleitung öffnen (Cloudflare Access / Reverse Proxy)",
       "setup.onionWarningTitle": "⚠️ Hinweis für BOLT12 auf Umbrel",
       "setup.onionWarningText": "Damit BOLT12 Offers funktionieren, muss Onion Messaging in LND aktiviert sein.",
       "setup.onionWarningPath": "Öffne diese Datei auf deinem Umbrel und füge die folgenden Zeilen am Ende der Datei hinzu:",  
@@ -2203,7 +2200,7 @@ installBtn.addEventListener('click', async () => {
       "setup.security.title": "🔐 Remote access security",
       "setup.security.text": "If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.",
       "setup.security.routes": "Recommended: protect <span class=\"mono\">/pay</span> and <span class=\"mono\">/pay-login</span>, while keeping required public payment endpoints reachable.",
-      "setup.security.link": "→ Open README setup guide",
+      "setup.security.link": "→ Open setup guide (Cloudflare Access / Reverse Proxy)",
       "setup.onionWarningTitle": "⚠️ Important for BOLT12 on Umbrel",
       "setup.onionWarningText": "For BOLT12 offers to work, onion messaging must be enabled in LND.",
       "setup.onionWarningPath": "Open this file on your Umbrel and add the following lines at the end of the file:",
