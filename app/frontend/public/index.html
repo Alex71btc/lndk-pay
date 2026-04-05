@@ -610,17 +610,17 @@ custom-init=39</pre>
       <div class="hint" style="margin-top:14px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,0.02);">
         <div style="font-weight:700;color:var(--text);margin-bottom:6px;" data-i18n="setup.security.title">🔐 Remote access security</div>
         <div data-i18n="setup.security.text">
-          If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.
+          Wenn du diese App aus dem Internet erreichbar machst, schütze Admin-Routen mit Cloudflare Tunnel + Access oder einer vergleichbaren Zugriffskontrolle.
         </div>
-<div class="hint">
-  Recommended: protect <span class="mono">/pay</span> and <span class="mono">/pay-login</span>, while keeping required public payment endpoints reachable.
-  <br>
-  <a
-    href="https://github.com/Alex71btc/lndk-pay?tab=readme-ov-file#recommended-setup-cloudflare-access"
-    target="_blank"
-    rel="noopener noreferrer"
-  >→ Open setup guide (Cloudflare Access / Reverse Proxy)</a>
-</div>
+        <p data-i18n="setup.security.routes">
+          Empfohlen: <span class="mono">/pay</span> und <span class="mono">/pay-login</span> schützen, während notwendige öffentliche Payment-Endpunkte erreichbar bleiben.
+        </p>
+        <a
+          href="https://github.com/Alex71btc/lndk-pay?tab=readme-ov-file#recommended-setup-cloudflare-access"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-i18n="setup.security.link"
+        >→ Setup-Anleitung öffnen (Cloudflare Access / Reverse Proxy)</a>
       </div>
 
       <label class="label" for="setupDnsMode" style="margin-top:14px;" data-i18n="setup.label.dns_mode">DNS Mode</label>
@@ -2233,17 +2233,23 @@ installBtn.addEventListener('click', async () => {
 
   window.__t = t;
 
-  window.applyTranslations = function applyTranslations() {
-    document.querySelectorAll("[data-i18n]").forEach((el) => {
-      const key = el.getAttribute("data-i18n");
-      if (key) el.textContent = t(key);
-    });
+window.applyTranslations = function applyTranslations() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n;
+    const value = window.__t(key);
 
-    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      if (key) el.placeholder = t(key);
-    });
-  };
+    if (!value) return;
+
+    // wichtig: HTML support (wegen <span class="mono">)
+    el.innerHTML = value;
+  });
+
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.dataset.i18nPlaceholder;
+    const value = window.__t(key);
+    if (value) el.placeholder = value;
+  });
+};
 
   function init() {
     if (window.applyTranslations) window.applyTranslations();
