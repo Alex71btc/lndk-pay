@@ -69,6 +69,10 @@ sudo reboot
 
 ## Step 5 — Install BOLT12 Pay
 
+BOLT12 Pay is available for Umbrel via my community store:
+
+👉 https://github.com/Alex71btc/umbrel-community-store
+
 1. Install from Umbrel Community Store  
 2. Open app  
 3. Complete setup  
@@ -80,11 +84,22 @@ sudo reboot
 
 Start9 uses a dedicated BOLT12-enabled LND.
 
+⚠️ Important:
+- Both Start9 packages are currently distributed via GitHub Releases only
+- They are **not available in the official Start9 Marketplace**
+- Installation currently requires **manual sideloading**
+- Install and use at your own risk
+- Always create a backup before upgrading or migrating
+
 ---
 
 ## Install LND BOLT12
 
+Repository:
 👉 https://github.com/Alex71btc/lnd-startos-bolt12
+
+Releases:
+👉 https://github.com/Alex71btc/lnd-startos-bolt12/releases
 
 - App name: **LND BOLT12**
 - Package ID: `lndbolt`
@@ -98,9 +113,17 @@ Inside Start9 UI:
 - Open **LND BOLT12**
 - Actions → **Import from Start9 LND**
 
+⚠️ Never run two LND nodes with the same wallet state at the same time.
+
 ---
 
 ## Install BOLT12 Pay
+
+Repository:
+👉 https://github.com/Alex71btc/bolt12-pay-start9
+
+Releases:
+👉 https://github.com/Alex71btc/bolt12-pay-start9/releases
 
 1. Install BOLT12 Pay  
 2. Open app  
