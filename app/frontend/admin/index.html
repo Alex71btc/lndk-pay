@@ -872,6 +872,13 @@ main.card .headerRow {
   </div>
 
   <script>
+function getCookie(name) {
+  return document.cookie.split("; ")
+    .find(row => row.startsWith(name + "="))
+    ?.split("=")[1];
+}
+
+
     const HISTORY_KEY = 'bolt12_admin_history_v1';
     const DEFAULT_ADDRESS = 'bolt12@alex71btc.com';
 
@@ -2278,7 +2285,10 @@ if (action === 'show-qr') {
       try {
         const response = await fetch('/api/create-offer', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCookie('csrf_token')
+          },
           body: JSON.stringify(payload)
         });
 
@@ -2365,7 +2375,10 @@ async function payBolt12Flow() {
   try {
     const response = await fetch('/api/pay-offer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCookie('csrf_token')
+      },
       body: JSON.stringify(payload)
     });
 
@@ -2564,7 +2577,10 @@ setStatus(`${window.__t('toast.checking_and_paying')} ${target.slice(0, 64)}${ta
   try {
     const response = await fetch('/api/pay-address', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCookie('csrf_token')
+      },
       body: JSON.stringify({
         target,
         amount_sat: Number(amountSat),
@@ -2688,7 +2704,10 @@ document.getElementById('cfCreateAliasBtn').addEventListener('click', async () =
   try {
     const response = await fetch('/api/cloudflare/create-bip353', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCookie('csrf_token')
+      },
       body: JSON.stringify({
         record_name: recordName,
         offer: offer

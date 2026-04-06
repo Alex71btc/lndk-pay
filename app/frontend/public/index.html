@@ -825,6 +825,13 @@ custom-init=39</pre>
   </main>
 
   <script>
+
+function getCookie(name) {
+  return document.cookie.split("; ")
+    .find(row => row.startsWith(name + "="))
+    ?.split("=")[1];
+}
+
     const statusBar = document.getElementById('statusBar');
     const addressBox = document.getElementById('addressBox');
     const fallbackAddressBox = document.getElementById('fallbackAddressBox');
@@ -1555,7 +1562,10 @@ function renderAliasList(items) {
       try {
         const response = await fetch('/api/create-invoice', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCookie('csrf_token')
+          },
           body: JSON.stringify({
             amount_sat: Number(amountValue),
             memo: memoValue,
@@ -1819,7 +1829,10 @@ document.addEventListener('click', function (e) {
       try {
         const response = await fetch('/api/create-offer', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': getCookie('csrf_token')
+          },
           body: JSON.stringify(payload)
         });
 

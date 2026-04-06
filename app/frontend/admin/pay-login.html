@@ -95,6 +95,45 @@
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
+          if (res.status === 429) {
+            let remaining = parseInt(data.retry_after || res.headers.get("Retry-After") || "0", 10);
+
+            if (remaining > 0) {
+              const lang = localStorage.getItem("app_lang") || "de";
+              const originalText = "Login";
+
+              const renderLockedMessage = () => {
+                msgEl.textContent = lang === "en"
+                  ? `Too many attempts. Try again in ${remaining}s`
+                  : `Zu viele Versuche. Bitte in ${remaining}s erneut versuchen.`;
+              };
+
+              renderLockedMessage();
+              loginBtn.disabled = true;
+              loginBtn.textContent = lang === "en"
+                ? `Wait ${remaining}s`
+                : `Warte ${remaining}s`;
+
+              const interval = setInterval(() => {
+                remaining--;
+
+                if (remaining <= 0) {
+                  clearInterval(interval);
+                  loginBtn.disabled = false;
+                  loginBtn.textContent = originalText;
+                  msgEl.textContent = "";
+                } else {
+                  renderLockedMessage();
+                  loginBtn.textContent = lang === "en"
+                    ? `Wait ${remaining}s`
+                    : `Warte ${remaining}s`;
+                }
+              }, 1000);
+
+              return;
+            }
+          }
+
           msgEl.textContent = (typeof data.detail === "string" && data.detail)
             || (typeof data.error === "string" && data.error)
             || ((localStorage.getItem("app_lang") || "de") === "en"
@@ -104,7 +143,6 @@
           loginBtn.textContent = "Login";
           return;
         }
-
         const next = new URLSearchParams(window.location.search).get("next") || "/pay";
         window.location.href = next;
       } catch (err) {

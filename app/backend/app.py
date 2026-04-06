@@ -69,12 +69,93 @@ LND_REST_INSECURE = os.environ.get("LND_REST_INSECURE", "false").lower() in {"1"
 PAY_UI_PASSWORD = os.getenv("PAY_UI_PASSWORD", "").strip()
 PAY_UI_SESSION_TTL = int(os.getenv("PAY_UI_SESSION_TTL", "1800"))
 PAY_UI_COOKIE_NAME = "pay_session"
+PAY_UI_COOKIE_SECURE = os.getenv("PAY_UI_COOKIE_SECURE", "false").lower() in {"1", "true", "yes", "on"}
+
+# --- Login brute-force protection (minimal v2) ---
+LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "900"))
+LOGIN_MAX_FAILED_ATTEMPTS = int(os.getenv("LOGIN_MAX_FAILED_ATTEMPTS", "5"))
+LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))
+LOGIN_FAILURE_DELAY_MS = int(os.getenv("LOGIN_FAILURE_DELAY_MS", "1200"))
+
+_LOGIN_FAILURES: dict[str, list[float]] = {}
+_LOGIN_LOCKOUTS: dict[str, float] = {}
+
+def _client_ip(request: StarletteRequest) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "").strip()
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+def _prune_login_state(now: float) -> None:
+    expired_lockouts = [ip for ip, until in _LOGIN_LOCKOUTS.items() if until <= now]
+    for ip in expired_lockouts:
+        _LOGIN_LOCKOUTS.pop(ip, None)
+
+    for ip in list(_LOGIN_FAILURES.keys()):
+        attempts = _LOGIN_FAILURES.get(ip, [])
+        attempts = [ts for ts in attempts if (now - ts) <= LOGIN_RATE_LIMIT_WINDOW_SECONDS]
+        if attempts:
+            _LOGIN_FAILURES[ip] = attempts
+        else:
+            _LOGIN_FAILURES.pop(ip, None)
+
+def _login_is_locked(ip: str) -> tuple[bool, int]:
+    now = time.time()
+    _prune_login_state(now)
+    until = _LOGIN_LOCKOUTS.get(ip)
+    if until and until > now:
+        return True, int(until - now)
+    return False, 0
+
+def _record_login_failure(ip: str) -> int:
+    now = time.time()
+    _prune_login_state(now)
+    attempts = _LOGIN_FAILURES.get(ip, [])
+    attempts.append(now)
+    _LOGIN_FAILURES[ip] = attempts
+    count = len(attempts)
+    if count >= LOGIN_MAX_FAILED_ATTEMPTS:
+        _LOGIN_LOCKOUTS[ip] = now + LOGIN_LOCKOUT_SECONDS
+    return count
+
+def _record_login_success(ip: str) -> None:
+    _LOGIN_FAILURES.pop(ip, None)
+    _LOGIN_LOCKOUTS.pop(ip, None)
+
+def _login_failure_delay(attempt_count: int) -> None:
+    factor = max(1, min(attempt_count, 5))
+    time.sleep((LOGIN_FAILURE_DELAY_MS * factor) / 1000.0)
+
+
 PAY_SESSIONS: dict[str, dict] = {}
 
 NWC_SESSION_TTL = int(os.getenv("NWC_SESSION_TTL", "180"))
 NWC_COOKIE_NAME = "nwc_session"
 NWC_SESSIONS: dict[str, dict] = {}
 
+# --- Cloudflare rate limiting ---
+CLOUDFLARE_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("CLOUDFLARE_RATE_LIMIT_WINDOW_SECONDS", "60"))
+CLOUDFLARE_RATE_LIMIT_MAX_REQUESTS = int(os.getenv("CLOUDFLARE_RATE_LIMIT_MAX_REQUESTS", "5"))
+
+_CLOUDFLARE_RATE_LIMITS: dict[str, list[float]] = {}
+
+def _check_cloudflare_rate_limit(request: StarletteRequest):
+    ip = _client_ip(request)
+    now = time.time()
+
+    attempts = _CLOUDFLARE_RATE_LIMITS.get(ip, [])
+    attempts = [ts for ts in attempts if (now - ts) <= CLOUDFLARE_RATE_LIMIT_WINDOW_SECONDS]
+    attempts.append(now)
+    _CLOUDFLARE_RATE_LIMITS[ip] = attempts
+
+    if len(attempts) > CLOUDFLARE_RATE_LIMIT_MAX_REQUESTS:
+        retry_after = max(1, int(CLOUDFLARE_RATE_LIMIT_WINDOW_SECONDS - (now - attempts[0])))
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Try again in {retry_after}s."
+        )
 
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
@@ -2013,9 +2094,9 @@ def set_setup_config(payload: dict):
 
     return {"ok": True}
 @app.post("/api/create-offer", response_model=OfferResponse)
-def create_offer(payload: OfferRequest) -> OfferResponse:
+def create_offer(payload: OfferRequest, request: StarletteRequest) -> OfferResponse:
+    _require_csrf(request)
     return _create_offer_internal(payload)
-
 
 @app.post("/api/decode-offer", response_model=DecodeResponse)
 def decode_offer(payload: DecodeRequest) -> DecodeResponse:
@@ -2026,7 +2107,8 @@ def decode_offer(payload: DecodeRequest) -> DecodeResponse:
 
 
 @app.post("/api/pay-offer", response_model=PayOfferResponse)
-def pay_offer(payload: PayOfferRequest) -> PayOfferResponse:
+def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferResponse:
+    _require_csrf(request)
     if not ALLOW_PAY_OFFER:
         raise HTTPException(status_code=403, detail="pay-offer endpoint is disabled")
 
@@ -2039,7 +2121,8 @@ def pay_offer(payload: PayOfferRequest) -> PayOfferResponse:
     raw_output = _run_command(args)
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 @app.post("/api/pay-address", response_model=PayOfferResponse)
-async def pay_address(payload: PayAddressRequest) -> PayOfferResponse:
+async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> PayOfferResponse:
+    _require_csrf(request)
     target = payload.target.strip()
     if not target:
         raise HTTPException(status_code=400, detail="target required")
@@ -2246,7 +2329,9 @@ async def pay_lnurl(payload: PayLnurlRequest) -> PayOfferResponse:
     )
 
 @app.post("/api/cloudflare/create-bip353")
-async def create_cloudflare_bip353(req: CloudflareBIP353Request):
+async def create_cloudflare_bip353(req: CloudflareBIP353Request, request: StarletteRequest):
+    _require_csrf(request)
+    _check_cloudflare_rate_limit(request)
     record_name = req.record_name.strip().lower()
     if not record_name:
         raise HTTPException(status_code=400, detail="record_name required")
@@ -2367,6 +2452,7 @@ def update_alias(name: str, payload: AliasUpdateRequest):
 async def create_invoice(payload: CreateInvoiceRequest, request: StarletteRequest) -> CreateInvoiceResponse:
     if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
+    _require_csrf(request)
     result = await _create_bolt11_invoice(
         amount_sat=payload.amount_sat,
         memo=payload.memo,
@@ -2854,6 +2940,15 @@ def _get_pay_session_token(request: StarletteRequest) -> Optional[str]:
     return request.cookies.get(PAY_UI_COOKIE_NAME)
 
 
+
+
+def _require_csrf(request: StarletteRequest):
+    csrf_cookie = request.cookies.get("csrf_token")
+    csrf_header = request.headers.get("x-csrf-token")
+
+    if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+        raise HTTPException(status_code=403, detail="CSRF validation failed")
+
 def _is_pay_session_valid(request: StarletteRequest) -> bool:
     _cleanup_pay_sessions()
     token = _get_pay_session_token(request)
@@ -3022,11 +3117,34 @@ def _pay_login_html() -> str:
 
         const data = await res.json();
 
-        if (!res.ok) {{
-          msgEl.textContent = data.detail || data.error || "Login failed";
-          return;
-        }}
+if (!res.ok) {{
+  // 🚨 Rate limit / brute-force lock
+  if (res.status === 429 && data.retry_after) {{
+    let remaining = data.retry_after;
 
+    msgEl.textContent = `Too many attempts. Try again in ${remaining}s`;
+
+    loginBtn.disabled = true;
+
+    const interval = setInterval(() => {{
+      remaining--;
+
+      if (remaining <= 0) {{
+        clearInterval(interval);
+        loginBtn.disabled = false;
+        msgEl.textContent = "";
+      }} else {{
+        msgEl.textContent = `Too many attempts. Try again in ${remaining}s`;
+      }}
+    }}, 1000);
+
+    return;
+  }}
+
+  // ❌ normal error
+  msgEl.textContent = data.detail || data.error || "Login failed";
+  return;
+}}
         window.location.href = "/pay";
       }} catch (err) {{
         msgEl.textContent = "Login request failed";
@@ -3109,22 +3227,47 @@ def pay_login_page(request: StarletteRequest):
 
 
 @app.post("/api/auth/login")
-def api_auth_login(payload: PayLoginRequest):
+def api_auth_login(payload: PayLoginRequest, request: StarletteRequest):
     if not _is_pay_ui_enabled():
         return JSONResponse({"ok": True, "disabled": True}, headers=_no_store_headers())
 
+    ip = _client_ip(request)
+    locked, remaining = _login_is_locked(ip)
+    if locked:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "Too many login attempts. Please try again later.",
+                "retry_after": remaining,
+            },
+            status_code=429,
+            headers=_no_store_headers(),
+        )
+
     if not _verify_ui_password(payload.password or ""):
+        attempts = _record_login_failure(ip)
+        _login_failure_delay(attempts)
         raise HTTPException(status_code=401, detail="Invalid password")
 
+    _record_login_success(ip)
     token = _create_pay_session()
 
     resp = JSONResponse({"ok": True}, headers=_no_store_headers())
+    csrf_token = secrets.token_hex(16)
+    resp.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=PAY_UI_COOKIE_SECURE,
+        samesite="strict",
+        path="/",
+    )
     resp.set_cookie(
         key=PAY_UI_COOKIE_NAME,
         value=token,
         max_age=PAY_UI_SESSION_TTL,
         httponly=True,
-        secure=False,
+        secure=PAY_UI_COOKIE_SECURE,
         samesite="strict",
         path="/",
     )
