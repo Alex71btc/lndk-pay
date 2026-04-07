@@ -262,8 +262,16 @@ Feel free to contribute or reach out.
 
 ## Screenshots
 
-![BOLT12 Pay Screenshot 1](https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/1.png)
-![BOLT12 Pay Screenshot 2](https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/2.png)
-![BOLT12 Pay Screenshot 3](https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/3.png)
-![BOLT12 Pay Screenshot 4](https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/4.png)
-![BOLT12 Pay Screenshot 5](https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/5.png)
+<p float="left">
+  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/1.png" width="48%" />
+  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/2.png" width="48%" />
+</p>
+
+<p float="left">
+  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/3.png" width="48%" />
+  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/4.png" width="48%" />
+</p>
+
+<p float="left">
+  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/5.png" width="48%" />
+</p>
