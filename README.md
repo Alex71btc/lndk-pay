@@ -80,7 +80,7 @@ BOLT12 Pay is available for Umbrel via my community store:
 
 ---
 
-# 🟢 Start9 Setup (Recommended)
+# 🟢 StartOS Setup (Recommended)
 
 Start9 uses a dedicated BOLT12-enabled LND.
 
