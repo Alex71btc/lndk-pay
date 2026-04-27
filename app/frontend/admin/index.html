@@ -18,7 +18,7 @@
   <meta name="application-name" content="BOLT12 Pay" />
   <title>BOLT12 Pay</title>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
@@ -603,13 +603,13 @@ main.card .headerRow {
           <div id="offerQrBox" class="qrBox" title="Antippen = aktiven Inhalt kopieren"></div>
           <div class="hint">
             <span data-i18n="hint.no_offer_qr">Solange noch kein Offer erzeugt wurde, zeigt der QR standardmäßig</span>
-            <span class="mono" style="white-space:nowrap;">bolt12@alex71btc.com</span>.
+            <span id="defaultAddressHint" class="mono" style="white-space:nowrap;">bolt12@example.com</span>.
           </div>
         </div>
 
         <label class="label" for="offerPreviewBox" style="margin-top:14px;"><span data-i18n="label.active_content">Aktiver Inhalt</span></label>
         <div id="offerPreviewBox" class="valueBox mono copyable offerPreview" title="Zum Kopieren antippen">
-          bolt12@alex71btc.com
+          bolt12@example.com
         </div>
 
         <input id="offerInput" type="hidden" />
@@ -835,7 +835,7 @@ main.card .headerRow {
 
 <div class="hint">
   <span data-i18n="hint.cloudflare_prefix">Erstellt einen TXT-Record wie</span>
-  <span class="mono">name.user._bitcoin-payment.alex71btc.com</span>.
+  <span class="mono">name.user._bitcoin-payment.example.com</span>.
 </div>
 
       <label class="label" for="cfHumanAddressOutput" style="margin-top:14px;"><span data-i18n="label.generated_address">Erzeugte Adresse</span></label>
@@ -880,7 +880,25 @@ function getCookie(name) {
 
 
     const HISTORY_KEY = 'bolt12_admin_history_v1';
-    const DEFAULT_ADDRESS = 'bolt12@alex71btc.com';
+    let DEFAULT_ADDRESS = 'bolt12@example.com';
+    async function loadDefaultAddressFromConfig() {
+      try {
+        const res = await fetch('/api/setup/config', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const candidate = String(data?.public_bolt12_address || data?.bolt12_address || data?.address || '').trim();
+        if (candidate && candidate.includes('@')) {
+          DEFAULT_ADDRESS = candidate;
+          const defaultAddressHint = document.getElementById('defaultAddressHint');
+          if (defaultAddressHint) defaultAddressHint.textContent = DEFAULT_ADDRESS;
+          if (offerPreviewBox && (!getCurrentOffer() || offerPreviewBox.textContent.includes('example.com'))) {
+            offerPreviewBox.textContent = DEFAULT_ADDRESS;
+          }
+          renderQr(DEFAULT_ADDRESS);
+        }
+      } catch (_) {}
+    }
+
 
     const statusBar = document.getElementById('statusBar');
 
@@ -2272,7 +2290,7 @@ if (action === 'show-qr') {
 
     document.getElementById('createOfferBtn').addEventListener('click', async () => {
       const amountValue = amountInput.value.trim();
-      const descriptionValue = messageInput.value.trim() || DEFAULT_ADDRESS;
+      const descriptionValue = messageInput.value.trim() || 'BOLT12 Pay';
       const payload = { description: descriptionValue };
 
       if (amountValue) payload.amount = Number(amountValue);
@@ -3613,6 +3631,7 @@ window.addEventListener('load', () => {
 
 
 <script>
+    loadDefaultAddressFromConfig();
 </script>
 
 </body>
