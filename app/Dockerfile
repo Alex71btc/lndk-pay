@@ -1,8 +1,18 @@
-FROM alex71btc/lndk:v0.3.0 AS lndkbin
+FROM alex71btc/lndk:stable-good-20260401 AS lndkbin
 
 FROM python:3.12-slim
 
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    build-essential \
+    libsecp256k1-dev \
+    autoconf \
+    automake \
+    libtool \
+    && rm -rf /var/lib/apt/lists/*
+
 
 COPY --from=lndkbin /usr/local/bin/lndk-cli /usr/local/bin/lndk-cli
 
