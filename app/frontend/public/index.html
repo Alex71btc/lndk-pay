@@ -577,7 +577,7 @@ protocol.custom-init=39</pre>
   <button
     type="button"
     class="btn secondary bolt12-onion-copy-btn"
-    onclick="navigator.clipboard.writeText('[protocol]\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39'); this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopiert' : 'Config copied'); setTimeout(() => { this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopieren' : 'Copy config'); }, 1800);"
+    onclick="copyToClipboard('[protocol]\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39').then(() => { this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopiert' : 'Config copied'); setTimeout(() => { this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopieren' : 'Copy config'); }, 1800); })"
     data-copy-label-de="Konfiguration kopieren"
     data-copy-label-en="Copy config"
   >
@@ -921,6 +921,27 @@ function getCookie(name) {
           statusBar.className = 'statusBar';
           statusBar.textContent = '';
         }, 4200);
+      }
+    }
+
+    function copyToClipboard(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+
+      try {
+        document.execCommand("copy");
+        return Promise.resolve();
+      } finally {
+        document.body.removeChild(ta);
       }
     }
 
