@@ -567,17 +567,17 @@
     Öffne diese Datei auf deinem Umbrel:
   </div>
 
-  <pre class="bolt12-onion-warning__code">/home/umbrel/umbrel/app-data/lightning/data/lnd/lnd.conf</pre>
+  <pre class="bolt12-onion-warning__code">nano /home/umbrel/umbrel/app-data/lightning/data/lnd/lnd.conf</pre>
 
   <pre class="bolt12-onion-warning__code">[protocol]
-custom-message=513
-custom-nodeann=39
-custom-init=39</pre>
+protocol.custom-message=513
+protocol.custom-nodeann=39
+protocol.custom-init=39</pre>
 
   <button
     type="button"
     class="btn secondary bolt12-onion-copy-btn"
-    onclick="navigator.clipboard.writeText('[protocol]\ncustom-message=513\ncustom-nodeann=39\ncustom-init=39'); this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopiert' : 'Config copied'); setTimeout(() => { this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopieren' : 'Copy config'); }, 1800);"
+    onclick="navigator.clipboard.writeText('[protocol]\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39'); this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopiert' : 'Config copied'); setTimeout(() => { this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopieren' : 'Copy config'); }, 1800);"
     data-copy-label-de="Konfiguration kopieren"
     data-copy-label-en="Copy config"
   >

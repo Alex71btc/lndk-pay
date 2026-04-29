@@ -50,9 +50,9 @@ nano ~/umbrel/app-data/lightning/data/lnd/lnd.conf
 
 ```text
 [protocol]
-custom-message=513
-custom-nodeann=39
-custom-init=39
+protocol.custom-message=513
+protocol.custom-nodeann=39
+protocol.custom-init=39
 ```
 
 ---
