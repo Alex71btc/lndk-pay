@@ -567,7 +567,11 @@
     Öffne diese Datei auf deinem Umbrel:
   </div>
 
-  <pre class="bolt12-onion-warning__code">nano /home/umbrel/umbrel/app-data/lightning/data/lnd/lnd.conf</pre>
+  <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningUmbrelFiles">
+    Öffne Umbrel → Files und navigiere zu:
+  </div>
+
+  <pre class="bolt12-onion-warning__code">/home/umbrel/umbrel/app-data/lightning/data/lnd/lnd.conf</pre>
 
   <pre class="bolt12-onion-warning__code">[protocol]
 protocol.custom-message=513
@@ -2140,7 +2144,8 @@ installBtn.addEventListener('click', async () => {
       "setup.security.link": "→ Setup-Anleitung öffnen (Cloudflare Access / Reverse Proxy)",
       "setup.onionWarningTitle": "⚠️ Hinweis für BOLT12 auf Umbrel",
       "setup.onionWarningText": "Damit BOLT12 Offers funktionieren, muss Onion Messaging in LND aktiviert sein.",
-      "setup.onionWarningPath": "Öffne diese Datei auf deinem Umbrel und füge die folgenden Zeilen am Ende der Datei hinzu:",  
+      "setup.onionWarningPath": "Öffne diese Datei auf deinem Umbrel und füge die folgenden Zeilen am Ende der Datei hinzu:",
+      "setup.onionWarningUmbrelFiles": "Öffne Umbrel → Files und navigiere zu:",  
       "setup.onionWarningRestart": "Danach Datei speichern und die Lightning Node neu starten. Ohne das funktionieren BOLT12 Offers nicht.",  
       "dns.none": "Keine",
       "dns.manual": "Manuell",
@@ -2238,6 +2243,7 @@ installBtn.addEventListener('click', async () => {
       "setup.onionWarningTitle": "⚠️ Important for BOLT12 on Umbrel",
       "setup.onionWarningText": "For BOLT12 offers to work, onion messaging must be enabled in LND.",
       "setup.onionWarningPath": "Open this file on your Umbrel and add the following lines at the end of the file:",
+      "setup.onionWarningUmbrelFiles": "Open Umbrel → Files and navigate to:",
       "setup.onionWarningRestart": "Then save the file and restart your Lightning node. Without this, BOLT12 offers will not work.",
       "dns.none": "None",
       "dns.manual": "Manual",
