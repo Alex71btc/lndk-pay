@@ -574,26 +574,39 @@
 
   <pre class="bolt12-onion-warning__code">Apps → lightning → data → lnd → lnd.conf</pre>
 
+<pre class="bolt12-onion-warning__code">[protocol]
+protocol.custom-message=513
+protocol.custom-nodeann=39
+protocol.custom-init=39</pre>
+
+<button
+  type="button"
+  class="btn secondary bolt12-onion-copy-btn"
+  data-copy-label-de="Umbrel-Konfiguration kopieren"
+  data-copy-label-en="Copy Umbrel config"
+  onclick="copyToClipboard('[protocol]\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39').then(() => { this.querySelector('span').textContent = (document.documentElement.lang === 'de' ? 'Umbrel-Konfiguration kopiert!' : 'Umbrel config copied!'); setTimeout(() => { this.querySelector('span').textContent = (document.documentElement.lang === 'de' ? 'Umbrel-Konfiguration kopieren' : 'Copy Umbrel config'); }, 2000); })">
+  <span data-i18n="setup.copyUmbrelConfig">Copy Umbrel config</span>
+</button>
+
 <div class="bolt12-onion-warning__text">
   <strong>StartOS:</strong>
   <span data-i18n="setup.onionWarningStartOS"></span>
 </div>
 
 <pre class="bolt12-onion-warning__code">sudo nano /media/startos/data/package-data/volumes/lnd/data/main/lnd.conf</pre>
-  <pre class="bolt12-onion-warning__code">[protocol]
-protocol.custom-message=513
+
+<pre class="bolt12-onion-warning__code">protocol.custom-message=513
 protocol.custom-nodeann=39
 protocol.custom-init=39</pre>
 
-  <button
-    type="button"
-    class="btn secondary bolt12-onion-copy-btn"
-    onclick="copyToClipboard('[protocol]\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39').then(() => { this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopiert' : 'Config copied'); setTimeout(() => { this.textContent = (document.documentElement.lang === 'de' ? 'Konfiguration kopieren' : 'Copy config'); }, 1800); })"
-    data-copy-label-de="Konfiguration kopieren"
-    data-copy-label-en="Copy config"
-  >
-    Copy config
-  </button>
+<button
+  type="button"
+  class="btn secondary bolt12-onion-copy-btn"
+  data-copy-label-de="StartOS-Konfiguration kopieren"
+  data-copy-label-en="Copy StartOS config"
+  onclick="copyToClipboard('protocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39').then(() => { this.querySelector('span').textContent = (document.documentElement.lang === 'de' ? 'StartOS-Konfiguration kopiert!' : 'StartOS config copied!'); setTimeout(() => { this.querySelector('span').textContent = (document.documentElement.lang === 'de' ? 'StartOS-Konfiguration kopieren' : 'Copy StartOS config'); }, 2000); })">
+  <span data-i18n="setup.copyStartOSConfig">Copy StartOS config</span>
+</button>
 
   <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningRestart">
     Danach die Lightning Node neu starten.
@@ -2052,11 +2065,14 @@ installBtn.addEventListener('click', async () => {
     const lang = getLang();
     document.documentElement.setAttribute("lang", lang);
 
-    document.querySelectorAll('.bolt12-onion-copy-btn').forEach((btn) => {
-      btn.textContent = lang === 'de'
-        ? (btn.dataset.copyLabelDe || 'Konfiguration kopieren')
-        : (btn.dataset.copyLabelEn || 'Copy config');
-    });
+  document.querySelectorAll('.bolt12-onion-copy-btn').forEach((btn) => {
+    const span = btn.querySelector('span');
+    if (!span) return;
+
+    span.textContent = lang === 'de'
+      ? (btn.dataset.copyLabelDe || 'Kopieren')
+      : (btn.dataset.copyLabelEn || 'Copy');
+  });
 
     allLangButtons().forEach(([btn, code]) => {
       const active = lang === code;
@@ -2155,6 +2171,8 @@ installBtn.addEventListener('click', async () => {
       "setup.onionWarningUmbrelFiles": "Öffne Umbrel → Files und navigiere zu:",  
       "setup.onionWarningStartOS": " Verbinde dich per SSH und öffne:",
       "setup.onionWarningRestart": "Danach Datei speichern und die Lightning Node neu starten. Ohne das funktionieren BOLT12 Offers nicht.",  
+      "setup.copyUmbrelConfig": "Umbrel-Konfiguration kopieren",
+      "setup.copyStartOSConfig": "StartOS-Konfiguration kopieren",
       "dns.none": "Keine",
       "dns.manual": "Manuell",
       "dns.cloudflare": "Cloudflare",
@@ -2254,6 +2272,8 @@ installBtn.addEventListener('click', async () => {
       "setup.onionWarningStartOS": " Connect via SSH and open:",
       "setup.onionWarningUmbrelFiles": "Open Umbrel → Files and navigate to:",
       "setup.onionWarningRestart": "Then save the file and restart your Lightning node. Without this, BOLT12 offers will not work.",
+      "setup.copyUmbrelConfig": "Copy Umbrel config",
+      "setup.copyStartOSConfig": "Copy StartOS config",
       "dns.none": "None",
       "dns.manual": "Manual",
       "dns.cloudflare": "Cloudflare",
