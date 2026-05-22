@@ -556,7 +556,7 @@
 
 <div class="bolt12-onion-warning">
   <div class="bolt12-onion-warning__title" data-i18n="setup.onionWarningTitle">
-    ⚠️ Hinweis für BOLT12 auf Umbrel
+  ⚠️ Hinweis für BOLT12 mit LND
   </div>
 
   <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningText">
@@ -567,12 +567,19 @@
     Öffne diese Datei auf deinem Umbrel:
   </div>
 
-  <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningUmbrelFiles">
-    Öffne Umbrel → Files und navigiere zu:
-  </div>
+<div class="bolt12-onion-warning__text" style="margin-top:8px;">
+  <strong>Umbrel:</strong>
+  <span data-i18n="setup.onionWarningUmbrelFiles"></span>
+</div>
 
   <pre class="bolt12-onion-warning__code">Apps → lightning → data → lnd → lnd.conf</pre>
 
+<div class="bolt12-onion-warning__text">
+  <strong>StartOS:</strong>
+  <span data-i18n="setup.onionWarningStartOS"></span>
+</div>
+
+<pre class="bolt12-onion-warning__code">sudo nano /media/startos/data/package-data/volumes/lnd/data/main/lnd.conf</pre>
   <pre class="bolt12-onion-warning__code">[protocol]
 protocol.custom-message=513
 protocol.custom-nodeann=39
@@ -2142,10 +2149,11 @@ installBtn.addEventListener('click', async () => {
       "setup.security.text": "Wenn du diese App aus dem Internet erreichbar machst, schütze Admin-Routen mit Cloudflare Tunnel + Access oder einer vergleichbaren Zugriffskontrolle.",
       "setup.security.routes": "Empfohlen: <span class=\"mono\">/pay</span> und <span class=\"mono\">/pay-login</span> schützen, während notwendige öffentliche Payment-Endpunkte erreichbar bleiben.",
       "setup.security.link": "→ Setup-Anleitung öffnen (Cloudflare Access / Reverse Proxy)",
-      "setup.onionWarningTitle": "⚠️ Hinweis für BOLT12 auf Umbrel",
+      "setup.onionWarningTitle": "⚠️ Hinweis für BOLT12 mit LND",
       "setup.onionWarningText": "Damit BOLT12 Offers funktionieren, muss Onion Messaging in LND aktiviert sein.",
-      "setup.onionWarningPath": "Öffne diese Datei auf deinem Umbrel und füge die folgenden Zeilen am Ende der Datei hinzu:",
+      "setup.onionWarningPath": "Füge die folgenden Zeilen am Ende deiner LND-Konfigurationsdatei hinzu:",
       "setup.onionWarningUmbrelFiles": "Öffne Umbrel → Files und navigiere zu:",  
+      "setup.onionWarningStartOS": " Verbinde dich per SSH und öffne:",
       "setup.onionWarningRestart": "Danach Datei speichern und die Lightning Node neu starten. Ohne das funktionieren BOLT12 Offers nicht.",  
       "dns.none": "Keine",
       "dns.manual": "Manuell",
@@ -2240,9 +2248,10 @@ installBtn.addEventListener('click', async () => {
       "setup.security.text": "If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.",
       "setup.security.routes": "Recommended: protect <span class=\"mono\">/pay</span> and <span class=\"mono\">/pay-login</span>, while keeping required public payment endpoints reachable.",
       "setup.security.link": "→ Open setup guide (Cloudflare Access / Reverse Proxy)",
-      "setup.onionWarningTitle": "⚠️ Important for BOLT12 on Umbrel",
+      "setup.onionWarningTitle": "⚠️ Important for BOLT12 with LND",
       "setup.onionWarningText": "For BOLT12 offers to work, onion messaging must be enabled in LND.",
-      "setup.onionWarningPath": "Open this file on your Umbrel and add the following lines at the end of the file:",
+      "setup.onionWarningPath": "Add the following lines at the end of your LND configuration file:",
+      "setup.onionWarningStartOS": " Connect via SSH and open:",
       "setup.onionWarningUmbrelFiles": "Open Umbrel → Files and navigate to:",
       "setup.onionWarningRestart": "Then save the file and restart your Lightning node. Without this, BOLT12 offers will not work.",
       "dns.none": "None",
