@@ -13,6 +13,7 @@ Self-hosted Lightning payment and identity server with next-generation BOLT12 su
 - 🧠 Nostr identity (NIP-05 + Zaps)
 - 📱 QR-based payments
 - ☁️ Optional Cloudflare DNS automation
+- 🟢 Available in the official Start9 Community Registry
 
 ---
 
@@ -24,11 +25,9 @@ BOLT12 Pay requires a Lightning node with BOLT12 support.
 
 # 🟣 Umbrel Setup (Manual LND Config REQUIRED)
 
-BOLT12 requires **onion messaging support in LND**.
+BOLT12 requires onion messaging support in LND.
 
 This must be enabled manually.
-
----
 
 ## Step 1 — Connect to Umbrel
 
@@ -36,15 +35,11 @@ This must be enabled manually.
 ssh umbrel@umbrel.local
 ```
 
----
-
 ## Step 2 — Edit LND config
 
 ```bash
 nano ~/umbrel/app-data/lightning/data/lnd/lnd.conf
 ```
-
----
 
 ## Step 3 — Add this
 
@@ -55,8 +50,6 @@ protocol.custom-nodeann=39
 protocol.custom-init=39
 ```
 
----
-
 ## Step 4 — Restart Lightning
 
 ```bash
@@ -65,213 +58,84 @@ sudo reboot
 
 ⚠️ Without this, BOLT12 will NOT work.
 
----
-
 ## Step 5 — Install BOLT12 Pay
 
-BOLT12 Pay is available for Umbrel via my community store:
-
 👉 https://github.com/Alex71btc/umbrel-community-store
-
-1. Install from Umbrel Community Store  
-2. Open app  
-3. Complete setup  
-4. Done 🎉
 
 ---
 
 # 🟢 StartOS Setup (Recommended)
 
-Start9 uses a dedicated BOLT12-enabled LND.
+BOLT12 Pay is now available in the official Start9 Community Registry ⚡
 
-⚠️ Important:
-- Both Start9 packages are currently distributed via GitHub Releases only
-- They are **not available in the official Start9 Marketplace**
-- Installation currently requires **manual sideloading**
-- Install and use at your own risk
-- Always create a backup before upgrading or migrating
+Features:
+- one-click installation
+- StartOS 0.4 support
+- integrated LNDK runtime
+- BOLT12 Offers
+- Lightning Address support
+- LNURL fallback
 
----
+## Install from Community Registry
+
+Inside StartOS:
+
+1. Open Marketplace  
+2. Switch to Community Registry  
+3. Search for `BOLT12 Pay`  
+4. Install 🎉
+
+Repository:
+👉 https://github.com/Start9-Community/bolt12-pay-startos
+
+## Requirements
+
+- LND BOLT12 (`lndbolt`)
+- onion messaging enabled
 
 ## Install LND BOLT12
 
-Repository:
 👉 https://github.com/Alex71btc/lnd-startos-bolt12
 
-Releases:
-👉 https://github.com/Alex71btc/lnd-startos-bolt12/releases
+## Remote Access (recommended)
 
-- App name: **LND BOLT12**
-- Package ID: `lndbolt`
+Recommended:
+- Cloudflare Tunnel
+- Cloudflare Access for admin protection
 
----
-
-## Optional: Import existing LND
-
-Inside Start9 UI:
-
-- Open **LND BOLT12**
-- Actions → **Import from Start9 LND**
-
-⚠️ Never run two LND nodes with the same wallet state at the same time.
+Public payment endpoints must remain reachable.
 
 ---
 
-## Install BOLT12 Pay
+# 🔒 Access control
 
-Repository:
-👉 https://github.com/Alex71btc/bolt12-pay-start9
-
-Releases:
-👉 https://github.com/Alex71btc/bolt12-pay-start9/releases
-
-1. Install BOLT12 Pay  
-2. Open app  
-3. Configure:
-   - BOLT12 address
-   - Lightning address
-   - domain / DNS  
-
----
-
-# 🌐 Remote Access (recommended)
-
-Use:
-
-👉 https://github.com/remcoros/cloudflared-startos/releases
-
----
-
-# 🔒 Access control (IMPORTANT)
-
-BOLT12 Pay separates:
-
-## Admin (sensitive)
-
+Admin:
 - `/pay`
 - `/pay-login`
 
-## Public (must stay open)
-
+Public:
 - LNURL
 - payment callbacks
 - public pages
 
 ---
 
-## Recommended (Cloudflare Access)
-
-### 1. Admin → ALLOW
-
-Protect:
-
-- `/pay*`
-- `/pay-login*`
-
-Require login.
-
----
-
-### 2. Public → BYPASS
-
-Allow:
-
-- LNURL
-- payment endpoints
-- public pages
-
----
-
-## ⚠️ Do NOT
-
-- protect the whole app → breaks payments  
-- expose `/pay` publicly → security risk  
-
----
-
 # 🧱 Architecture
 
-BOLT12 Pay combines:
-
-- **LNDK** → BOLT12 Offers
-- **LND** → Lightning backend
-- **LNURL / BIP353** → compatibility
-- **Nostr** → identity + Zaps
-- **Web UI** → admin + payments
+- LNDK → BOLT12 Offers
+- LND → Lightning backend
+- LNURL / BIP353 → compatibility
+- Nostr → identity + Zaps
+- Web UI → admin + payments
 
 ---
 
-# 🧠 Capabilities
+# 📸 StartOS Community Marketplace
 
-## Payment pages
-
-- BOLT12 Offer
-- Lightning Address
-- LNURL fallback
-- BOLT11 fallback
-
----
-
-## Admin UI
-
-- create offers
-- pay offers
-- decode BOLT12 / BIP353
-- manage aliases
-- Nostr integration
-
----
-
-# 🧪 Status
-
-BOLT12 Pay is cutting-edge:
-
-- BOLT12 still evolving
-- wallet support inconsistent
-- fallback layers required
-
----
-
-# 🧰 Deployment
-
-- `deploy/docker-compose.local.yml`
-- `deploy/docker-compose.umbrel.yml`
-
----
-
-# 📂 Structure
-
-- `app/`
-- `umbrel/`
-- `start9/`
-- `docs/`
+BOLT12 Pay is now officially available in the Start9 Community Registry.
 
 ---
 
 # 🧾 License
 
 MIT
-
----
-
-# 💡 Funding
-
-This project is a strong candidate for Bitcoin / Lightning open-source grants.
-
-Feel free to contribute or reach out.
-
-## Screenshots
-
-<p float="left">
-  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/1.png" width="48%" />
-  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/2.png" width="48%" />
-</p>
-
-<p float="left">
-  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/3.png" width="48%" />
-  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/4.png" width="48%" />
-</p>
-
-<p float="left">
-  <img src="https://raw.githubusercontent.com/Alex71btc/umbrel-community-store/master/alex-bolt12-pay/screenshots/5.png" width="48%" />
-</p>
