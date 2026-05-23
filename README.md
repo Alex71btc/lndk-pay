@@ -90,12 +90,12 @@ Repository:
 
 ## Requirements
 
-- LND BOLT12 (`lndbolt`)
+- official Startos LND package 
 - onion messaging enabled
 
-## Install LND BOLT12
+## Install LND 
 
-👉 https://github.com/Alex71btc/lnd-startos-bolt12
+https://github.com/Start9Labs/lnd-startos/releases
 
 ## Remote Access (recommended)
 
