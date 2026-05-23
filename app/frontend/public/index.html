@@ -1291,7 +1291,7 @@ async function saveSetup() {
     }
 
 function renderAliasList(items) {
-  const lang = localStorage.getItem('app_lang') || 'de';
+  const lang = getLang();
   const L = lang === 'en'
     ? {
         no_aliases: 'No aliases created yet.',
@@ -1444,7 +1444,7 @@ function renderAliasList(items) {
       }
 
       createAliasBtn.disabled = true;
-      createAliasBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Creating...' : 'Lege an...';
+      createAliasBtn.textContent = getLang() === 'en' ? 'Creating...' : 'Lege an...';
 
       try {
         const response = await fetch('/api/alias', {
@@ -1475,7 +1475,7 @@ function renderAliasList(items) {
         setStatus(`Alias-Fehler: ${error?.message || error}`, 'error', true);
       } finally {
         createAliasBtn.disabled = false;
-        createAliasBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Create alias' : 'Alias anlegen';
+        createAliasBtn.textContent = getLang() === 'en' ? 'Create alias' : 'Alias anlegen';
       }
     }
 
@@ -1602,7 +1602,7 @@ function renderAliasList(items) {
       }
 
       createInvoiceBtn.disabled = true;
-      createInvoiceBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Creating...' : 'Erzeuge...';
+      createInvoiceBtn.textContent = getLang() === 'en' ? 'Creating...' : 'Erzeuge...';
 
       try {
         const response = await fetch('/api/create-invoice', {
@@ -1633,7 +1633,7 @@ function renderAliasList(items) {
         setStatus(`Invoice-Fehler: ${error?.message || error}`, 'error', true);
       } finally {
         createInvoiceBtn.disabled = false;
-        createInvoiceBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Create BOLT11 invoice' : 'BOLT11 Rechnung erzeugen';
+        createInvoiceBtn.textContent = getLang() === 'en' ? 'Create BOLT11 invoice' : 'BOLT11 Rechnung erzeugen';
       }
     }
 
@@ -1868,7 +1868,10 @@ document.addEventListener('click', function (e) {
       }
 
       createOfferBtn.disabled = true;
-      createOfferBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Creating...' : 'Erzeuge...';
+      createOfferBtn.textContent =
+        getLang() === 'en'
+          ? 'Creating...'
+          : 'Erzeuge...';
       tStatus('toast.creating_offer', 'warn');
 
       try {
@@ -1897,7 +1900,7 @@ document.addEventListener('click', function (e) {
         setStatus(`Fehler: ${error?.message || error}`, 'error', true);
       } finally {
         createOfferBtn.disabled = false;
-        createOfferBtn.textContent = (localStorage.getItem('app_lang') || 'de') === 'en' ? 'Create offer' : 'Offer erzeugen';
+        createOfferBtn.textContent = getLang() === 'en' ? 'Create offer' : 'Offer erzeugen';
       }
     });
 invoiceBox.addEventListener('click', async () => {
@@ -2036,10 +2039,14 @@ installBtn.addEventListener('click', async () => {
 
   const KEY = "app_lang";
 
-  function getLang() {
-    return localStorage.getItem(KEY) || "de";
+  function detectBrowserLanguage() {
+    const nav = navigator.language || navigator.userLanguage || "en";
+    return nav.toLowerCase().startsWith("de") ? "de" : "en";
   }
 
+  window.getLang = function () {
+    return localStorage.getItem(KEY) || detectBrowserLanguage();
+  }
   function allLangButtons() {
     return [
       ["langBtnDe", "de"],
@@ -2296,7 +2303,7 @@ installBtn.addEventListener('click', async () => {
   };
 
   function t(key) {
-    const lang = localStorage.getItem("app_lang") || "de";
+    const lang = getLang();
     return (I18N[lang] && I18N[lang][key]) || key;
   }
 
@@ -2373,9 +2380,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeBlock1Installed = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   const T = {
     de: {
       quick_amount: "Schnellauswahl",
@@ -2514,9 +2520,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeBlock2Bolt11Installed = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   const T = {
     de: {
       title: "BOLT11 Kompatibilitätsmodus",
@@ -2649,9 +2654,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeBlock1HintFixInstalled = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   const T = {
     de: {
       quick_amount: "Schnellauswahl",
@@ -2715,9 +2719,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeQuickAmountInstalled = true;
 
   function quickLang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   const QUICK_T = {
     de: {
       label: "Schnellauswahl",
@@ -2773,9 +2776,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeLnurlInstalled = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   const T = {
     de: {
       optional: "LNURL Fallback (optional)",
@@ -2875,9 +2877,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeAliasStaticInstalled = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   const T = {
     de: {
       title: "Alias Manager",
@@ -3001,9 +3002,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeAliasListInstalled = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   const T = {
     de: {
       description: "Beschreibung:",
@@ -3206,9 +3206,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeToastInstalled = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   const T = {
     de: {
       "toast.public_lnurl_loaded": "Public Daten inkl. LNURL geladen.",
@@ -3497,9 +3496,8 @@ window.applyTranslations = function applyTranslations() {
   window.__runtimeFinalI18nInstalled = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
-
   function t(de, en) {
     return lang() === "en" ? en : de;
   }

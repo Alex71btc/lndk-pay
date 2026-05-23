@@ -2867,8 +2867,13 @@ if ('serviceWorker' in navigator) {
 (function () {
   const KEY = "app_lang";
 
+  function detectBrowserLanguage() {
+    const nav = navigator.language || navigator.userLanguage || "en";
+    return nav.toLowerCase().startsWith("de") ? "de" : "en";
+  }
+
   function getLang() {
-    return localStorage.getItem(KEY) || "de";
+    return localStorage.getItem(KEY) || detectBrowserLanguage();
   }
 
   function updateButtons(lang) {
@@ -3368,7 +3373,10 @@ window.addEventListener('load', () => {
     }
   };
   function t(key) {
-    const lang = localStorage.getItem("app_lang") || "de";
+    const lang =
+      localStorage.getItem("app_lang") ||
+      ((navigator.language || "en").toLowerCase().startsWith("de") ? "de" : "en");
+
     return (I18N[lang] && I18N[lang][key]) || key;
   }
 
@@ -3402,7 +3410,7 @@ window.addEventListener('load', () => {
   window.__adminTooltipRuntimeInstalled = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
 
   function patchTitles() {
@@ -3467,9 +3475,9 @@ window.addEventListener('load', () => {
   if (window.__adminQrScannerRuntimeInstalled) return;
   window.__adminQrScannerRuntimeInstalled = true;
 
-  function lang() {
-    return localStorage.getItem("app_lang") || "de";
-  }
+function lang() {
+  return getLang();
+}
 
   const T = {
     de: {
@@ -3570,9 +3578,9 @@ window.addEventListener('load', () => {
   if (window.__adminScannerTextSafePatch) return;
   window.__adminScannerTextSafePatch = true;
 
-  function lang() {
-    return localStorage.getItem("app_lang") || "de";
-  }
+function lang() {
+  return getLang();
+}
 
   function t(de, en) {
     return lang() === "en" ? en : de;

@@ -99,7 +99,7 @@
             let remaining = parseInt(data.retry_after || res.headers.get("Retry-After") || "0", 10);
 
             if (remaining > 0) {
-              const lang = localStorage.getItem("app_lang") || "de";
+              const lang = getLang();
               const originalText = "Login";
 
               const renderLockedMessage = () => {
@@ -136,7 +136,7 @@
 
           msgEl.textContent = (typeof data.detail === "string" && data.detail)
             || (typeof data.error === "string" && data.error)
-            || ((localStorage.getItem("app_lang") || "de") === "en"
+            || (getLang() === "en"
                 ? "Invalid password"
                 : "Ungültiges Passwort");
           loginBtn.disabled = false;
@@ -164,7 +164,7 @@
   window.__payLoginI18nInstalled = true;
 
   function lang() {
-    return localStorage.getItem("app_lang") || "de";
+    return getLang();
   }
 
   const T = {
