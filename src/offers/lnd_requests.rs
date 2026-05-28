@@ -154,7 +154,7 @@ pub(super) async fn track_payment(
 }
 
 pub(super) struct CreateOfferArgs {
-    amount_msats: u64,
+    amount_msats: Option<u64>,
     chain: Network,
     description: Option<String>,
     issuer: Option<String>,
@@ -196,9 +196,14 @@ pub(super) async fn create_offer(
             .await?;
 
     let mut builder =
-        OfferBuilder::deriving_signing_pubkey(node_id, expanded_key, nonce, &secp_ctx)
-            .amount_msats(args.amount_msats)
-            .chain(args.chain);
+    OfferBuilder::deriving_signing_pubkey(node_id, expanded_key, nonce, &secp_ctx)
+        .chain(args.chain);
+
+    builder = if let Some(msats) = args.amount_msats {
+        builder.amount_msats(msats)
+    } else {
+        builder
+    };    
 
     builder = if let Some(path) = paths.first() {
         builder.path(path.clone())
