@@ -2559,11 +2559,11 @@ async def public_index_page():
           <div class="aliasTitle mono">{alias_name}@{get_lnurl_base_domain()}</div>
           <div class="aliasMeta">
             {description}<br />
-            Amount: {amount_label}
+            <span class="amount-label">Amount</span>: {amount_label}
           </div>
           <div class="row">
             <button onclick="window.location.href='/{alias_name}'">Open</button>
-            <button class="secondary" onclick="copyWithToast('{alias_name}@{get_lnurl_base_domain()}', (T[getLang()] || T.en).addressCopied)">Copy address</button>
+            <button class="secondary" data-copy-address="{alias_name}@{get_lnurl_base_domain()}">Copy address</button>
           </div>
         </div>
         """
@@ -2675,6 +2675,9 @@ async def public_index_page():
 </head>
 <body>
 <main class="card">
+  <div id="landingToast"
+       style="display:none;margin-bottom:12px;padding:12px;border-radius:12px;background:#14532d;color:#bbf7d0;text-align:center;">
+  </div>
 
   <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
     <div style="
@@ -2747,7 +2750,10 @@ async def public_index_page():
       openApp: "Open App",
       openPay: "Open Pay",
       setup: "Setup Wizard",
-      empty: "No public aliases available yet."
+      empty: "No public aliases available yet.",
+      copyAddress: "Copy address",
+      addressCopied: "Address copied.",
+      copyFailed: "Copy failed."
     }},
     de: {{
       title: "⚡ Lightning Zahlungen",
@@ -2756,7 +2762,10 @@ async def public_index_page():
       openApp: "App öffnen",
       openPay: "Bezahlen öffnen",
       setup: "Setup Assistent",
-      empty: "Noch keine öffentlichen Aliase vorhanden."
+      empty: "Noch keine öffentlichen Aliase vorhanden.",
+      copyAddress: "Adresse kopieren",
+      addressCopied: "Adresse kopiert.",
+      copyFailed: "Kopieren fehlgeschlagen."
     }}
   }};
 function getLang() {{
@@ -2803,31 +2812,103 @@ function getLang() {{
     }}
   }}
 
-  function applyLang() {{
-    const lang = getLang();
-    const t = T[lang] || T.en;
+ function applyLang() {{
+  const lang = getLang();
+  const t = T[lang] || T.en;
 
-    const title = document.getElementById("landingTitle");
-    const subtitle = document.getElementById("landingSubtitle");
-    const subline = document.getElementById("landingSubline");
-    const openApp = document.getElementById("landingOpenApp");
-    const openPay = document.getElementById("landingOpenPay");
-    const setup = document.getElementById("landingSetup");
+  const title = document.getElementById("landingTitle");
+  const subtitle = document.getElementById("landingSubtitle");
+  const subline = document.getElementById("landingSubline");
+  const openApp = document.getElementById("landingOpenApp");
+  const openPay = document.getElementById("landingOpenPay");
+  const setup = document.getElementById("landingSetup");
 
-    if (title) title.textContent = t.title;
-    if (subtitle) subtitle.textContent = t.subtitle;
-    if (subline) subline.textContent = t.subline;
-    if (openApp) openApp.textContent = t.openApp;
-    if (openPay) openPay.textContent = t.openPay;
-    if (setup) setup.textContent = t.setup;
+  if (title) title.textContent = t.title;
+  if (subtitle) subtitle.textContent = t.subtitle;
+  if (subline) subline.textContent = t.subline;
+  if (openApp) openApp.textContent = t.openApp;
+  if (openPay) openPay.textContent = t.openPay;
+  if (setup) setup.textContent = t.setup;
 
-    const aliasList = document.querySelector(".aliasList");
-    const emptyCard = aliasList ? aliasList.querySelector('[data-empty-alias-list="1"]') : null;
-    if (emptyCard) {{
-      emptyCard.innerHTML = '<div class="aliasMeta">' + t.empty + '</div>';
+  const aliasList = document.querySelector(".aliasList");
+  const emptyCard = aliasList ? aliasList.querySelector('[data-empty-alias-list="1"]') : null;
+  if (emptyCard) {{
+    emptyCard.innerHTML = '<div class="aliasMeta">' + t.empty + '</div>';
+  }}
+
+  document.querySelectorAll("[data-copy-address]").forEach((btn) => {{
+    btn.textContent = t.copyAddress;
+  }});
+
+document.querySelectorAll(".amount-label").forEach((el) => {{
+  el.textContent = lang === "de" ? "Betrag" : "Amount";
+}});
+
+setActive(lang);
+}}
+
+function showLandingToast(message, kind) {{
+  const toast = document.getElementById("landingToast");
+  if (!toast) return;
+
+  toast.textContent = message || "";
+  toast.style.display = "block";
+
+  clearTimeout(window.__landingToastTimer);
+  window.__landingToastTimer = setTimeout(() => {{
+    toast.style.display = "none";
+  }}, 1800);
+}}
+function showLandingToast(message, kind) {{
+  const toast = document.getElementById("landingToast");
+  if (!toast) return;
+
+  toast.textContent = message || "";
+  toast.style.display = "block";
+
+  toast.style.background =
+    kind === "error"
+      ? "rgba(127,29,29,.22)"
+      : "rgba(22,101,52,.22)";
+
+  toast.style.color =
+    kind === "error"
+      ? "#fecaca"
+      : "#86efac";
+
+  clearTimeout(window.__landingToastTimer);
+
+  window.__landingToastTimer = setTimeout(() => {{
+    toast.style.display = "none";
+    toast.textContent = "";
+  }}, 1800);
+}}
+async function copyLandingText(text) {{
+    const value = String(text || "").trim();
+    const t = T[getLang()] || T.en;
+    if (!value) return alert(t.copyFailed);
+
+    try {{
+      if (navigator.clipboard && window.isSecureContext) {{
+        await navigator.clipboard.writeText(value);
+      }} else {{
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (!ok) throw new Error("copy failed");
+      }}
+        showLandingToast(t.addressCopied, "ok");
+    }} catch (e) {{
+        showLandingToast(t.copyFailed, "error");
     }}
-
-    setActive(lang);
   }}
   function applyAliasTooltips() {{
     const t = T[getLang()] || T.en;
@@ -2857,6 +2938,13 @@ function getLang() {{
 
     if (deBtn) deBtn.onclick = function () {{ window.setLang("de"); }};
     if (enBtn) enBtn.onclick = function () {{ window.setLang("en"); }};
+
+    document.querySelectorAll("[data-copy-address]").forEach((btn) => {{
+      btn.onclick = function () {{
+        copyLandingText(btn.dataset.copyAddress);
+      }};
+    }});
+
     applyLang();
   }});
 }})();
