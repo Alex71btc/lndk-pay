@@ -2676,9 +2676,21 @@ async def public_index_page():
 <body>
 <main class="card">
   <div id="landingToast"
-       style="display:none;margin-bottom:12px;padding:12px;border-radius:12px;background:#14532d;color:#bbf7d0;text-align:center;">
+     style="
+       display:none;
+       margin-bottom:16px;
+       padding:12px 16px;
+       border-radius:16px;
+       border:1px solid rgba(74,222,128,.18);
+       background:rgba(22,101,52,.22);
+       color:#86efac;
+       text-align:center;
+       backdrop-filter:blur(12px);
+       -webkit-backdrop-filter:blur(12px);
+       box-shadow:0 4px 18px rgba(0,0,0,.18);
+       font-weight:500;
+     ">
   </div>
-
   <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
     <div style="
       display:inline-flex;
