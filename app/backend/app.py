@@ -2671,14 +2671,33 @@ async def public_index_page():
       color: #eef2ff;
       border-color: #26324a;
     }}
+.landingToast {{
+  display: none;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(143,227,136,.35);
+  background: rgba(143,227,136,.10);
+  color: #8fe388;
+  text-align: center;
+  font-size: .95rem;
+  line-height: 1.4;
+}}
+
+.landingToast.show {{
+  display: block;
+}}
+
+.landingToast.error {{
+  border-color: rgba(255,123,114,.35);
+  background: rgba(255,123,114,.10);
+  color: #ff7b72;
+}}
   </style>
 </head>
 <body>
 <main class="card">
-  <div id="landingToast"
-       style="display:none;margin-bottom:12px;padding:12px;border-radius:12px;background:#14532d;color:#bbf7d0;text-align:center;">
-  </div>
-
+<div id="landingToast" class="landingToast"></div>
   <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
     <div style="
       display:inline-flex;
@@ -2851,11 +2870,17 @@ function showLandingToast(message, kind) {{
   const toast = document.getElementById("landingToast");
   if (!toast) return;
 
+  const toastKind = kind || "ok";
+
   toast.textContent = message || "";
+  toast.className = "landingToast show " + toastKind;
   toast.style.display = "block";
 
   clearTimeout(window.__landingToastTimer);
+
   window.__landingToastTimer = setTimeout(() => {{
+    toast.className = "landingToast";
+    toast.textContent = "";
     toast.style.display = "none";
   }}, 1800);
 }}
@@ -2865,16 +2890,6 @@ function showLandingToast(message, kind) {{
 
   toast.textContent = message || "";
   toast.style.display = "block";
-
-  toast.style.background =
-    kind === "error"
-      ? "rgba(127,29,29,.22)"
-      : "rgba(22,101,52,.22)";
-
-  toast.style.color =
-    kind === "error"
-      ? "#fecaca"
-      : "#86efac";
 
   clearTimeout(window.__landingToastTimer);
 
