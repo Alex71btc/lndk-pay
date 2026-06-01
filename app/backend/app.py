@@ -2562,7 +2562,7 @@ async def public_index_page():
             <span class="amount-label">Amount</span>: {amount_label}
           </div>
           <div class="row">
-            <button onclick="window.location.href='/{alias_name}'">Open</button>
+            <button onclick="window.open('/alias/{alias_name}', '_blank')">Open</button>
             <button class="secondary" data-copy-address="{alias_name}@{get_lnurl_base_domain()}">Copy address</button>
           </div>
         </div>
@@ -3453,14 +3453,10 @@ def icon_svg() -> FileResponse:
         raise HTTPException(status_code=404, detail="icon.svg not found")
     return FileResponse(file, media_type="image/svg+xml")
 
-@app.get("/alias/{alias_name}", response_class=HTMLResponse)
-async def public_alias_page_new(alias_name: str):
-    return await public_alias_page(alias_name)	
-
 from fastapi.responses import RedirectResponse
 
-@app.get("/{alias_name}")
-async def legacy_alias_redirect(alias_name: str):
+@app.get("/alias/{alias_name}", response_class=HTMLResponse)
+async def public_alias_page(alias_name: str):
 
     reserved_paths = {
         "admin",
@@ -3491,6 +3487,7 @@ async def legacy_alias_redirect(alias_name: str):
 
     if alias_name not in aliases:
         return HTMLResponse("<h1>Alias not found</h1>", status_code=404)
+
 
     alias = aliases[alias_name]
 
@@ -4136,6 +4133,32 @@ async function payBolt11Invoice() {{
 """
     return HTMLResponse(html)
 
+@app.get("/{alias_name}")
+async def legacy_alias_redirect(alias_name: str):
+
+    reserved_paths = {
+        "admin",
+        "pay",
+        "app",
+        "links",
+        "api",
+        "favicon.ico",
+        "service-worker.js",
+        "public.webmanifest",
+        "pay.webmanifest",
+        "admin.webmanifest",
+        "icon.svg",
+        "static",
+        "alias",
+    }
+
+    if alias_name in reserved_paths:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    return RedirectResponse(
+        url=f"/alias/{alias_name}",
+        status_code=301,
+    )
 # --- Minimal self-tests -----------------------------------------------------
 def _test_extract_offer() -> None:
     sample = 'Offer: CreateOfferResponse { offer: "lno1example123" }.'
