@@ -2057,7 +2057,10 @@ def setup_status(request: StarletteRequest):
     }
 
 @app.get("/api/setup/config")
-def get_setup_config():
+def get_setup_config(request: StarletteRequest):
+    if _is_pay_ui_enabled():
+        require_pay_auth(request)
+
     return load_config()
 
 from fastapi.staticfiles import StaticFiles
@@ -2065,7 +2068,10 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/assets", StaticFiles(directory="/app/assets"), name="assets")
 
 @app.post("/api/setup/config")
-def set_setup_config(payload: dict):
+def set_setup_config(payload: dict, request: StarletteRequest):
+    if _is_pay_ui_enabled():
+        require_pay_auth(request)
+
     cfg = load_config()
 
     safe_payload = dict(payload or {})
@@ -2330,6 +2336,7 @@ async def pay_lnurl(payload: PayLnurlRequest) -> PayOfferResponse:
 
 @app.post("/api/cloudflare/create-bip353")
 async def create_cloudflare_bip353(req: CloudflareBIP353Request, request: StarletteRequest):
+    require_pay_auth(request)
     _require_csrf(request)
     _check_cloudflare_rate_limit(request)
     record_name = req.record_name.strip().lower()
@@ -2359,7 +2366,8 @@ async def create_cloudflare_bip353(req: CloudflareBIP353Request, request: Starle
     }
 
 @app.get("/api/alias")
-def list_aliases():
+def list_aliases(request: StarletteRequest):
+    require_pay_auth(request)
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
@@ -2381,7 +2389,8 @@ async def qr_code(value: str):
     return Response(buf.getvalue(), media_type="image/png")
 
 @app.post("/api/alias", response_model=AliasResponse)
-def create_alias(payload: AliasCreateRequest):
+def create_alias(payload: AliasCreateRequest, request: StarletteRequest):
+    require_pay_auth(request)
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
@@ -2466,7 +2475,8 @@ async def create_invoice(payload: CreateInvoiceRequest, request: StarletteReques
     )
 
 @app.post("/api/alias/{name}/publish", response_model=AliasResponse)
-async def publish_alias(name: str):
+async def publish_alias(name: str, request: StarletteRequest):
+    require_pay_auth(request)
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
@@ -2505,7 +2515,8 @@ async def publish_alias(name: str):
     from fastapi.responses import HTMLResponse
 
 @app.post("/api/alias/{name}/refresh-offer", response_model=AliasResponse)
-async def refresh_alias_offer(name: str):
+async def refresh_alias_offer(name: str, request: StarletteRequest):
+    require_pay_auth(request)
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
