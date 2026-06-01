@@ -3453,8 +3453,15 @@ def icon_svg() -> FileResponse:
         raise HTTPException(status_code=404, detail="icon.svg not found")
     return FileResponse(file, media_type="image/svg+xml")
 
-@app.get("/{alias_name}", response_class=HTMLResponse)
-async def public_alias_page(alias_name: str):
+@app.get("/alias/{alias_name}", response_class=HTMLResponse)
+async def public_alias_page_new(alias_name: str):
+    return await public_alias_page(alias_name)	
+
+from fastapi.responses import RedirectResponse
+
+@app.get("/{alias_name}")
+async def legacy_alias_redirect(alias_name: str):
+
     reserved_paths = {
         "admin",
         "pay",
@@ -3468,6 +3475,7 @@ async def public_alias_page(alias_name: str):
         "admin.webmanifest",
         "icon.svg",
         "static",
+        "alias",
     }
 
     if alias_name in reserved_paths:
