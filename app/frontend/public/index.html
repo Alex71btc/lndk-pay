@@ -588,31 +588,28 @@ protocol.custom-init=39</pre>
   <span data-i18n="setup.copyUmbrelConfig">Copy Umbrel config</span>
 </button>
 
-<div class="bolt12-onion-warning__text">
+<br>
+
+<div class="bolt12-onion-warning__text" style="margin-top:12px;">
   <strong>StartOS:</strong>
   <span data-i18n="setup.onionWarningStartOS"></span>
 </div>
 
-<pre class="bolt12-onion-warning__code">sudo nano /media/startos/data/package-data/volumes/lnd/data/main/lnd.conf</pre>
-
-<pre class="bolt12-onion-warning__code">protocol.custom-message=513
-protocol.custom-nodeann=39
-protocol.custom-init=39</pre>
+<pre
+  class="bolt12-onion-warning__code"
+  data-i18n="setup.startOSInstructions">
+</pre>
 
 <button
-  type="button"
-  class="btn secondary bolt12-onion-copy-btn"
-  data-copy-label-de="StartOS-Konfiguration kopieren"
-  data-copy-label-en="Copy StartOS config"
-  onclick="copyToClipboard('protocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39').then(() => { this.querySelector('span').textContent = (document.documentElement.lang === 'de' ? 'StartOS-Konfiguration kopiert!' : 'StartOS config copied!'); setTimeout(() => { this.querySelector('span').textContent = (document.documentElement.lang === 'de' ? 'StartOS-Konfiguration kopieren' : 'Copy StartOS config'); }, 2000); })">
-  <span data-i18n="setup.copyStartOSConfig">Copy StartOS config</span>
-</button>
+type="button"
+class="btn secondary bolt12-onion-copy-btn"
+data-copy-label-de="StartOS-Konfiguration kopieren"
+data-copy-label-en="Copy StartOS config"
+onclick="copyToClipboard('protocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39').then(() => { this.querySelector('span').textContent = (document.documentElement.lang === 'de' ? 'StartOS-Konfiguration kopiert!' : 'StartOS config copied!'); setTimeout(() => { this.querySelector('span').textContent = (document.documentElement.lang === 'de' ? 'StartOS-Konfiguration kopieren' : 'Copy StartOS config'); }, 2000); })"> <span data-i18n="setup.copyStartOSConfig">Copy StartOS config</span> </button>
 
-  <div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningRestart">
-    Danach die Lightning Node neu starten.
-  </div>
+<div class="bolt12-onion-warning__text" data-i18n="setup.onionWarningRestart">
+  Danach die Lightning Node neu starten.
 </div>
-
     <section class="section">
       <label class="label" for="setupBolt12Address" data-i18n="setup.label.bolt12_address">Public BOLT12 Address</label>
       <input id="setupBolt12Address" type="text" data-i18n-placeholder="setup.ph.bolt12_address" placeholder="z. B. bolt12@pay.example.com" />
@@ -2176,7 +2173,8 @@ installBtn.addEventListener('click', async () => {
       "setup.onionWarningText": "Damit BOLT12 Offers funktionieren, muss Onion Messaging in LND aktiviert sein.",
       "setup.onionWarningPath": "Füge die folgenden Zeilen am Ende deiner LND-Konfigurationsdatei hinzu:",
       "setup.onionWarningUmbrelFiles": "Öffne Umbrel → Files und navigiere zu:",  
-      "setup.onionWarningStartOS": " Verbinde dich per SSH und öffne:",
+      "setup.startOSInstructions": "start-cli package attach lnd\n\nvi /root/.lnd/lnd.conf\n\nDrücken:\ni    (Einfügemodus)\n\nHinzufügen:\n\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39\n\nSpeichern:\n\nESC\n:wq\nENTER",
+      "setup.onionWarningStartOS": " Verbinde dich per SSH und führe aus:",
       "setup.onionWarningRestart": "Danach Datei speichern und die Lightning Node neu starten. Ohne das funktionieren BOLT12 Offers nicht.",  
       "setup.copyUmbrelConfig": "Umbrel-Konfiguration kopieren",
       "setup.copyStartOSConfig": "StartOS-Konfiguration kopieren",
@@ -2273,10 +2271,11 @@ installBtn.addEventListener('click', async () => {
       "setup.security.text": "If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.",
       "setup.security.routes": "Recommended: protect <span class=\"mono\">/pay</span> and <span class=\"mono\">/pay-login</span>, while keeping required public payment endpoints reachable.",
       "setup.security.link": "→ Open setup guide (Cloudflare Access / Reverse Proxy)",
+      "setup.startOSInstructions": "start-cli package attach lnd\n\nvi /root/.lnd/lnd.conf\n\nPress:\ni    (insert mode)\n\nAdd:\n\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39\n\nSave:\n\nESC\n:wq\nENTER",
       "setup.onionWarningTitle": "⚠️ Important for BOLT12 with LND",
       "setup.onionWarningText": "For BOLT12 offers to work, onion messaging must be enabled in LND.",
       "setup.onionWarningPath": "Add the following lines at the end of your LND configuration file:",
-      "setup.onionWarningStartOS": " Connect via SSH and open:",
+      "setup.onionWarningStartOS": " Connect via SSH and run:",
       "setup.onionWarningUmbrelFiles": "Open Umbrel → Files and navigate to:",
       "setup.onionWarningRestart": "Then save the file and restart your Lightning node. Without this, BOLT12 offers will not work.",
       "setup.copyUmbrelConfig": "Copy Umbrel config",
