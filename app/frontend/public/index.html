@@ -1137,13 +1137,19 @@ function getCookie(name) {
         throw new Error(statusData?.detail || 'Setup-Status konnte nicht geladen werden');
       }
 
-      const configResponse = await fetch('/api/setup/config', { cache: 'no-store' });
-      const configData = await configResponse.json();
+     let configData = {};
 
-      if (!configResponse.ok) {
-        throw new Error(configData?.detail || 'Setup-Konfiguration konnte nicht geladen werden');
+     try {
+       const configResponse = await fetch('/api/setup/config', {
+         cache: 'no-store'
+       });
+
+       if (configResponse.ok) {
+         configData = await configResponse.json();
+        }
+      } catch (e) {
+        console.log('Setup config unavailable', e);
       }
-
       setupBolt12Address.value = configData.public_bolt12_address || '';
       setupLnurlAddress.value = configData.public_lnurl_address || '';
       setupLnurlBaseDomain.value = configData.lnurl_base_domain || '';
