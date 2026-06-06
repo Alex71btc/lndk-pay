@@ -356,8 +356,7 @@ _NOSTR_DEFAULT_RELAYS_RAW = _get_setting(
         "wss://relay.damus.io",
         "wss://nos.lol",
         "wss://relay.getalby.com/v1",
-        "wss://offchain.pub",
-        "wss://relay.alex71btc.com",
+        "wss://offchain.pub"
     ],
 )
 
@@ -378,8 +377,7 @@ TARGET_DEFAULT_NOSTR_RELAYS = [
     "wss://relay.damus.io",
     "wss://nos.lol",
     "wss://relay.getalby.com/v1",
-    "wss://offchain.pub",
-    "wss://relay.alex71btc.com",
+    "wss://offchain.pub"
 ]
 
 
@@ -392,7 +390,10 @@ def _local_normalize_relays(relays):
             value = part.strip()
             if not value:
                 continue
-            if not value.startswith("wss://"):
+            if not (
+                value.startswith("wss://")
+                or value.startswith("ws://")
+            ):
                 continue
             if value in seen:
                 continue
@@ -422,7 +423,10 @@ def _migrate_default_nostr_relays() -> None:
                     value = part.strip()
                     if not value:
                         continue
-                    if not value.startswith("wss://"):
+                    if not (
+                        value.startswith("wss://")
+                        or value.startswith("ws://")
+                    ):
                         continue
                     if value in seen:
                         continue
@@ -4556,7 +4560,10 @@ def _normalize_relays(relays):
             value = part.strip()
             if not value:
                 continue
-            if not value.startswith("wss://"):
+            if not (
+                value.startswith("wss://")
+                or value.startswith("ws://")
+            ):
                 continue
             if value in seen:
                 continue

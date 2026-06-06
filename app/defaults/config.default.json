@@ -5,8 +5,7 @@
       "wss://relay.damus.io",
       "wss://nos.lol",
       "wss://relay.getalby.com/v1",
-      "wss://offchain.pub",
-      "wss://relay.alex71btc.com"
+      "wss://offchain.pub"
     ],
     "zap_poll_interval": 15,
     "name_map": {}
