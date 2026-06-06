@@ -367,9 +367,12 @@ else:
 
 
 OLD_DEFAULT_NOSTR_RELAYS = [
+    "wss://relay.primal.net",
     "wss://relay.damus.io",
     "wss://nos.lol",
-    "wss://relay.primal.net",
+    "wss://relay.getalby.com/v1",
+    "wss://offchain.pub",
+    "wss://relay.alex71btc.com",
 ]
 
 TARGET_DEFAULT_NOSTR_RELAYS = [
@@ -448,9 +451,17 @@ def _migrate_default_nostr_relays() -> None:
         normalized_old = _local_normalize_relays(OLD_DEFAULT_NOSTR_RELAYS)
         normalized_target = _local_normalize_relays(TARGET_DEFAULT_NOSTR_RELAYS)
 
+        changed = False
+
         if not normalized_current or normalized_current == normalized_old:
+            normalized_current = normalized_target
+            changed = True
+
+        
+        if changed:
             cfg.setdefault("nostr", {})
-            cfg["nostr"]["default_relays"] = normalized_target
+            cfg["nostr"]["default_relays"] = normalized_current
+
             CONFIG_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
             CONFIG_JSON_PATH.write_text(
                 json.dumps(cfg, indent=2, ensure_ascii=False) + "\n",
