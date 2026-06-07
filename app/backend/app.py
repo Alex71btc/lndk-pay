@@ -314,7 +314,7 @@ APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/data"))
 CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(APP_DATA_DIR / "config.json")))
 SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
-TX_DB_PATH = DATA_DIR / "bolt12pay.db"
+TX_DB_PATH = APP_DATA_DIR / "bolt12pay.db"
 
 def _load_json_file(path: Path):
     try:
@@ -1267,7 +1267,7 @@ def get_lnurl_base_url():
     return (cfg.get("lnurl_base_url") or "").strip().rstrip("/") or LNURL_BASE_URL
 
 def _tx_db():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(TX_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -1363,7 +1363,9 @@ def _upsert_transaction(
 
 
 def _list_transactions(limit: int = 100):
+
     safe_limit = max(1, min(int(limit or 100), 500))
+
     with _tx_db() as conn:
         rows = conn.execute("""
             SELECT *
@@ -1371,8 +1373,8 @@ def _list_transactions(limit: int = 100):
             ORDER BY timestamp DESC
             LIMIT ?
         """, (safe_limit,)).fetchall()
-        return [dict(row) for row in rows]
 
+    return [dict(row) for row in rows]
 async def _create_bolt11_invoice(
     *,
     amount_sat: int,
