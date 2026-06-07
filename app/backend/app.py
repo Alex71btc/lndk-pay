@@ -1257,6 +1257,56 @@ def _read_macaroon_hex(path: str) -> str:
         raise HTTPException(status_code=500, detail=f"macaroon file not found: {path}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"failed to read macaroon file: {exc}") from exc
+
+async def _fetch_lnd_payments():
+    headers = {
+        "Grpc-Metadata-macaroon": _read_macaroon_hex(LND_MACAROON_PATH)
+    }
+
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+    async with httpx.AsyncClient(timeout=30, verify=verify) as client:
+        response = await client.get(
+            f"{LND_REST_URL}/v1/payments?reversed=true&max_payments=50&include_incomplete=true",
+            headers=headers,
+        )
+
+    response.raise_for_status()
+    return response.json()
+
+async def _sync_lnd_payments():
+    data = await _fetch_lnd_payments()
+
+    for payment in data.get("payments", []):
+        if payment.get("status") != "SUCCEEDED":
+            continue
+
+        _upsert_transaction(
+            payment_hash=payment["payment_hash"],
+            timestamp=int(payment.get("creation_date") or 0),
+            direction="outgoing",
+            payment_type="bolt11",
+            amount_sat=int(payment.get("value_sat") or 0),
+            fee_sat=int(payment.get("fee_sat") or 0),
+            status="settled",
+        )
+
+async def _fetch_lnd_invoices():
+    headers = {
+        "Grpc-Metadata-macaroon": _read_macaroon_hex(LND_MACAROON_PATH)
+    }
+
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+    async with httpx.AsyncClient(timeout=30, verify=verify) as client:
+        response = await client.get(
+            f"{LND_REST_URL}/v1/invoices",
+            headers=headers,
+        )
+
+    response.raise_for_status()
+    return response.json()
+
 def get_lnurl_base_domain():
     cfg = load_config()
     return (cfg.get("lnurl_base_domain") or "").strip().lower() or LNURL_BASE_DOMAIN
@@ -2034,6 +2084,18 @@ def lnurl_for_address(address: str) -> LnurlInfoResponse:
         lnurlp_url=lnurlp_url,
     )
 
+@app.get("/api/debug/lnd-payments")
+async def debug_lnd_payments(request: StarletteRequest):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return await _fetch_lnd_payments()
+
+
+@app.get("/api/debug/lnd-invoices")
+async def debug_lnd_invoices(request: StarletteRequest):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return await _fetch_lnd_invoices()
 
 @app.get("/.well-known/lnurlp/{username}", response_model=LnurlPayMetadataResponse)
 def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
@@ -2252,6 +2314,7 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
 
     raw_output = _run_command(args)
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
+
 @app.post("/api/pay-address", response_model=PayOfferResponse)
 async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> PayOfferResponse:
     _require_csrf(request)
@@ -2278,7 +2341,6 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
             indent=2,
             ensure_ascii=False,
         )
-
         return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 
     except HTTPException as exc:
@@ -2296,6 +2358,25 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
         pay_result = await _pay_bolt11_invoice(
             payment_request=lnurl_result["payment_request"],
         )
+        payment_hash = str(pay_result.get("payment_hash") or "").strip()
+
+        if payment_hash:
+            _upsert_transaction(
+                payment_hash=payment_hash,
+                timestamp=_utc_now_ts(),
+                direction="outgoing",
+                payment_type="lnurl",
+                amount_sat=payload.amount_sat,
+                destination=target,
+                memo=payload.payer_note,
+                status="settled",
+                source="bolt12pay",
+                raw_json={
+                    "mode": "lnurl",
+                    "target": target,
+                    "payment_result": pay_result,
+                },
+            )
 
         raw_output = json.dumps(
             {
@@ -2307,12 +2388,13 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
             },
             indent=2,
             ensure_ascii=False,
-        )
+         )
 
         return PayOfferResponse(
             resolved_offer=target,
             raw_output=raw_output,
         )
+
 @app.post("/api/pay-bolt11", response_model=PayOfferResponse)
 async def pay_bolt11(payload: PayBolt11Request) -> PayOfferResponse:
 
@@ -2336,6 +2418,14 @@ async def pay_bolt11(payload: PayBolt11Request) -> PayOfferResponse:
         resolved_offer=invoice,
         raw_output=raw_output,
     )
+
+@app.get("/api/debug/sync-payments")
+async def api_debug_sync_payments(request: StarletteRequest):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    await _sync_lnd_payments()
+    return {"ok": True}
 
 class DecodeBolt11Request(BaseModel):
     invoice: str = Field(min_length=10, description="BOLT11 invoice like lnbc...")
