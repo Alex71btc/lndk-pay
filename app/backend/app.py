@@ -1300,12 +1300,51 @@ async def _fetch_lnd_invoices():
 
     async with httpx.AsyncClient(timeout=30, verify=verify) as client:
         response = await client.get(
-            f"{LND_REST_URL}/v1/invoices",
+            f"{LND_REST_URL}/v1/invoices?num_max_invoices=1000&reversed=true",
             headers=headers,
         )
 
     response.raise_for_status()
     return response.json()
+
+async def _sync_lnd_invoices():
+    data = await _fetch_lnd_invoices()
+
+    for inv in data.get("invoices", []):
+        if not inv.get("settled"):
+            continue
+        print(
+            "SYNC INVOICE",
+            inv.get("memo"),
+            inv.get("settled"),
+            inv.get("r_hash"),
+            inv.get("amt_paid_sat"),
+            flush=True,
+        )
+
+        payment_hash = str(inv.get("r_hash") or "").strip()
+
+        if not payment_hash:
+            continue
+
+        print(
+            "UPSERT INVOICE",
+            payment_hash,
+            inv.get("amt_paid_sat"),
+            flush=True,
+        )
+        _upsert_transaction(
+            payment_hash=payment_hash,
+            timestamp=int(inv.get("settle_date") or inv.get("creation_date") or 0),
+            direction="incoming",
+            payment_type="bolt11",
+            amount_sat=int(inv.get("amt_paid_sat") or inv.get("value") or 0),
+            memo=inv.get("memo"),
+            status="settled",
+            source="lnd",
+            raw_json=inv,
+        )
+
 
 def get_lnurl_base_domain():
     cfg = load_config()
@@ -2096,6 +2135,11 @@ async def debug_lnd_invoices(request: StarletteRequest):
     if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
     return await _fetch_lnd_invoices()
+
+@app.get("/api/debug/sync-invoices")
+async def api_debug_sync_invoices():
+    await _sync_lnd_invoices()
+    return {"ok": True}
 
 @app.get("/.well-known/lnurlp/{username}", response_model=LnurlPayMetadataResponse)
 def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
