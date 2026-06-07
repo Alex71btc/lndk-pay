@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse, quote
 
+import sqlite3
+from datetime import datetime, timezone
 import dns.exception
 import dns.resolver
 import httpx
@@ -312,7 +314,7 @@ APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/data"))
 CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(APP_DATA_DIR / "config.json")))
 SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
-
+TX_DB_PATH = DATA_DIR / "bolt12pay.db"
 
 def _load_json_file(path: Path):
     try:
@@ -1263,6 +1265,113 @@ def get_lnurl_base_domain():
 def get_lnurl_base_url():
     cfg = load_config()
     return (cfg.get("lnurl_base_url") or "").strip().rstrip("/") or LNURL_BASE_URL
+
+def _tx_db():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(TX_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _init_tx_db():
+    with _tx_db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                payment_hash TEXT PRIMARY KEY,
+                timestamp INTEGER NOT NULL,
+                direction TEXT NOT NULL,
+                payment_type TEXT,
+                amount_sat INTEGER,
+                fee_sat INTEGER,
+                alias TEXT,
+                destination TEXT,
+                memo TEXT,
+                status TEXT,
+                source TEXT DEFAULT 'lnd',
+                raw_json TEXT,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_transactions_timestamp
+            ON transactions(timestamp)
+        """)
+
+
+def _utc_now_ts() -> int:
+    return int(datetime.now(timezone.utc).timestamp())
+
+
+def _upsert_transaction(
+    *,
+    payment_hash: str,
+    timestamp: int | None,
+    direction: str,
+    payment_type: str | None = None,
+    amount_sat: int | None = None,
+    fee_sat: int | None = None,
+    alias: str | None = None,
+    destination: str | None = None,
+    memo: str | None = None,
+    status: str | None = None,
+    source: str = "lnd",
+    raw_json: dict | None = None,
+):
+    payment_hash = (payment_hash or "").strip()
+    if not payment_hash:
+        return
+
+    now = _utc_now_ts()
+    ts = int(timestamp or now)
+
+    with _tx_db() as conn:
+        conn.execute("""
+            INSERT INTO transactions (
+                payment_hash, timestamp, direction, payment_type,
+                amount_sat, fee_sat, alias, destination, memo,
+                status, source, raw_json, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(payment_hash) DO UPDATE SET
+                timestamp = COALESCE(excluded.timestamp, transactions.timestamp),
+                direction = COALESCE(excluded.direction, transactions.direction),
+                payment_type = COALESCE(excluded.payment_type, transactions.payment_type),
+                amount_sat = COALESCE(excluded.amount_sat, transactions.amount_sat),
+                fee_sat = COALESCE(excluded.fee_sat, transactions.fee_sat),
+                alias = COALESCE(excluded.alias, transactions.alias),
+                destination = COALESCE(excluded.destination, transactions.destination),
+                memo = COALESCE(excluded.memo, transactions.memo),
+                status = COALESCE(excluded.status, transactions.status),
+                source = COALESCE(excluded.source, transactions.source),
+                raw_json = COALESCE(excluded.raw_json, transactions.raw_json),
+                updated_at = excluded.updated_at
+        """, (
+            payment_hash,
+            ts,
+            direction,
+            payment_type,
+            amount_sat,
+            fee_sat,
+            alias,
+            destination,
+            memo,
+            status,
+            source,
+            json.dumps(raw_json, separators=(",", ":"), ensure_ascii=False) if raw_json else None,
+            now,
+        ))
+
+
+def _list_transactions(limit: int = 100):
+    safe_limit = max(1, min(int(limit or 100), 500))
+    with _tx_db() as conn:
+        rows = conn.execute("""
+            SELECT *
+            FROM transactions
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """, (safe_limit,)).fetchall()
+        return [dict(row) for row in rows]
 
 async def _create_bolt11_invoice(
     *,
@@ -4712,6 +4821,7 @@ async def _zap_publisher_loop():
 
 @app.on_event("startup")
 async def startup_background_tasks():
+    _init_tx_db()
     app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
     app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
     print("zap publisher loop started", flush=True)
@@ -4723,6 +4833,11 @@ async def api_admin_nostr_status(request: StarletteRequest):
         raise HTTPException(status_code=401, detail="Authentication required")
     return _get_nostr_admin_status()
 
+@app.get("/api/tx-history")
+async def api_tx_history(request: StarletteRequest, limit: int = 100):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return {"transactions": _list_transactions(limit)}
 
 
 def load_secrets() -> dict:
