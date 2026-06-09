@@ -83,7 +83,8 @@ Umbrel authentication may redirect authenticated app routes back to:
 
 Public payment/discovery endpoints remain usable over the public HTTPS domain, but browser features that require a secure HTTPS context, such as QR camera scanning or PWA installation, may only work reliably when the page remains on the public HTTPS origin.
 
-For best public payment functional
+For best public payment functionality, use the public domain for LNURL, BIP353 and public payment endpoints.
+
 ---
 
 # 🟢 StartOS Setup (Recommended)
@@ -162,5 +163,4 @@ BOLT12 Pay is now officially available in the Start9 Community Registry.
 
 MIT
 
-ity, use the public domain for LNURL, BIP353 and public payment endpoints.
 
