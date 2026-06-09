@@ -23,6 +23,15 @@ BOLT12 Pay requires a Lightning node with BOLT12 support.
 
 ---
 
+## Official app availability
+
+BOLT12 Pay is officially available on:
+
+- Umbrel App Store
+- StartOS Community Registry / Marketplace
+
+---
+
 # 🟣 Umbrel Setup (Manual LND Config REQUIRED)
 
 BOLT12 requires onion messaging support in LND.
@@ -54,6 +63,27 @@ protocol.custom-init=39
 from the official app-store, search for `BOLT12 Pay`  
  (Repo: https://github.com/getumbrel/umbrel-apps/tree/master/bolt12-pay)
 
+## Umbrel + Cloudflare Tunnel note
+
+When exposing BOLT12 Pay on Umbrel through Cloudflare Tunnel, route your public domain to:
+
+    http://umbrel.local:8367
+
+In Cloudflare Tunnel HTTP settings, set:
+
+    HTTP Host Header: umbrel.local
+
+This helps Umbrel route authenticated app access correctly.
+
+Important limitation:
+
+Umbrel authentication may redirect authenticated app routes back to:
+
+    http://umbrel.local:8367
+
+Public payment/discovery endpoints remain usable over the public HTTPS domain, but browser features that require a secure HTTPS context, such as QR camera scanning or PWA installation, may only work reliably when the page remains on the public HTTPS origin.
+
+For best public payment functional
 ---
 
 # 🟢 StartOS Setup (Recommended)
@@ -132,32 +162,5 @@ BOLT12 Pay is now officially available in the Start9 Community Registry.
 
 MIT
 
-## Official app availability
-
-BOLT12 Pay is officially available on:
-
-- Umbrel App Store
-- StartOS Community Registry / Marketplace
-
-## Umbrel + Cloudflare Tunnel note
-
-When exposing BOLT12 Pay on Umbrel through Cloudflare Tunnel, route your public domain to:
-
-    http://umbrel.local:8367
-
-In Cloudflare Tunnel HTTP settings, set:
-
-    HTTP Host Header: umbrel.local
-
-This helps Umbrel route authenticated app access correctly.
-
-Important limitation:
-
-Umbrel authentication may redirect authenticated app routes back to:
-
-    http://umbrel.local:8367
-
-Public payment/discovery endpoints remain usable over the public HTTPS domain, but browser features that require a secure HTTPS context, such as QR camera scanning or PWA installation, may only work reliably when the page remains on the public HTTPS origin.
-
-For best public payment functionality, use the public domain for LNURL, BIP353 and public payment endpoints.
+ity, use the public domain for LNURL, BIP353 and public payment endpoints.
 
