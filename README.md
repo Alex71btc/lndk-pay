@@ -29,16 +29,11 @@ BOLT12 requires onion messaging support in LND.
 
 This must be enabled manually.
 
-## Step 1 — Connect to Umbrel
+## Step 1 — Edit LND config
 
-```bash
-ssh umbrel@umbrel.local
+Open Umbrel → Files and navigate to:
 ```
-
-## Step 2 — Edit LND config
-
-```bash
-nano ~/umbrel/app-data/lightning/data/lnd/lnd.conf
+Apps → lightning → data → lnd → lnd.conf
 ```
 
 ## Step 3 — Add this
@@ -50,17 +45,14 @@ protocol.custom-nodeann=39
 protocol.custom-init=39
 ```
 
-## Step 4 — Restart Lightning
-
-```bash
-sudo reboot
-```
+## Step 4 — Restart Lightning Node app
 
 ⚠️ Without this, BOLT12 will NOT work.
 
 ## Step 5 — Install BOLT12 Pay
 
-👉 https://github.com/Alex71btc/umbrel-community-store
+from the official app-store, search for `BOLT12 Pay`  
+ (Repo: https://github.com/getumbrel/umbrel-apps/tree/master/bolt12-pay)
 
 ---
 
@@ -139,3 +131,33 @@ BOLT12 Pay is now officially available in the Start9 Community Registry.
 # 🧾 License
 
 MIT
+
+## Official app availability
+
+BOLT12 Pay is officially available on:
+
+- Umbrel App Store
+- StartOS Community Registry / Marketplace
+
+## Umbrel + Cloudflare Tunnel note
+
+When exposing BOLT12 Pay on Umbrel through Cloudflare Tunnel, route your public domain to:
+
+    http://umbrel.local:8367
+
+In Cloudflare Tunnel HTTP settings, set:
+
+    HTTP Host Header: umbrel.local
+
+This helps Umbrel route authenticated app access correctly.
+
+Important limitation:
+
+Umbrel authentication may redirect authenticated app routes back to:
+
+    http://umbrel.local:8367
+
+Public payment/discovery endpoints remain usable over the public HTTPS domain, but browser features that require a secure HTTPS context, such as QR camera scanning or PWA installation, may only work reliably when the page remains on the public HTTPS origin.
+
+For best public payment functionality, use the public domain for LNURL, BIP353 and public payment endpoints.
+
