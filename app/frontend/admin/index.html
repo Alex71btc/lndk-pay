@@ -2494,11 +2494,14 @@ async function payBolt11Flow() {
   setStatus(`${window.__t('toast.paying_invoice')} ${invoice.slice(0, 64)}${invoice.length > 64 ? '…' : ''}`, 'warn');
 
   try {
-    const response = await fetch('/api/pay-bolt11', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoice })
-    });
+const response = await fetch('/api/pay-bolt11', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': getCookie('csrf_token')
+  },
+  body: JSON.stringify({ invoice })
+});
 const data = await readJsonOrThrow(response);
 const parsed = safeJsonParse(data?.raw_output);
 
