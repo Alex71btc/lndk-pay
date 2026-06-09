@@ -2129,6 +2129,7 @@ def decode_offer(payload: DecodeRequest) -> DecodeResponse:
 
 @app.post("/api/pay-offer", response_model=PayOfferResponse)
 def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferResponse:
+    require_pay_auth(request)
     _require_csrf(request)
     if not ALLOW_PAY_OFFER:
         raise HTTPException(status_code=403, detail="pay-offer endpoint is disabled")
@@ -2143,6 +2144,7 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 @app.post("/api/pay-address", response_model=PayOfferResponse)
 async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> PayOfferResponse:
+    require_pay_auth(request)
     _require_csrf(request)
     target = payload.target.strip()
     if not target:
@@ -2203,7 +2205,9 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
             raw_output=raw_output,
         )
 @app.post("/api/pay-bolt11", response_model=PayOfferResponse)
-async def pay_bolt11(payload: PayBolt11Request) -> PayOfferResponse:
+async def pay_bolt11(payload: PayBolt11Request, request: StarletteRequest) -> PayOfferResponse:
+    require_pay_auth(request)
+    _require_csrf(request)
 
     invoice = payload.invoice.strip()
     if not invoice:
@@ -2239,7 +2243,12 @@ class PayLnurlRequest(BaseModel):
     comment: Optional[str] = None
 
 @app.post("/api/preview-pay-target")
-async def preview_pay_target(payload: PreviewPayTargetRequest):
+async def preview_pay_target(
+    payload: PreviewPayTargetRequest,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+
     target = payload.target.strip()
     if not target:
         raise HTTPException(status_code=400, detail="target required")
@@ -2322,7 +2331,10 @@ async def preview_pay_target(payload: PreviewPayTargetRequest):
     }
 
 @app.post("/api/pay-lnurl", response_model=PayOfferResponse)
-async def pay_lnurl(payload: PayLnurlRequest) -> PayOfferResponse:
+async def pay_lnurl(payload: PayLnurlRequest, request: StarletteRequest) -> PayOfferResponse:
+    require_pay_auth(request)
+    _require_csrf(request)
+
     result = await _resolve_lnurl_bech32_invoice(
         lnurl=payload.lnurl,
         amount_sat=payload.amount_sat,
