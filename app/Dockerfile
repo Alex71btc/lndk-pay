@@ -1,4 +1,4 @@
-FROM alex71btc/lndk:stable-good-20260401 AS lndkbin
+FROM alex71btc/lndk:amountless-fix as lndkbin
 
 FROM python:3.12-slim
 
