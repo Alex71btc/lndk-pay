@@ -579,7 +579,7 @@ main.card .headerRow {
         <h2><span data-i18n="title.create">Offer erzeugen</span></h2>
 
         <label class="label" for="amountInput"><span data-i18n="label.min">Mindestbetrag in sats</span></label>
-        <input id="amountInput" type="number" min="1" step="1" data-i18n-placeholder="ph.min_amount" placeholder="Leer = Backend nutzt 1 sat" />
+        <input id="amountInput" type="number" min="1" step="1" data-i18n-placeholder="ph.min_amount" placeholder="Leer = Backend verwendet 1 Sat" />
 
         <label class="label" for="messageInput" style="margin-top:14px;"><span data-i18n="label.desc">Beschreibung / Label</span></label>
         <input id="messageInput" type="text" data-i18n-placeholder="ph.description" placeholder="z. B. coffee, tip, donation" />
@@ -2947,7 +2947,7 @@ window.addEventListener('load', () => {
       "ph.decode_target": "lno... oder user@domain",
       "ph.amount": "z. B. 1000",
       "ph.payer_note": "z. B. test",
-      "ph.min_amount": "Leer = Backend nutzt 1 sat",
+      "ph.min_amount": "Leer = Amountless Offer",
       "ph.description": "z. B. coffee, tip, donation",
       "ph.amount_from_invoice": "Betrag kommt aus Invoice",
       "ph.comment_not_for_bolt11": "Kommentar nicht für BOLT11",
@@ -3175,7 +3175,7 @@ window.addEventListener('load', () => {
       "ph.decode_target": "lno... or user@domain",
       "ph.amount": "e.g. 1000",
       "ph.payer_note": "e.g. test",
-      "ph.min_amount": "Empty = backend uses 1 sat",
+      "ph.min_amount": "Empty = amountless offer",
       "ph.description": "e.g. coffee, tip, donation",
       "ph.amount_from_invoice": "Amount comes from invoice",
       "ph.comment_not_for_bolt11": "Comment not available for BOLT11",

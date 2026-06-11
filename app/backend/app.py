@@ -497,7 +497,7 @@ class OfferRequest(BaseModel):
     amount: Optional[int] = Field(
         default=None,
         ge=1,
-        description="Minimum amount in sats. If omitted, backend uses 1 sat.",
+        description="Minimum amount in sats. Leave empty for an amountless offer."
     )
     description: str = Field(default="bolt12@example.com", min_length=1, max_length=200)
     issuer: Optional[str] = Field(default=None, max_length=120)
@@ -1724,9 +1724,8 @@ def _build_alias_response(name: str, alias_data: dict[str, Any]) -> dict[str, An
 def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
     args = _base_command() + ["create-offer", "--description", payload.description]
 
-    effective_amount_sat = payload.amount if payload.amount is not None else 1
-    args += ["--amount", str(effective_amount_sat * 1000)]
-
+    if payload.amount is not None:
+        args += ["--amount", str(payload.amount * 1000)]
     if payload.issuer:
         args += ["--issuer", payload.issuer]
     if payload.expiry is not None:
