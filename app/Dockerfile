@@ -1,4 +1,4 @@
-FROM alex71btc/lndk:amountless-fix as lndkbin
+FROM alex71btc/lndk:amountless-fix-v2 AS lndkbin
 
 FROM python:3.12-slim
 
