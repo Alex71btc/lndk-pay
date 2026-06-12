@@ -154,56 +154,55 @@ Many setup issues are caused by confusion between:
 - BIP353 (Lightning Address) Domain
 - LNURL Domain
 
-Recommended structure:
-
-```text
-Cloudflare Zone
-└── yourdomain.com
-    ├── bolt12@yourdomain.com
-    └── pay.yourdomain.com
-         └── lnurl@pay.yourdomain.com
-```
-
 ---
 
-## BIP353 (Lightning Address)
+## Recommended Setup (Simple)
 
-Use your root domain:
+BOLT12 Pay can serve both BIP353 and LNURL from the same domain.
 
-```text
-bolt12@yourdomain.com
-```
-
-Examples:
+For most users this is the recommended configuration:
 
 ```text
-bolt12@yourdomain.com
-donations@yourdomain.com
-tips@yourdomain.com
-```
+Cloudflare Zone:
+yourdomain.com
 
-BOLT12 Pay automatically creates the required DNS records inside your Cloudflare zone.
-
-Recommended:
-
-```text
 BOLT12 Address:
 bolt12@yourdomain.com
+
+LNURL Address:
+sats@yourdomain.com
+
+LNURL Base Domain:
+yourdomain.com
+
+LNURL Base URL:
+https://yourdomain.com
 ```
+
+Advantages:
+
+- simpler setup
+- cleaner Lightning addresses
+- fewer DNS records
+- easier Cloudflare configuration
+- less maintenance
 
 ---
 
-## LNURL
+## Optional: Dedicated LNURL Subdomain
 
-For LNURL it is recommended to use a dedicated subdomain:
-
-```text
-lnurl@pay.yourdomain.com
-```
-
-Recommended configuration:
+Advanced users may choose to host LNURL on a separate subdomain:
 
 ```text
+Cloudflare Zone:
+yourdomain.com
+
+BOLT12 Address:
+bolt12@yourdomain.com
+
+LNURL Address:
+sats@pay.yourdomain.com
+
 LNURL Base Domain:
 pay.yourdomain.com
 
@@ -211,7 +210,14 @@ LNURL Base URL:
 https://pay.yourdomain.com
 ```
 
-This keeps LNURL endpoints separate from your main website and simplifies reverse-proxy and Cloudflare Tunnel setups.
+Reasons to use a dedicated subdomain:
+
+- separate branding
+- separate infrastructure
+- advanced routing setups
+- compatibility testing
+
+This setup is optional and not required.
 
 ---
 
@@ -235,27 +241,6 @@ The Cloudflare Zone is the parent domain that contains all DNS records.
 
 ---
 
-## Recommended Production Setup
-
-```text
-Cloudflare Zone:
-yourdomain.com
-
-BOLT12 Address:
-bolt12@yourdomain.com
-
-LNURL Address:
-lnurl@pay.yourdomain.com
-
-LNURL Base Domain:
-pay.yourdomain.com
-
-LNURL Base URL:
-https://pay.yourdomain.com
-```
-
----
-
 ## Real-world Example
 
 ```text
@@ -266,13 +251,13 @@ BOLT12 Address:
 bolt12@alex71btc.com
 
 LNURL Address:
-lnurl@pay.alex71btc.com
+sats@alex71btc.com
 
 LNURL Base Domain:
-pay.alex71btc.com
+alex71btc.com
 
 LNURL Base URL:
-https://pay.alex71btc.com
+https://alex71btc.com
 ```
 
 ---
@@ -285,21 +270,15 @@ https://pay.alex71btc.com
 
 ---
 
-❌ BOLT12 Address = bolt12@pay.yourdomain.com
+❌ LNURL Base URL = http://yourdomain.com
 
-✅ BOLT12 Address = bolt12@yourdomain.com
-
----
-
-❌ LNURL Base URL = http://pay.yourdomain.com
-
-✅ LNURL Base URL = https://pay.yourdomain.com
+✅ LNURL Base URL = https://yourdomain.com
 
 ---
 
-❌ Using the same domain for everything without understanding the DNS structure
+✅ Using the same domain for BIP353 and LNURL is fully supported
 
-✅ Use the root domain for BIP353 and a dedicated subdomain for LNURL
+✅ A dedicated LNURL subdomain is optional
 
 ---
 
