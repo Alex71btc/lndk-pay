@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   lndk:
-    image: alex71btc/lndk:amountless-fix@sha256:f7a237a131f4b1950e7650692954db865b42ec492348936726871f65b1c1d2e3
+    image: alex71btc/lndk:amountless-fix-v2@sha256:dcace5e9c90c4dfe26c85979f373ecebfafdf0a56b494e22fd5abe7fb731987e
     container_name: lndk
     restart: unless-stopped
 
