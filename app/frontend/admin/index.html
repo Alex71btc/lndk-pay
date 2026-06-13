@@ -2315,7 +2315,9 @@ if (action === 'show-qr') {
         setCurrentOffer(data.offer);
         renderOfferQr(data.offer);
 
-        const amountText = amountValue ? `${amountValue} sats min` : '1 sat default';
+        const amountText = amountValue
+          ? `${amountValue} sats min`
+          : 'Amountless offer';
         addHistoryItem({
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           offer: data.offer,
