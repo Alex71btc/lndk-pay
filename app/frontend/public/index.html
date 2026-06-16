@@ -316,6 +316,58 @@
       margin-top: 16px;
     }
 
+    .paymentModeLabel {
+      margin-top: 14px;
+      margin-bottom: 6px;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .paymentModeCards {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .paymentModeCard {
+      position: relative;
+      display: block;
+      padding: 20px 16px 20px 52px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      cursor: pointer;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .paymentModeCard:hover {
+      border-color: var(--accent);
+    }
+
+    .paymentModeCard input[type="radio"] {
+      position: absolute;
+      left: 18px;
+      top: 22px;
+      width: auto;
+      min-width: 0;
+      height: auto;
+      margin: 0;
+      padding: 0;
+      transform: scale(1.15);
+    }
+    .paymentModeTitle {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .paymentModeDesc {
+      margin-top: 4px;
+      color: var(--text);
+    }
+
+    .paymentModeHint {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
     .aliasItem {
       border: 1px solid var(--border);
       background: #0c1322;
@@ -603,33 +655,66 @@ protocol.custom-init=39</pre>
       <label class="label" for="setupBolt12Address" data-i18n="setup.label.bolt12_address">Public BOLT12 Address</label>
       <input id="setupBolt12Address" type="text" data-i18n-placeholder="setup.ph.bolt12_address" placeholder="z. B. bolt12@pay.example.com" />
 
-      <div style="margin-top:14px;">
-        <label class="label">Payment Mode</label>
+<div class="paymentModeLabel"
+     data-i18n="setup.paymentModeTitle">
+  Choose Payment Mode
+</div>
 
-        <div style="margin-top:8px;">
-          <label>
-            <input
-              type="radio"
-              name="paymentMode"
-              value="compatibility"
-              checked
-            />
-            Compatibility (BOLT12 + LNURL + BOLT11 fallback)
-          </label>
-        </div>
+<div class="hint"
+     style="margin-bottom:12px;"
+     data-i18n="setup.paymentModeHint">
+  Select between maximum wallet compatibility or maximum privacy.
+</div>
 
-        <div style="margin-top:8px;">
-          <label>
-            <input
-              type="radio"
-              name="paymentMode"
-              value="privacy"
-            />
-            Privacy (BOLT12 only)
-          </label>
-        </div>
+   <div class="paymentModeCards">
+        <label class="paymentModeCard">
+          <input
+            type="radio"
+            name="paymentMode"
+            value="compatibility"
+            checked
+          />
+
+          <div class="paymentModeTitle"
+     data-i18n="setup.paymentMode.compatibility.title">
+  Compatibility
+</div>
+
+<div class="paymentModeDesc"
+     data-i18n="setup.paymentMode.compatibility.desc">
+  BOLT12 + LNURL + BOLT11 fallback
+</div>
+
+<div class="paymentModeHint"
+     data-i18n="setup.paymentMode.compatibility.hint">
+  Best compatibility with today's wallets.
+</div>
+        </label>
+
+        <label class="paymentModeCard">
+          <input
+            type="radio"
+            name="paymentMode"
+            value="privacy"
+          />
+
+<div class="paymentModeTitle"
+     data-i18n="setup.paymentMode.privacy.title">
+  Privacy
+</div>
+
+<div class="paymentModeDesc"
+     data-i18n="setup.paymentMode.privacy.desc">
+  BOLT12 + BIP353 only
+</div>
+
+<div class="paymentModeHint"
+     data-i18n="setup.paymentMode.privacy.hint">
+  No LNURL endpoints are exposed.
+</div>
+        </label>
+
       </div>
-
       <div id="lnurlSettingsBlock">
 
         <label class="label" for="setupLnurlAddress" style="margin-top:14px;" data-i18n="setup.label.lnurl_address">Public LNURL Address</label>
@@ -2227,6 +2312,17 @@ installBtn.addEventListener('click', async () => {
       "setup.onionWarningUmbrelFiles": "Öffne Umbrel → Files und navigiere zu:",  
       "setup.onionWarningStartOS": "Keine manuelle Konfiguration erforderlich. Falls Onion Messages nicht aktiviert sind, fordert BOLT12 Pay automatisch die benötigte LND Auto-Configure-Aufgabe an.",
       "setup.copyUmbrelConfig": "Umbrel-Konfiguration kopieren",
+      "setup.paymentModeTitle": "Kompatibilität oder Privatsphäre?",
+      "setup.paymentModeHint": "Wähle zwischen maximaler Wallet-Kompatibilität und maximaler Privatsphäre.",
+
+      "setup.paymentMode.compatibility.title": "Kompatibilität",
+      "setup.paymentMode.compatibility.desc": "BOLT12 + LNURL + BOLT11 Fallback",
+      "setup.paymentMode.compatibility.hint": "Beste Kompatibilität mit heutigen Wallets.",
+
+      "setup.paymentMode.privacy.title": "Privatsphäre",
+      "setup.paymentMode.privacy.desc": "Nur BOLT12 + BIP353",
+      "setup.paymentMode.privacy.hint": "Keine LNURL-Endpunkte werden veröffentlicht.",
+      
       "dns.none": "Keine",
       "dns.manual": "Manuell",
       "dns.cloudflare": "Cloudflare",
@@ -2326,6 +2422,16 @@ installBtn.addEventListener('click', async () => {
       "setup.onionWarningStartOS": "No manual configuration required. If Onion Messages are not enabled, BOLT12 Pay will automatically request the required LND Auto-Configure task.",
       "setup.onionWarningUmbrelFiles": "Open Umbrel → Files and navigate to:",
       "setup.copyUmbrelConfig": "Copy Umbrel config",
+      "setup.paymentModeTitle": "Compatibility or Privacy?",
+      "setup.paymentModeHint": "Choose between maximum wallet compatibility and maximum privacy.",
+
+      "setup.paymentMode.compatibility.title": "Compatibility",
+      "setup.paymentMode.compatibility.desc": "BOLT12 + LNURL + BOLT11 fallback",
+      "setup.paymentMode.compatibility.hint": "Best compatibility with today's wallets.",
+
+      "setup.paymentMode.privacy.title": "Privacy",
+      "setup.paymentMode.privacy.desc": "BOLT12 + BIP353 only",
+      "setup.paymentMode.privacy.hint": "No LNURL endpoints are exposed.",
       "dns.none": "None",
       "dns.manual": "Manual",
       "dns.cloudflare": "Cloudflare",
