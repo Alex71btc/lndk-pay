@@ -194,6 +194,7 @@ def get_public_lnurl_address():
     cfg = load_config()
     return (cfg.get("public_lnurl_address") or "").strip() or PUBLIC_LNURL_ADDRESS
 
+
 def get_payment_mode():
     cfg = load_config()
     mode = str(cfg.get("payment_mode", "compatibility")).strip().lower()
