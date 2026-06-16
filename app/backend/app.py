@@ -2608,25 +2608,28 @@ async def public_index_page():
     aliases = cfg.get("aliases", {}) or {}
 
     items_html = ""
+
     for alias_name, alias in aliases.items():
         description = alias.get("description") or "Lightning payment"
         amount_sat = alias.get("amount_sat")
         amount_label = f"{amount_sat} sats" if amount_sat else "variable amount"
 
+        bolt12_domain = get_public_bolt12_address().split("@", 1)[1]
+        bip353_address = f"{alias_name}@{bolt12_domain}"
+
         items_html += f"""
         <div class="aliasCard">
-          <div class="aliasTitle mono">{alias_name}@{get_lnurl_base_domain()}</div>
+          <div class="aliasTitle mono">{bip353_address}</div>
           <div class="aliasMeta">
             {description}<br />
             <span class="amount-label">Amount</span>: {amount_label}
           </div>
           <div class="row">
             <button onclick="window.open('/alias/{alias_name}', '_blank')">Open</button>
-            <button class="secondary" data-copy-address="{alias_name}@{get_lnurl_base_domain()}">Copy address</button>
+            <button class="secondary" data-copy-address="{bip353_address}">Copy address</button>
           </div>
         </div>
         """
-
     if not items_html:
         items_html = """
     <div class="aliasCard" data-empty-alias-list="1">
@@ -3550,7 +3553,10 @@ async def public_alias_page(alias_name: str):
 
     alias = aliases[alias_name]
 
+    privacy_mode = privacy_mode_enabled()
+
     bip353_domain = get_bip353_base_domain()
+
     lnurl_domain = get_lnurl_base_domain()
 
     bip353_address = f"{alias_name}@{bip353_domain}"
@@ -3581,6 +3587,11 @@ async def public_alias_page(alias_name: str):
     except Exception:
         bolt11_invoice = None
 
+    subline = (
+        "BOLT12 only"
+        if privacy_mode
+        else "BOLT12 first · LNURL and BOLT11 as fallback"
+    )
     offer_section = ""
     if last_offer:
         offer_section = f"""
@@ -3599,9 +3610,8 @@ async def public_alias_page(alias_name: str):
           </div>
         </div>
         """
-
     bolt11_section = ""
-    if bolt11_invoice:
+    if bolt11_invoice and not privacy_mode:
         bolt11_section = f"""
         <div class="section">
           <div class="sectionTitle">BOLT11 Compatibility Fallback</div>
@@ -3620,7 +3630,7 @@ async def public_alias_page(alias_name: str):
         """
 
     lnurl_section = ""
-    if lnurl_fallback:
+    if lnurl_fallback and not privacy_mode:
         lnurl_section = f"""
         <div class="section">
           <div id="aliasLnurlTitle" class="sectionTitle">LNURL Fallback</div>
@@ -3859,7 +3869,7 @@ button:hover {{
 <div class="sub">
 <span id="aliasDescription">{description}</span><br/>
 <span id="aliasAmountLabel">Amount</span>: <span id="aliasAmountValue">{amount_label}</span><br/>
-<span id="aliasSubline" style="font-size:.92rem;">BOLT12 first · LNURL and BOLT11 as fallback</span>
+<span id="aliasSubline" style="font-size:.92rem;">{subline}</span>
 </div>
 
 {offer_section}
