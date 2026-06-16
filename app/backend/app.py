@@ -194,6 +194,18 @@ def get_public_lnurl_address():
     cfg = load_config()
     return (cfg.get("public_lnurl_address") or "").strip() or PUBLIC_LNURL_ADDRESS
 
+def get_payment_mode():
+    cfg = load_config()
+    mode = str(cfg.get("payment_mode", "compatibility")).strip().lower()
+
+    if mode not in ("compatibility", "privacy"):
+        return "compatibility"
+
+    return mode
+
+
+def privacy_mode_enabled():
+    return get_payment_mode() == "privacy"
 
 
 def _mask_secret(value: str) -> str:
@@ -2095,6 +2107,15 @@ def set_setup_config(payload: dict, request: StarletteRequest):
     cfg["public_lnurl_address"] = str(safe_payload.get("public_lnurl_address", "")).strip()
     cfg["lnurl_base_domain"] = str(safe_payload.get("lnurl_base_domain", "")).strip().lower()
     cfg["lnurl_base_url"] = str(safe_payload.get("lnurl_base_url", "")).strip().rstrip("/")
+
+    payment_mode = str(
+        safe_payload.get("payment_mode", "compatibility")
+    ).strip().lower()
+
+    if payment_mode not in ("compatibility", "privacy"):
+        payment_mode = "compatibility"
+
+    cfg["payment_mode"] = payment_mode
 
     dns_mode = str(safe_payload.get("dns_mode", "none")).strip().lower()
     cfg["dns_mode"] = dns_mode
