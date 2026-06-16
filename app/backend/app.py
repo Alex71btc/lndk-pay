@@ -195,6 +195,19 @@ def get_public_lnurl_address():
     return (cfg.get("public_lnurl_address") or "").strip() or PUBLIC_LNURL_ADDRESS
 
 
+def get_payment_mode():
+    cfg = load_config()
+    mode = str(cfg.get("payment_mode", "compatibility")).strip().lower()
+
+    if mode not in ("compatibility", "privacy"):
+        return "compatibility"
+
+    return mode
+
+
+def privacy_mode_enabled():
+    return get_payment_mode() == "privacy"
+
 
 def _mask_secret(value: str) -> str:
     value = (value or "").strip()
@@ -1925,13 +1938,20 @@ def lnurl_for_address(address: str) -> LnurlInfoResponse:
 
 @app.get("/.well-known/lnurlp/{username}", response_model=LnurlPayMetadataResponse)
 def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
-    alias = _resolve_lnurl_alias(username)
 
+    if privacy_mode_enabled():
+        raise HTTPException(
+            status_code=404,
+            detail="LNURL disabled by privacy mode",
+        )
+
+    alias = _resolve_lnurl_alias(username)
     min_sendable = LNURL_MIN_SENDABLE_MSAT
     max_sendable = LNURL_MAX_SENDABLE_MSAT
 
     if alias["fixed_amount_sat"] is not None:
         fixed_msat = int(alias["fixed_amount_sat"]) * 1000
+
         min_sendable = fixed_msat
         max_sendable = fixed_msat
 
@@ -1954,6 +1974,13 @@ async def lnurl_callback(
     nostr: Optional[str] = Query(default=None),
     lnurl: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
+
+    if privacy_mode_enabled():
+        raise HTTPException(
+            status_code=404,
+            detail="LNURL disabled by privacy mode",
+        )
+
     alias = _resolve_lnurl_alias(username)
 
     min_sendable = LNURL_MIN_SENDABLE_MSAT
@@ -2095,6 +2122,15 @@ def set_setup_config(payload: dict, request: StarletteRequest):
     cfg["public_lnurl_address"] = str(safe_payload.get("public_lnurl_address", "")).strip()
     cfg["lnurl_base_domain"] = str(safe_payload.get("lnurl_base_domain", "")).strip().lower()
     cfg["lnurl_base_url"] = str(safe_payload.get("lnurl_base_url", "")).strip().rstrip("/")
+
+    payment_mode = str(
+        safe_payload.get("payment_mode", "compatibility")
+    ).strip().lower()
+
+    if payment_mode not in ("compatibility", "privacy"):
+        payment_mode = "compatibility"
+
+    cfg["payment_mode"] = payment_mode
 
     dns_mode = str(safe_payload.get("dns_mode", "none")).strip().lower()
     cfg["dns_mode"] = dns_mode
@@ -2586,25 +2622,28 @@ async def public_index_page():
     aliases = cfg.get("aliases", {}) or {}
 
     items_html = ""
+
     for alias_name, alias in aliases.items():
         description = alias.get("description") or "Lightning payment"
         amount_sat = alias.get("amount_sat")
         amount_label = f"{amount_sat} sats" if amount_sat else "variable amount"
 
+        bolt12_domain = get_public_bolt12_address().split("@", 1)[1]
+        bip353_address = f"{alias_name}@{bolt12_domain}"
+
         items_html += f"""
         <div class="aliasCard">
-          <div class="aliasTitle mono">{alias_name}@{get_lnurl_base_domain()}</div>
+          <div class="aliasTitle mono">{bip353_address}</div>
           <div class="aliasMeta">
             {description}<br />
             <span class="amount-label">Amount</span>: {amount_label}
           </div>
           <div class="row">
             <button onclick="window.open('/alias/{alias_name}', '_blank')">Open</button>
-            <button class="secondary" data-copy-address="{alias_name}@{get_lnurl_base_domain()}">Copy address</button>
+            <button class="secondary" data-copy-address="{bip353_address}">Copy address</button>
           </div>
         </div>
         """
-
     if not items_html:
         items_html = """
     <div class="aliasCard" data-empty-alias-list="1">
@@ -3528,7 +3567,10 @@ async def public_alias_page(alias_name: str):
 
     alias = aliases[alias_name]
 
+    privacy_mode = privacy_mode_enabled()
+
     bip353_domain = get_bip353_base_domain()
+
     lnurl_domain = get_lnurl_base_domain()
 
     bip353_address = f"{alias_name}@{bip353_domain}"
@@ -3559,6 +3601,11 @@ async def public_alias_page(alias_name: str):
     except Exception:
         bolt11_invoice = None
 
+    subline = (
+        "BOLT12 only"
+        if privacy_mode
+        else "BOLT12 first · LNURL and BOLT11 as fallback"
+    )
     offer_section = ""
     if last_offer:
         offer_section = f"""
@@ -3577,9 +3624,8 @@ async def public_alias_page(alias_name: str):
           </div>
         </div>
         """
-
     bolt11_section = ""
-    if bolt11_invoice:
+    if bolt11_invoice and not privacy_mode:
         bolt11_section = f"""
         <div class="section">
           <div class="sectionTitle">BOLT11 Compatibility Fallback</div>
@@ -3598,7 +3644,7 @@ async def public_alias_page(alias_name: str):
         """
 
     lnurl_section = ""
-    if lnurl_fallback:
+    if lnurl_fallback and not privacy_mode:
         lnurl_section = f"""
         <div class="section">
           <div id="aliasLnurlTitle" class="sectionTitle">LNURL Fallback</div>
@@ -3837,7 +3883,7 @@ button:hover {{
 <div class="sub">
 <span id="aliasDescription">{description}</span><br/>
 <span id="aliasAmountLabel">Amount</span>: <span id="aliasAmountValue">{amount_label}</span><br/>
-<span id="aliasSubline" style="font-size:.92rem;">BOLT12 first · LNURL and BOLT11 as fallback</span>
+<span id="aliasSubline" style="font-size:.92rem;">{subline}</span>
 </div>
 
 {offer_section}

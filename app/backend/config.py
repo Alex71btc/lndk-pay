@@ -10,6 +10,7 @@ DEFAULT_CONFIG = {
     "public_lnurl_address": "lnurl@pay.local",
     "lnurl_base_domain": "",
     "lnurl_base_url": "",
+    "payment_mode": "compatibility",  # compatibility | privacy
     "dns_mode": "none",   # none | manual | cloudflare
     "ui_password_hash": "",
     "cloudflare": {
