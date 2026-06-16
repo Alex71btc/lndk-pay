@@ -1938,13 +1938,20 @@ def lnurl_for_address(address: str) -> LnurlInfoResponse:
 
 @app.get("/.well-known/lnurlp/{username}", response_model=LnurlPayMetadataResponse)
 def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
-    alias = _resolve_lnurl_alias(username)
 
+    if privacy_mode_enabled():
+        raise HTTPException(
+            status_code=404,
+            detail="LNURL disabled by privacy mode",
+        )
+
+    alias = _resolve_lnurl_alias(username)
     min_sendable = LNURL_MIN_SENDABLE_MSAT
     max_sendable = LNURL_MAX_SENDABLE_MSAT
 
     if alias["fixed_amount_sat"] is not None:
         fixed_msat = int(alias["fixed_amount_sat"]) * 1000
+
         min_sendable = fixed_msat
         max_sendable = fixed_msat
 
@@ -1967,6 +1974,13 @@ async def lnurl_callback(
     nostr: Optional[str] = Query(default=None),
     lnurl: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
+
+    if privacy_mode_enabled():
+        raise HTTPException(
+            status_code=404,
+            detail="LNURL disabled by privacy mode",
+        )
+
     alias = _resolve_lnurl_alias(username)
 
     min_sendable = LNURL_MIN_SENDABLE_MSAT
