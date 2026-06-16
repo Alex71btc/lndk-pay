@@ -909,6 +909,7 @@ function getCookie(name) {
     const manualDnsHint = document.getElementById('manualDnsHint');
     const manualDnsExampleName = document.getElementById('manualDnsExampleName');
     const lnurlSettingsBlock = document.getElementById('lnurlSettingsBlock');
+
     const cloudflareFields = document.getElementById('cloudflareFields');
     const cfZoneName = document.getElementById('cfZoneName');
     const cfZoneId = document.getElementById('cfZoneId');
@@ -1130,14 +1131,15 @@ function getCookie(name) {
       manualDnsHint.hidden = setupDnsMode.value !== 'manual';
       cloudflareFields.hidden = setupDnsMode.value !== 'cloudflare';
     }
-    function updatePaymentModeUi() {
-  const privacy =
-    document.querySelector(
-      'input[name="paymentMode"]:checked'
-    )?.value === 'privacy';
 
-  lnurlSettingsBlock.hidden = privacy;
-} 
+    function updatePaymentModeUi() {
+      const privacy =
+        document.querySelector(
+          'input[name="paymentMode"]:checked'
+        )?.value === 'privacy';
+
+      lnurlSettingsBlock.hidden = privacy;
+    }
 
     // ------------------------------------------------------------------
     // Data loading helpers
@@ -2006,8 +2008,8 @@ logoutBtn?.addEventListener('click', async () => {
 
     saveSetupBtn.addEventListener('click', saveSetup);
     paymentModeInputs.forEach(el => {
-  el.addEventListener('change', updatePaymentModeUi);
-});
+      el.addEventListener('change', updatePaymentModeUi);
+    });
     setupDnsMode.addEventListener('change', updateDnsModeUi);
     setupLnurlBaseDomain.addEventListener('input', updateDnsModeUi);
     setupBolt12Address.addEventListener('input', updateDnsModeUi);
