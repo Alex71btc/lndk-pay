@@ -601,16 +601,61 @@ protocol.custom-init=39</pre>
 
     <section class="section">
       <label class="label" for="setupBolt12Address" data-i18n="setup.label.bolt12_address">Public BOLT12 Address</label>
-      <input id="setupBolt12Address" type="text" data-i18n-placeholder="setup.ph.bolt12_address" placeholder="z. B. bolt12@pay.example.com" />
+      
+<input id="setupBolt12Address" type="text" data-i18n-placeholder="setup.ph.bolt12_address" placeholder="z. B. bolt12@pay.example.com" />
+<div style="margin-top:14px;">
+  <label class="label">Payment Mode</label>
 
-      <label class="label" for="setupLnurlAddress" style="margin-top:14px;" data-i18n="setup.label.lnurl_address">Public LNURL Address</label>
-      <input id="setupLnurlAddress" type="text" data-i18n-placeholder="setup.ph.lnurl_address" placeholder="z. B. lnurl@pay.example.com" />
+  <div style="margin-top:8px;">
+    <label>
+      <input
+        type="radio"
+        name="paymentMode"
+        value="compatibility"
+        checked
+      />
+      Compatibility (BOLT12 + LNURL + BOLT11 fallback)
+    </label>
+  </div>
 
-      <label class="label" for="setupLnurlBaseDomain" style="margin-top:14px;" data-i18n="setup.label.lnurl_base_domain">LNURL Base Domain</label>
-      <input id="setupLnurlBaseDomain" type="text" data-i18n-placeholder="setup.ph.lnurl_base_domain" placeholder="z. B. pay.example.com" />
+  <div style="margin-top:8px;">
+    <label>
+      <input
+        type="radio"
+        name="paymentMode"
+        value="privacy"
+      />
+      Privacy (BOLT12 only)
+    </label>
+  </div>
+</div>
 
-      <label class="label" for="setupLnurlBaseUrl" style="margin-top:14px;" data-i18n="setup.label.lnurl_base_url">LNURL Base URL</label>
-      <input id="setupLnurlBaseUrl" type="text" data-i18n-placeholder="setup.ph.lnurl_base_url" placeholder="z. B. https://pay.example.com" />
+      <div id="lnurlSettingsBlock">
+
+  <label class="label" for="setupLnurlAddress" style="margin-top:14px;" data-i18n="setup.label.lnurl_address">
+    Public LNURL Address
+  </label>
+  <input id="setupLnurlAddress" type="text"
+         data-i18n-placeholder="setup.ph.lnurl_address"
+         placeholder="z. B. lnurl@pay.example.com" />
+
+  <label class="label" for="setupLnurlBaseDomain" style="margin-top:14px;"
+         data-i18n="setup.label.lnurl_base_domain">
+    LNURL Base Domain
+  </label>
+  <input id="setupLnurlBaseDomain" type="text"
+         data-i18n-placeholder="setup.ph.lnurl_base_domain"
+         placeholder="z. B. pay.example.com" />
+
+  <label class="label" for="setupLnurlBaseUrl" style="margin-top:14px;"
+         data-i18n="setup.label.lnurl_base_url">
+    LNURL Base URL
+  </label>
+  <input id="setupLnurlBaseUrl" type="text"
+         data-i18n-placeholder="setup.ph.lnurl_base_url"
+         placeholder="z. B. https://pay.example.com" />
+
+</div>
       
       <label class="label" for="setupPassword" style="margin-top:14px;" data-i18n="setup.label.password">Passwort setzen</label>
       <input id="setupPassword" type="password" data-i18n-placeholder="setup.ph.password" placeholder="Neues Passwort" />
@@ -842,6 +887,7 @@ function getCookie(name) {
     ?.split("=")[1];
 }
 
+   
     const statusBar = document.getElementById('statusBar');
     const addressBox = document.getElementById('addressBox');
     const fallbackAddressBox = document.getElementById('fallbackAddressBox');
@@ -877,13 +923,14 @@ function getCookie(name) {
     const saveSetupBtn = document.getElementById('saveSetupBtn');
     const manualDnsHint = document.getElementById('manualDnsHint');
     const manualDnsExampleName = document.getElementById('manualDnsExampleName');
-
+    const lnurlSettingsBlock = document.getElementById('lnurlSettingsBlock');
     const cloudflareFields = document.getElementById('cloudflareFields');
     const cfZoneName = document.getElementById('cfZoneName');
     const cfZoneId = document.getElementById('cfZoneId');
     const cfApiToken = document.getElementById('cfApiToken');
     const setupPassword = document.getElementById('setupPassword');
     const setupPasswordConfirm = document.getElementById('setupPasswordConfirm');
+    const paymentModeInputs = document.querySelectorAll('input[name="paymentMode"]');
 
     const aliasNameInput = document.getElementById('aliasNameInput');
     const aliasDescriptionInput = document.getElementById('aliasDescriptionInput');
@@ -1098,6 +1145,14 @@ function getCookie(name) {
       manualDnsHint.hidden = setupDnsMode.value !== 'manual';
       cloudflareFields.hidden = setupDnsMode.value !== 'cloudflare';
     }
+    function updatePaymentModeUi() {
+  const privacy =
+    document.querySelector(
+      'input[name="paymentMode"]:checked'
+    )?.value === 'privacy';
+
+  lnurlSettingsBlock.hidden = privacy;
+} 
 
     // ------------------------------------------------------------------
     // Data loading helpers
@@ -1140,6 +1195,14 @@ function getCookie(name) {
         console.log('Setup config unavailable', e);
       }
       setupBolt12Address.value = configData.public_bolt12_address || '';
+      
+      const paymentMode =
+        configData.payment_mode || 'compatibility';
+
+      paymentModeInputs.forEach(el => {
+        el.checked = el.value === paymentMode;
+      });
+      updatePaymentModeUi();
       setupLnurlAddress.value = configData.public_lnurl_address || '';
       setupLnurlBaseDomain.value = configData.lnurl_base_domain || '';
       setupLnurlBaseUrl.value = configData.lnurl_base_url || '';
@@ -1175,6 +1238,10 @@ async function saveSetup() {
 
     const payload = {
       public_bolt12_address: (setupBolt12Address.value || '').trim(),
+      payment_mode:
+        document.querySelector(
+          'input[name="paymentMode"]:checked'
+        )?.value || 'compatibility',
       public_lnurl_address: (setupLnurlAddress.value || '').trim(),
       lnurl_base_domain: (setupLnurlBaseDomain.value || '').trim().toLowerCase(),
       lnurl_base_url: (setupLnurlBaseUrl.value || '').trim(),
@@ -1953,6 +2020,9 @@ logoutBtn?.addEventListener('click', async () => {
 });
 
     saveSetupBtn.addEventListener('click', saveSetup);
+    paymentModeInputs.forEach(el => {
+  el.addEventListener('change', updatePaymentModeUi);
+});
     setupDnsMode.addEventListener('change', updateDnsModeUi);
     setupLnurlBaseDomain.addEventListener('input', updateDnsModeUi);
     setupBolt12Address.addEventListener('input', updateDnsModeUi);
