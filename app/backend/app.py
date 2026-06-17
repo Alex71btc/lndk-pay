@@ -22,6 +22,7 @@ import hashlib
 import base64
 import bech32
 import sqlite3
+from datetime import datetime, timezone
 from io import BytesIO
 from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.responses import FileResponse, Response, HTMLResponse, RedirectResponse, JSONResponse
@@ -344,6 +345,21 @@ def init_db():
         )
     """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS history_bip353 (
+            history_id TEXT NOT NULL,
+            alias TEXT NOT NULL,
+            address TEXT NOT NULL,
+            dns_name TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_history_bip353_alias
+        ON history_bip353(alias)
+    """)
+
     conn.commit()
     conn.close()
 
@@ -367,8 +383,80 @@ def list_offer_history(limit: int = 50):
             (safe_limit,),
         ).fetchall()
 
+    items = [dict(row) for row in rows]
+
+    for item in items:
+        item["bip353_aliases"] = list_history_bip353(item["id"])
+
+    return items
+
+def get_offer_history_item(item_id: str):
+    with _db_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id, offer, label, amount_text, created_at
+            FROM offer_history
+            WHERE id = ?
+            """,
+            (str(item_id or "").strip(),),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+def list_history_bip353(history_id: str):
+    with _db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT history_id, alias, address, dns_name, created_at
+            FROM history_bip353
+            WHERE history_id = ?
+            ORDER BY created_at DESC
+            """,
+            (str(history_id or "").strip(),),
+        ).fetchall()
+
     return [dict(row) for row in rows]
 
+
+def get_history_bip353_by_alias(alias: str):
+    with _db_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT history_id, alias, address, dns_name, created_at
+            FROM history_bip353
+            WHERE alias = ?
+            """,
+            (str(alias or "").strip(),),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def save_history_bip353(history_id: str, alias: str, address: str, dns_name: str):
+    with _db_conn() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO history_bip353 (
+                history_id, alias, address, dns_name, created_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                str(history_id or "").strip(),
+                str(alias or "").strip(),
+                str(address or "").strip(),
+                str(dns_name or "").strip(),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+
+
+def delete_history_bip353(alias: str):
+    with _db_conn() as conn:
+        conn.execute(
+            "DELETE FROM history_bip353 WHERE alias = ?",
+            (str(alias or "").strip(),),
+        )
 
 def save_offer_history_item(item: dict):
     with _db_conn() as conn:
@@ -667,6 +755,9 @@ class LnurlPayMetadataResponse(BaseModel):
 class CloudflareBIP353Request(BaseModel):
     record_name: str
     offer: str
+
+class PublishHistoryBIP353Request(BaseModel):
+    alias: str = Field(min_length=1, max_length=64)
 
 class AliasCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
@@ -4894,6 +4985,57 @@ def api_clear_offer_history(request: StarletteRequest):
     clear_offer_history()
 
     return {"ok": True}
+
+@app.post("/api/history/{item_id}/publish-bip353")
+async def api_publish_history_bip353(
+    item_id: str,
+    payload: PublishHistoryBIP353Request,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    _require_csrf(request)
+    _check_cloudflare_rate_limit(request)
+
+    item = get_offer_history_item(item_id)
+
+    if not item:
+        raise HTTPException(status_code=404, detail="History item not found")
+
+    offer = str(item.get("offer") or "").strip()
+
+    if not offer.startswith("lno"):
+        raise HTTPException(status_code=400, detail="BOLT12 offer required")
+
+    alias_name = _normalize_alias_name(payload.alias)
+
+    dns_name = _alias_dns_name(alias_name)
+    dns_content = build_bip353_txt_value(offer)
+
+    cfg = load_config()
+
+    dns_result = None
+    if cfg.get("dns_mode") == "cloudflare":
+        dns_result = await _cloudflare_upsert_txt_record(
+            name=dns_name,
+            content=dns_content,
+        )
+
+    public_bolt12_address = get_public_bolt12_address()
+    domain = public_bolt12_address.split("@", 1)[1].strip() if "@" in public_bolt12_address else get_bip353_base_domain()
+    address = f"{alias_name}@{domain}"
+    save_history_bip353(
+        history_id=item_id,
+        alias=alias_name,
+        address=address,
+        dns_name=dns_name,
+    )
+    return {
+        "ok": True,
+        "address": address,
+        "dns_name": dns_name,
+        "dns_content": dns_content,
+        "dns_result": dns_result,
+    }
 
 @app.get("/api/admin/nostr-status")
 async def api_admin_nostr_status(request: StarletteRequest):
