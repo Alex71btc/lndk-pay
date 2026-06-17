@@ -2368,8 +2368,7 @@
 
               await renderHistory();
 
-              await copyText(
-                data.address,
+              setStatus(
                 `${window.__t("toast.address_created")} ${data.address}`,
               );
             } catch (error) {
