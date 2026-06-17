@@ -347,6 +347,60 @@ def init_db():
     conn.commit()
     conn.close()
 
+def _db_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def list_offer_history(limit: int = 50):
+    safe_limit = max(1, min(int(limit or 50), 200))
+
+    with _db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, offer, label, amount_text, created_at
+            FROM offer_history
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def save_offer_history_item(item: dict):
+    with _db_conn() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO offer_history (
+                id, offer, label, amount_text, created_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                str(item.get("id") or "").strip(),
+                str(item.get("offer") or "").strip(),
+                str(item.get("label") or "").strip(),
+                str(item.get("amountText") or item.get("amount_text") or "").strip(),
+                str(item.get("createdAt") or item.get("created_at") or "").strip(),
+            ),
+        )
+
+
+def delete_offer_history_item(item_id: str):
+    with _db_conn() as conn:
+        conn.execute(
+            "DELETE FROM offer_history WHERE id = ?",
+            (item_id,),
+        )
+
+
+def clear_offer_history():
+    with _db_conn() as conn:
+        conn.execute("DELETE FROM offer_history")
+
 def _load_json_file(path: Path):
     try:
         if not path.exists():
@@ -4796,6 +4850,50 @@ async def startup_background_tasks():
 
     print("zap publisher loop started", flush=True)
     print("[NWC] startup task scheduled", flush=True)
+
+@app.get("/api/history")
+def api_get_offer_history(request: StarletteRequest, limit: int = 50):
+    require_pay_auth(request)
+    return {"items": list_offer_history(limit)}
+
+
+@app.post("/api/history")
+def api_add_offer_history_item(payload: dict, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    item_id = str(payload.get("id") or "").strip()
+    offer = str(payload.get("offer") or "").strip()
+
+    if not item_id:
+        raise HTTPException(status_code=400, detail="id required")
+
+    if not offer.startswith("lno"):
+        raise HTTPException(status_code=400, detail="BOLT12 offer required")
+
+    save_offer_history_item(payload)
+
+    return {"ok": True}
+
+
+@app.delete("/api/history/{item_id}")
+def api_delete_offer_history_item(item_id: str, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    delete_offer_history_item(item_id)
+
+    return {"ok": True}
+
+
+@app.delete("/api/history")
+def api_clear_offer_history(request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    clear_offer_history()
+
+    return {"ok": True}
 
 @app.get("/api/admin/nostr-status")
 async def api_admin_nostr_status(request: StarletteRequest):
