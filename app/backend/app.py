@@ -458,6 +458,7 @@ def delete_history_bip353(alias: str):
             (str(alias or "").strip(),),
         )
 
+
 def save_offer_history_item(item: dict):
     with _db_conn() as conn:
         conn.execute(
@@ -480,14 +481,43 @@ def save_offer_history_item(item: dict):
 def delete_offer_history_item(item_id: str):
     with _db_conn() as conn:
         conn.execute(
+            """
+            DELETE FROM history_bip353
+            WHERE history_id = ?
+            """,
+            (item_id,),
+        )
+
+        conn.execute(
             "DELETE FROM offer_history WHERE id = ?",
             (item_id,),
         )
 
+        conn.commit()
+
+def delete_history_bip353(
+    history_id: str,
+    alias: str,
+):
+    with _db_conn() as conn:
+        conn.execute(
+            """
+            DELETE FROM history_bip353
+            WHERE history_id = ?
+            AND alias = ?
+            """,
+            (
+                history_id,
+                alias,
+            ),
+        )
+        conn.commit()
 
 def clear_offer_history():
     with _db_conn() as conn:
+        conn.execute("DELETE FROM history_bip353")
         conn.execute("DELETE FROM offer_history")
+        conn.commit()
 
 def _load_json_file(path: Path):
     try:
@@ -4968,23 +4998,71 @@ def api_add_offer_history_item(payload: dict, request: StarletteRequest):
 
 
 @app.delete("/api/history/{item_id}")
-def api_delete_offer_history_item(item_id: str, request: StarletteRequest):
+async def api_delete_offer_history_item(item_id: str, request: StarletteRequest):
     require_pay_auth(request)
     _require_csrf(request)
+
+    aliases = list_history_bip353(item_id)
+    cfg = load_config()
+    dns_deleted = []
+
+    if cfg.get("dns_mode") == "cloudflare":
+        for entry in aliases:
+            dns_name = entry.get("dns_name")
+            if dns_name:
+                dns_deleted.append(
+                    await _cloudflare_delete_txt_record(name=dns_name)
+                )
 
     delete_offer_history_item(item_id)
 
-    return {"ok": True}
-
+    return {
+        "ok": True,
+        "deleted_bip353": len(aliases),
+        "dns_deleted": dns_deleted,
+    }
 
 @app.delete("/api/history")
-def api_clear_offer_history(request: StarletteRequest):
+async def api_clear_offer_history(request: StarletteRequest):
     require_pay_auth(request)
     _require_csrf(request)
 
+    aliases = []
+
+    with _db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT dns_name
+            FROM history_bip353
+            """
+        ).fetchall()
+
+        aliases = [
+            dict(r)
+            for r in rows
+        ]
+
+    cfg = load_config()
+    dns_deleted = []
+
+    if cfg.get("dns_mode") == "cloudflare":
+        for entry in aliases:
+            dns_name = str(entry.get("dns_name") or "").strip()
+
+            if dns_name:
+                dns_deleted.append(
+                    await _cloudflare_delete_txt_record(
+                        name=dns_name
+                    )
+                )
+
     clear_offer_history()
 
-    return {"ok": True}
+    return {
+        "ok": True,
+        "deleted_bip353": len(aliases),
+        "dns_deleted": dns_deleted,
+    }
 
 @app.post("/api/history/{item_id}/publish-bip353")
 async def api_publish_history_bip353(
@@ -5035,6 +5113,53 @@ async def api_publish_history_bip353(
         "dns_name": dns_name,
         "dns_content": dns_content,
         "dns_result": dns_result,
+    }
+
+@app.delete("/api/history-bip353/{history_id}/{alias}")
+async def api_delete_history_bip353(
+    history_id: str,
+    alias: str,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    rows = list_history_bip353(history_id)
+
+    entry = next(
+        (
+            r for r in rows
+            if r.get("alias") == alias
+        ),
+        None,
+    )
+
+    if not entry:
+        raise HTTPException(
+            status_code=404,
+            detail="Lightning Address not found",
+        )
+
+    cfg = load_config()
+
+    dns_result = None
+
+    if (
+        cfg.get("dns_mode") == "cloudflare"
+        and entry.get("dns_name")
+    ):
+        dns_result = await _cloudflare_delete_txt_record(
+            name=entry["dns_name"]
+        )
+
+    delete_history_bip353(
+        history_id,
+        alias,
+    )
+
+    return {
+        "ok": True,
+        "dns_deleted": dns_result,
     }
 
 @app.get("/api/admin/nostr-status")

@@ -2263,6 +2263,42 @@
 
               row.appendChild(addr);
               bip353Box.appendChild(row);
+
+              const delBtn = document.createElement("button");
+              delBtn.className = "danger";
+              delBtn.type = "button";
+              delBtn.textContent = window.__t
+                ? window.__t("history.delete")
+                : "Delete";
+              delBtn.addEventListener("click", async () => {
+                if (!confirm(`Delete Lightning Address ${alias.address}?`)) {
+                  return;
+                }
+
+                try {
+                  const response = await fetch(
+                    `/api/history-bip353/${encodeURIComponent(alias.history_id)}/${encodeURIComponent(alias.alias)}`,
+                    {
+                      method: "DELETE",
+                      headers: {
+                        "X-CSRF-Token": getCookie("csrf_token"),
+                      },
+                    },
+                  );
+
+                  const data = await readJsonOrThrow(response);
+
+                  await renderHistory();
+
+                  setStatus(`Lightning Address removed: ${alias.address}`);
+                } catch (error) {
+                  setStatus(`Error: ${errorToMessage(error)}`, "error", true);
+                }
+              });
+              row.style.display = "flex";
+              row.style.alignItems = "center";
+              row.style.gap = "10px";
+              row.appendChild(delBtn);
             }
           }
 
@@ -2332,7 +2368,7 @@
 
               await copyText(
                 data.address,
-                 `${window.__t("toast.address_created")} ${data.address}`
+                `${window.__t("toast.address_created")} ${data.address}`,
               );
             } catch (error) {
               setStatus(`Error: ${errorToMessage(error)}`, "error", true);
@@ -3663,7 +3699,7 @@
         }
 
         function lang() {
-          return window.getLang ? window.getLang() : "en";
+          return localStorage.getItem(KEY) || detectBrowserLanguage();
         }
 
         function updateButtons(lang) {
@@ -3674,7 +3710,7 @@
         }
 
         function applyLangUI() {
-          const lang = getLang();
+          const lang = localStorage.getItem(KEY) || detectBrowserLanguage();
           document.documentElement.setAttribute("lang", lang);
           updateButtons(lang);
         }
@@ -4272,7 +4308,7 @@
         window.__adminTooltipRuntimeInstalled = true;
 
         function lang() {
-          return getLang();
+          return window.getLang ? window.getLang() : "en";
         }
 
         function patchTitles() {
@@ -4337,7 +4373,7 @@
         window.__adminQrScannerRuntimeInstalled = true;
 
         function lang() {
-          return getLang();
+          return window.getLang ? window.getLang() : "en";
         }
 
         const T = {
@@ -4449,7 +4485,7 @@
         window.__adminScannerTextSafePatch = true;
 
         function lang() {
-          return getLang();
+          return window.getLang ? window.getLang() : "en";
         }
 
         function t(de, en) {
