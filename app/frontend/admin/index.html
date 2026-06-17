@@ -2366,6 +2366,8 @@
 
               const data = await readJsonOrThrow(response);
 
+              await renderHistory();
+
               await copyText(
                 data.address,
                 `${window.__t("toast.address_created")} ${data.address}`,
