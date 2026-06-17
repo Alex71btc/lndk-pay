@@ -21,6 +21,7 @@ import qrcode
 import hashlib
 import base64
 import bech32
+import sqlite3
 from io import BytesIO
 from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.responses import FileResponse, Response, HTMLResponse, RedirectResponse, JSONResponse
@@ -325,7 +326,26 @@ APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/data"))
 CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(APP_DATA_DIR / "config.json")))
 SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
+DB_PATH = APP_DATA_DIR / "bolt12pay.db"
 
+
+def init_db():
+    APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS offer_history (
+            id TEXT PRIMARY KEY,
+            offer TEXT NOT NULL,
+            label TEXT,
+            amount_text TEXT,
+            created_at TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
 
 def _load_json_file(path: Path):
     try:
@@ -4769,8 +4789,11 @@ async def _zap_publisher_loop():
 
 @app.on_event("startup")
 async def startup_background_tasks():
+    init_db()
+
     app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
     app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
+
     print("zap publisher loop started", flush=True)
     print("[NWC] startup task scheduled", flush=True)
 
