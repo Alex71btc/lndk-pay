@@ -1595,37 +1595,54 @@ function renderOfferQr(value) {
   });
 }
 
-    function loadHistory() {
+async function saveHistoryItem(item) {
+  await fetch('/api/history', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': getCookie('csrf_token')
+    },
+    body: JSON.stringify(item)
+  });
+}
+
+async function deleteHistoryItem(id) {
+  await fetch(`/api/history/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'X-CSRF-Token': getCookie('csrf_token')
+    }
+  });
+}
+
+async function clearHistoryApi() {
+  await fetch('/api/history', {
+    method: 'DELETE',
+    headers: {
+      'X-CSRF-Token': getCookie('csrf_token')
+    }
+  });
+}
+
+    async function loadHistory() {
       try {
-        return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+        const response = await fetch('/api/history');
+        const data = await response.json();
+        return data.items || [];
       } catch {
         return [];
       }
     }
 
-    function saveHistory(items) {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 50)));
+
+    async function addHistoryItem(item) {
+      await saveHistoryItem(item);
+      await renderHistory();
     }
 
-    function addHistoryItem(item) {
-      const items = loadHistory();
-      items.unshift(item);
-      saveHistory(items);
-      renderHistory();
 
-
-    }
-
-    function clearHistory() {
-      localStorage.removeItem(HISTORY_KEY);
-      renderHistory();
-
-
-      setStatus(window.__t('toast.history_cleared'));
-    }
-
-    window.renderHistory = function renderHistory() {
-      const items = loadHistory();
+    window.renderHistory = async function renderHistory() {
+      const items = await loadHistory();
       historyList.innerHTML = '';
 
       if (!items.length) {
@@ -1642,8 +1659,11 @@ function renderOfferQr(value) {
 
         const meta = document.createElement('div');
         meta.className = 'historyMeta';
-        meta.textContent = `${(item.createdAt ? formatHistoryDate(item.createdAt) : (item.timeText || ''))} · ${item.amountText || ''}${item.label ? ' · ' + item.label : ''}`;
+        const createdAt = item.createdAt || item.created_at;
+        const amountText = item.amountText || item.amount_text || '';
 
+        meta.textContent =
+        `${(createdAt ? formatHistoryDate(createdAt) : (item.timeText || ''))} · ${amountText}${item.label ? ' · ' + item.label : ''}`;
         const offer = document.createElement('div');
         offer.className = 'mono copyable';
         offer.title = 'Zum Kopieren antippen';
@@ -1687,15 +1707,12 @@ function renderOfferQr(value) {
         delBtn.className = 'danger';
         delBtn.type = 'button';
         delBtn.textContent = (window.__t ? window.__t('history.delete') : 'Löschen');
-        delBtn.addEventListener('click', () => {
-          const next = loadHistory().filter(entry => entry.id !== item.id);
-          saveHistory(next);
-          renderHistory();
-
+        delBtn.addEventListener('click', async () => {
+          await deleteHistoryItem(item.id);
+          await renderHistory();
 
           setStatus(window.__t('toast.history_deleted'));
         });
-
         actions.append(usePayBtn, useQrBtn, copyBtn, delBtn);
         wrap.append(meta, offer, actions);
         historyList.appendChild(wrap);
@@ -2691,7 +2708,11 @@ setStatus(statusText);
       await copyText(value, window.__t('toast.decode_copied'));
     });
 
-    document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
+    document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
+      await clearHistoryApi();
+      await renderHistory();
+      setStatus(window.__t('toast.history_cleared'));
+    });
 
     document.getElementById('cfUseCurrentOfferBtn').addEventListener('click', () => {
       const currentOffer = getCurrentOffer();
@@ -2877,8 +2898,8 @@ if ('serviceWorker' in navigator) {
     return nav.toLowerCase().startsWith("de") ? "de" : "en";
   }
 
-  function getLang() {
-    return localStorage.getItem(KEY) || detectBrowserLanguage();
+  function lang() {
+    return window.getLang ? window.getLang() : "en";
   }
 
   function updateButtons(lang) {
