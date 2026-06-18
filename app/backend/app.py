@@ -1140,6 +1140,27 @@ def _run_command(args: list[str]) -> str:
     return stdout or stderr
 
 
+def _run_command_retry(args: list[str], retries: int = 3) -> str:
+    last_exc = None
+
+    for attempt in range(retries):
+        try:
+            return _run_command(args)
+
+        except HTTPException as exc:
+            last_exc = exc
+
+            if exc.status_code == 502 and attempt < retries - 1:
+                print(
+                    f"Offer creation failed (attempt {attempt + 1}/{retries}): {exc.detail}"
+                )
+                time.sleep(1)
+                continue
+
+            raise
+
+    raise last_exc
+
 def _extract_offer(raw_output: str) -> str:
     match = OFFER_RE.search(raw_output)
     if match:
@@ -1941,7 +1962,7 @@ def _create_offer_internal(payload: OfferRequest) -> OfferResponse:
     if payload.quantity is not None:
         args += ["--quantity", str(payload.quantity)]
 
-    raw_output = _run_command(args)
+    raw_output = _run_command_retry(args)
     offer = _extract_offer(raw_output)
     return OfferResponse(offer=offer, raw_output=raw_output)
 
