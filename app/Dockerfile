@@ -1,4 +1,4 @@
-FROM alex71btc/lndk:amountless-fix-v2 AS lndkbin
+FROM alex71btc/lndk:native-onion-messages@sha256:34714777f155deabce7363dc9d5bc6b98fee455726e59c3fbcfd5fad6e1f788c AS lndkstage
 
 FROM python:3.12-slim
 
