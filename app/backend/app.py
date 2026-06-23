@@ -1572,32 +1572,72 @@ async def _pay_bolt11_invoice(
 
     verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
 
+    def parse_streaming_response(raw_text: str) -> dict[str, Any] | None:
+        last_result = None
+        for line in raw_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(item, dict) and isinstance(item.get("result"), dict):
+                last_result = item["result"]
+            elif isinstance(item, dict):
+                last_result = item
+        return last_result
+
+    def is_not_found(response: httpx.Response, data: Any, raw_text: str) -> bool:
+        if response.status_code == 404:
+            return True
+        if isinstance(data, dict):
+            msg = str(data.get("message") or "").lower()
+            if data.get("code") == 5 and "not found" in msg:
+                return True
+        return "not found" in raw_text.lower() and response.status_code >= 400
+
+    async def post_payment(client: httpx.AsyncClient, endpoint: str):
+        response = await client.post(
+            f"{LND_REST_URL}{endpoint}",
+            headers=headers,
+            json=payload,
+        )
+        raw_text = (response.text or "").strip()
+        try:
+            data = response.json()
+        except Exception:
+            data = parse_streaming_response(raw_text)
+        return response, raw_text, data
+
     try:
         async with httpx.AsyncClient(timeout=LND_REST_TIMEOUT, verify=verify) as client:
-            response = await client.post(
-                f"{LND_REST_URL}/v1/channels/transactions",
-                headers=headers,
-                json=payload,
-            )
+            response, raw_text, data = await post_payment(client, "/v1/channels/transactions")
+
+            # LND v0.21 no longer exposes the legacy REST payment endpoint.
+            # Fall back to RouterRPC, whose REST response is newline-delimited JSON.
+            if is_not_found(response, data, raw_text):
+                response, raw_text, data = await post_payment(client, "/v2/router/send")
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LND REST payment request failed: {exc}") from exc
 
-    raw_text = (response.text or "").strip()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=502, detail=f"LND REST payment returned unexpected response: {raw_text[:300]}")
 
-    try:
-        data = response.json()
-    except Exception:
-        data = None
+    # RouterRPC REST wraps the payment in {"result": {...}}.
+    payment_data = data.get("result") if isinstance(data.get("result"), dict) else data
 
-    combined_error = ""
+    error_obj = data.get("error") if isinstance(data.get("error"), dict) else {}
+    message_text = (
+        payment_data.get("message")
+        or data.get("message")
+        or error_obj.get("message")
+        or ""
+    )
+    payment_error = payment_data.get("payment_error") or payment_data.get("paymentError") or ""
+    failure_reason = payment_data.get("failure_reason") or payment_data.get("failureReason") or ""
 
-    if isinstance(data, dict):
-        message_text = data.get("message") or ""
-        payment_error = data.get("payment_error") or data.get("paymentError") or ""
-        failure_reason = data.get("failure_reason") or data.get("failureReason") or ""
-        combined_error = f"{message_text} {payment_error} {failure_reason} {raw_text}".strip().lower()
-    else:
-        combined_error = raw_text.lower()
+    combined_error = f"{message_text} {payment_error} {failure_reason} {raw_text}".strip().lower()
 
     if "already paid" in combined_error:
         raise HTTPException(status_code=400, detail="Diese Rechnung wurde bereits bezahlt.")
@@ -1615,17 +1655,13 @@ async def _pay_bolt11_invoice(
         raise HTTPException(status_code=400, detail="Zahlung hat zu lange gedauert.")
 
     if response.status_code >= 400:
-        if isinstance(data, dict):
-            detail = data.get("message") or data.get("detail") or data.get("payment_error") or data.get("failure_reason") or raw_text
-        else:
-            detail = raw_text or f"LND REST payment failed with HTTP {response.status_code}"
+        detail = message_text or payment_error or failure_reason or raw_text or f"LND REST payment failed with HTTP {response.status_code}"
         raise HTTPException(status_code=502, detail=str(detail))
 
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=502, detail=f"LND REST payment returned non-JSON: {raw_text[:300]}")
-
-    payment_error = data.get("payment_error") or data.get("paymentError") or ""
-    failure_reason = data.get("failure_reason") or data.get("failureReason") or ""
+    status = str(payment_data.get("status") or "").upper()
+    if status in {"FAILED", "FAILURE"}:
+        detail = payment_error or failure_reason or "Zahlung fehlgeschlagen."
+        raise HTTPException(status_code=400, detail=str(detail))
 
     if payment_error:
         raise HTTPException(status_code=400, detail=str(payment_error))
@@ -1633,7 +1669,7 @@ async def _pay_bolt11_invoice(
     if failure_reason and str(failure_reason).lower() not in {"failure_reason_none", "none", ""}:
         raise HTTPException(status_code=400, detail=str(failure_reason))
 
-    return data
+    return payment_data
 
 
 async def _resolve_lnurl_invoice(
