@@ -1,4 +1,4 @@
-FROM alex71btc/lndk:native-onion-messages-v2@sha256:aae5c01197f90e5bb9c0f1329193ee3578ecc6f5594aba1a824f2ea733a62aa5 AS lndkstage
+FROM alex71btc/lndk:native-onion-messages-v3@sha256:73c17075db15496e2c4243489017dbbe5f593d91c70d1ce253a16f796ab86065 lndkstage
 
 FROM python:3.12-slim
 
