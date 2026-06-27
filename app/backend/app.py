@@ -1554,7 +1554,7 @@ async def _create_bolt11_invoice(
 async def _pay_bolt11_invoice(
     *,
     payment_request: str,
-    fee_limit_sat: int | None = None,
+    fee_limit_sat: int | None = 5000,
 ) -> dict[str, Any]:
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
 
