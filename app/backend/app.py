@@ -1554,7 +1554,7 @@ async def _create_bolt11_invoice(
 async def _pay_bolt11_invoice(
     *,
     payment_request: str,
-    fee_limit_sat: int | None = 5000,
+    fee_limit_sat: int | None = None,
 ) -> dict[str, Any]:
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
 
@@ -1598,10 +1598,15 @@ async def _pay_bolt11_invoice(
         return "not found" in raw_text.lower() and response.status_code >= 400
 
     async def post_payment(client: httpx.AsyncClient, endpoint: str):
+        request_payload = dict(payload)
+
+        if endpoint == "/v2/router/send":
+            request_payload["fee_limit_sat"] = str(fee_limit_sat or 5000)
+
         response = await client.post(
             f"{LND_REST_URL}{endpoint}",
             headers=headers,
-            json=payload,
+            json=request_payload,
         )
         raw_text = (response.text or "").strip()
         try:
