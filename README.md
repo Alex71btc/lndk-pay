@@ -1,5 +1,9 @@
 # ⚡ BOLT12 Pay
 
+[![Available on Umbrel](https://apps.umbrel.com/api/app/bolt12-pay/badge-dark.svg)](https://apps.umbrel.com/app/bolt12-pay)
+
+[![Available on StartOS](https://img.shields.io/badge/StartOS-Community%20Registry-purple)](https://github.com/Start9-Community/bolt12-pay-startos)
+
 Self-hosted Lightning payment and identity server with next-generation BOLT12 support.
 
 ---
@@ -18,11 +22,31 @@ Self-hosted Lightning payment and identity server with next-generation BOLT12 su
 
 ---
 
-## ⚠️ Requirement: BOLT12-enabled Lightning node
+## ⚠️ Requirement: LND Lightning node
 
-BOLT12 Pay requires a Lightning node with BOLT12 support.
+BOLT12 Pay requires a LND Lightning node.
 
 ---
+# 🌍 Before You Start
+
+BOLT12 Pay works best when you already own a domain name.
+
+Recommended:
+
+- a personal domain (for example `yourdomain.com`)
+- DNS hosted at Cloudflare
+- Cloudflare API Token (optional, for automatic DNS management)
+
+Without a domain you can still:
+
+- create and receive BOLT12 Offers
+- test BOLT12 functionality locally
+
+However:
+
+- BIP353 Lightning Addresses require a domain
+- LNURL Addresses require a domain
+- Public payment pages require a public domain
 
 ## Official app availability
 
@@ -33,7 +57,17 @@ BOLT12 Pay is officially available on:
 
 ---
 
-# 🟣 Umbrel Setup (Manual LND Config REQUIRED)
+# 🟣 Umbrel Setup
+
+## LND v0.21.x (recommended)
+
+BOLT12 Pay automatically detects native Onion Messaging support.
+
+No manual LND configuration is required.
+
+---
+
+## LND v0.20.1 beta
 
 BOLT12 requires onion messaging support in LND.
 
@@ -100,7 +134,44 @@ For best public payment functionality, use the public domain for LNURL, BIP353 a
 
 ---
 
+### ⚠️  Upgrading from LND v0.20.x to LND v0.21.x
+
+
+   If you previously used BOLT12 Pay with LND v0.20.1 beta, you likely added custom protocol settings to your `lnd.conf`:
+
+
+   [protocol]
+   protocol.custom-message=513
+   protocol.custom-nodeann=39
+   protocol.custom-init=39
+
+
+   ### ⚠️   IMPORTANT
+
+
+   Before upgrading your Lightning node to LND v0.21.x, remove the entire custom protocol section from your `lnd.conf`. 
+   In your LND configuration file (Go to Files: Apps → lightning → data → lnd → lnd.conf), remove 
+
+   [protocol]
+   protocol.custom-message=513
+   protocol.custom-nodeann=39
+   protocol.custom-init=39
+
+
+   Save and restart LND, then you may savely update the Lightning Node app on umbrel.
+
+
+   Native onion messaging support is now built directly into LND v0.21 and these legacy settings are no longer required.
+
+   ⚠️  Leaving old custom protocol settings in place may cause unexpected behaviour after upgrading and may result in Lightning Node crash.
+
+   Once the custom protocol entries are removed, LND will work again.
+
+---
+
+
 # 🟢 StartOS Setup (Recommended)
+
 
 BOLT12 Pay is available in the official Start9 Community Registry ⚡
 
@@ -143,6 +214,11 @@ Recommended:
 - Cloudflare Access for admin protection
 
 Public payment endpoints must remain reachable.
+
+
+## BOLT12 Pay automatically detects native Onion Messaging support on newer LND versions.
+
+No manual configuration is required.
 
 ---
 
