@@ -2,7 +2,7 @@
 
 [![Available on Umbrel](https://apps.umbrel.com/api/app/bolt12-pay/badge-dark.svg)](https://apps.umbrel.com/app/bolt12-pay)
 
-[![Available on StartOS](https://img.shields.io/badge/StartOS-Community%50Registry-purple)](https://marketplace.start9.com/?registry=https:%2F%2Fcommunity-registry.start9.com%2F&id=bolt12-pay)
+[![Available on StartOS](https://img.shields.io/badge/StartOS-Community%20Registry-purple)](https://marketplace.start9.com/?registry=https:%2F%2Fcommunity-registry.start9.com%2F&id=bolt12-pay)
 
 Self-hosted Lightning payment and identity server with next-generation BOLT12 support.
 
