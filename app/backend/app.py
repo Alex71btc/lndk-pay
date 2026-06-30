@@ -1258,6 +1258,29 @@ def _lnd_rest_verify_setting():
         return False
     return LND_TLS_CERT_PATH
 
+async def _lnd_getinfo() -> dict[str, Any]:
+    if not LND_REST_URL:
+        return {}
+
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+    headers = {
+        "Grpc-Metadata-macaroon": macaroon_hex,
+    }
+
+    async with httpx.AsyncClient(
+        timeout=LND_REST_TIMEOUT,
+        verify=_lnd_rest_verify_setting(),
+    ) as client:
+        response = await client.get(
+            f"{LND_REST_URL}/v1/getinfo",
+            headers=headers,
+        )
+
+    response.raise_for_status()
+    data = response.json()
+
+    return data if isinstance(data, dict) else {}
+
 def _encode_lnurl(url: str) -> str:
     if not url.startswith("https://"):
         raise HTTPException(status_code=400, detail="LNURL target must be an https URL")
@@ -2342,16 +2365,34 @@ async def lnurl_callback(
     }
 
 @app.get("/api/setup/status")
-def setup_status(request: StarletteRequest):
+async def setup_status(request: StarletteRequest):
     if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     cfg = load_config()
-
     configured = bool(cfg.get("lnurl_base_domain"))
 
+    lnd_version = ""
+    native_onion_messaging = False
+
+    try:
+        info = await _lnd_getinfo()
+        lnd_version = str(info.get("version") or "")
+
+        # Native Onion Messaging is available from LND 0.21 onward.
+        m = re.match(r"^v?(\d+)\.(\d+)", lnd_version)
+        if m:
+            major = int(m.group(1))
+            minor = int(m.group(2))
+            native_onion_messaging = (major, minor) >= (0, 21)
+
+    except Exception as exc:
+        print("setup status lnd getinfo failed:", repr(exc))
+
     return {
-        "configured": configured
+        "configured": configured,
+        "lnd_version": lnd_version,
+        "native_onion_messaging": native_onion_messaging,
     }
 
 @app.get("/api/setup/config")

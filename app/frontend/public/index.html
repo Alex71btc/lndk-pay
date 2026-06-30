@@ -126,6 +126,14 @@
       margin-bottom: 16px;
     }
 
+
+.native-onion-success {
+  border: 1px solid rgba(34, 197, 94, 0.55);
+  border-radius: 14px;
+  background: rgba(34, 197, 94, 0.08);
+  padding: 14px;
+}
+
 .topActions {
   display: flex;
   flex-direction: column;
@@ -606,6 +614,7 @@
    <div class="sub" data-i18n="setup.subtitle">Grundkonfiguration für Public URL, Lightning-Adressen und DNS-Modus.</div>
 
 
+<div id="legacyOnionConfig">
 <div class="bolt12-onion-warning">
   <div class="bolt12-onion-warning__title" data-i18n="setup.onionWarningTitle">
   ⚠️ Hinweis für BOLT12 mit LND
@@ -650,7 +659,45 @@ protocol.custom-init=39</pre>
      style="margin-top:0.5rem;"
      data-i18n="setup.onionWarningStartOS">
 </div>
+</div>
+</div>
 
+<div id="nativeOnionConfig"
+     class="bolt12-onion-warning native-onion-success"
+     style="display:none;">
+
+  <div class="bolt12-onion-warning__title"
+       data-i18n="setup.nativeOnionTitle">
+    ✅ Native Onion Messaging Detected
+  </div>
+
+  <div class="bolt12-onion-warning__text"
+       style="margin-top:10px;margin-bottom:14px;font-weight:600;">
+    [<span id="lndVersionLabel"></span>]
+  </div>
+
+  <div class="bolt12-onion-warning__text"
+       style="margin-top:10px;"
+       data-i18n="setup.nativeOnionBuiltIn">
+    Native Onion Messaging is built into LND.
+  </div>
+
+  <div class="bolt12-onion-warning__text"
+       style="margin-top:6px;"
+       data-i18n="setup.nativeOnionNoConfig">
+    No custom protocol configuration is required.
+  </div>
+
+  <div class="bolt12-onion-warning__text"
+       style="margin-top:6px;"
+       data-i18n="setup.nativeOnionReady">
+    BOLT12 Offers are ready to use.
+  </div>
+
+</div>
+
+</div>
+</div>
     <section class="section">
       <label class="label" for="setupBolt12Address" data-i18n="setup.label.bolt12_address">Public BOLT12 Address</label>
       <input id="setupBolt12Address" type="text" data-i18n-placeholder="setup.ph.bolt12_address" placeholder="z. B. bolt12@pay.example.com" />
@@ -812,6 +859,7 @@ protocol.custom-init=39</pre>
   </a>
   <h1 style="margin:0;" data-i18n="console.title">⚡ BOLT12 Offer & Alias Console</h1>
 </div>
+      </div>
     </div>
     <button class="secondary" id="openSetupBtn" type="button" data-i18n="console.btn.setup">⚙ Setup</button>
   </div>
@@ -1251,6 +1299,28 @@ function getCookie(name) {
 
       if (!statusResponse.ok) {
         throw new Error(statusData?.detail || 'Setup-Status konnte nicht geladen werden');
+      }
+
+      // LND 0.21+ uses native Onion Messaging.
+      if (statusData.native_onion_messaging) {
+        const legacy = document.getElementById('legacyOnionConfig');
+        const nativeBox = document.getElementById('nativeOnionConfig');
+        const versionLabel = document.getElementById('lndVersionLabel');
+
+        if (legacy) {
+          legacy.style.display = 'none';
+        }
+
+        if (nativeBox) {
+          nativeBox.style.display = '';
+        }
+
+        if (versionLabel) {
+          const shortVersion =
+            (statusData.lnd_version || '').split(' commit=')[0];
+
+          versionLabel.textContent = `LND ${shortVersion}`;
+        }
       }
 
      let configData = {};
@@ -2312,6 +2382,11 @@ installBtn.addEventListener('click', async () => {
       "setup.onionWarningUmbrelFiles": "Öffne Umbrel → Files und navigiere zu:",  
       "setup.onionWarningStartOS": "Keine manuelle Konfiguration erforderlich. Falls Onion Messages nicht aktiviert sind, fordert BOLT12 Pay automatisch die benötigte LND Auto-Configure-Aufgabe an.",
       "setup.copyUmbrelConfig": "Umbrel-Konfiguration kopieren",
+      "setup.nativeOnionTitle": "✅ Native Onion Messaging erkannt",
+      "setup.nativeOnionVersion": "Erkannte LND-Version:",
+      "setup.nativeOnionBuiltIn": "Native Onion Messaging ist bereits in LND integriert.",
+      "setup.nativeOnionNoConfig": "Keine zusätzliche Protokollkonfiguration erforderlich.",
+      "setup.nativeOnionReady": "BOLT12 Offers sind einsatzbereit.",
       "setup.paymentModeTitle": "Kompatibilität oder Privatsphäre?",
       "setup.paymentModeHint": "Wähle zwischen maximaler Wallet-Kompatibilität und maximaler Privatsphäre.",
 
@@ -2422,6 +2497,11 @@ installBtn.addEventListener('click', async () => {
       "setup.onionWarningStartOS": "No manual configuration required. If Onion Messages are not enabled, BOLT12 Pay will automatically request the required LND Auto-Configure task.",
       "setup.onionWarningUmbrelFiles": "Open Umbrel → Files and navigate to:",
       "setup.copyUmbrelConfig": "Copy Umbrel config",
+      "setup.nativeOnionTitle": "✅ Native Onion Messaging Detected",
+      "setup.nativeOnionVersion": "Detected LND Version:",
+      "setup.nativeOnionBuiltIn": "Native Onion Messaging is built into LND.",
+      "setup.nativeOnionNoConfig": "No custom protocol configuration is required.",
+      "setup.nativeOnionReady": "BOLT12 Offers are ready to use.",
       "setup.paymentModeTitle": "Compatibility or Privacy?",
       "setup.paymentModeHint": "Choose between maximum wallet compatibility and maximum privacy.",
 
