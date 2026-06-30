@@ -24,7 +24,7 @@ Self-hosted Lightning payment and identity server with next-generation BOLT12 su
 
 ## ⚠️ Requirement: LND Lightning node
 
-BOLT12 Pay requires a LND Lightning node.
+BOLT12 Pay requires a LND Lightning node with at least one active channel, better a well connected node with multiple channels opened.
 
 ---
 # 🌍 Before You Start
