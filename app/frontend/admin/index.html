@@ -3472,6 +3472,20 @@
         await copyText(value, window.__t("toast.decode_copied"));
       });
 
+      paymentResultOutput?.addEventListener("click", async () => {
+        const value = paymentResultOutput.value.trim();
+
+        if (!value) {
+          setStatus(window.__t("toast.nothing_to_copy"), "error");
+          return;
+        }
+
+      await copyText(
+        value,
+        window.__t("toast.payment_result_copied")
+      );
+      });
+
       document
         .getElementById("clearHistoryBtn")
         .addEventListener("click", async () => {
@@ -3829,6 +3843,7 @@
             "toast.decode_copied": "Decode-Ausgabe kopiert.",
             "toast.nothing_to_copy": "Kein Inhalt zum Kopieren vorhanden.",
             "toast.copy_failed": "Kopieren fehlgeschlagen.",
+            "toast.payment_result_copied": "Zahlungsergebnis kopiert.",
             "toast.history_cleared": "Offer-History gelöscht.",
             "toast.history_to_pay": "Offer in Pay übernommen.",
             "toast.history_to_qr": "Offer als aktueller QR übernommen.",
@@ -4092,6 +4107,7 @@
             "toast.decode_copied": "Decode output copied.",
             "toast.nothing_to_copy": "Nothing to copy.",
             "toast.copy_failed": "Copy failed.",
+            "toast.payment_result_copied": "Payment result copied.",
             "toast.history_cleared": "Offer history cleared.",
             "toast.history_to_pay": "Offer loaded into Pay.",
             "toast.history_to_qr": "Offer loaded as current QR.",
