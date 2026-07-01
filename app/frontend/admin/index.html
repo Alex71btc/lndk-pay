@@ -3230,7 +3230,7 @@
           const successActionText = getLnurlSuccessActionText(parsed);
 
           renderSuccessOutput(
-            "✅ LNURL-Zahlung erfolgreich bezahlt",
+            window.__t("pay.summary.lnurl_paid"),
             [
               amountSat ? `⚡ ${formatSats(amountSat)}` : "",
               payerNote
@@ -4004,6 +4004,7 @@
             "hint.cloudflare_prefix": "Erstellt einen TXT-Record wie",
             "pay.summary.success": "✅ BOLT12-Offer erfolgreich bezahlt",
             "pay.summary.direct_offer": "🧾 Direktes Offer bezahlt",
+            "pay.summary.lnurl_paid": "✅ LNURL-Zahlung erfolgreich bezahlt",
             "pay.details": "--- Details ---",
             "pay.raw.success": "Offer erfolgreich bezahlt!",
             "toast.lnaddr_paid": "Lightning Address erfolgreich bezahlt.",
@@ -4267,6 +4268,7 @@
             "pay.summary.lnaddr_paid": "✅ Lightning Address paid successfully",
             "pay.summary.invoice_paid": "✅ BOLT11 invoice paid successfully",
             "pay.summary.invoice_processed": "🧾 Invoice processed",
+            "pay.summary.lnurl_paid": "✅ LNURL payment completed successfully",
             "pay.summary.invoice_amount_from_invoice":
               "⚡ Amount taken from invoice",
             "pay.summary.comment": "📝 Comment:",
