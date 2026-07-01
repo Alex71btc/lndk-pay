@@ -39,7 +39,7 @@ Recommended:
 
 Without a domain you can still:
 
-- create and receive BOLT12 Offers
+- create, pay and receive BOLT12 Offers (without Bip 353)
 - test BOLT12 functionality locally
 
 However:
