@@ -376,6 +376,17 @@
         padding: 9px 12px;
         font-size: 0.92rem;
       }
+      
+      .txMeta pre {
+          font-size: 12px;
+          max-height: 250px;
+          overflow: auto;
+      }
+
+      .txMeta code {
+          word-break: break-all;
+          white-space: pre-wrap;
+      }
 
       .txHeader {
         display: flex;
@@ -2281,14 +2292,72 @@
           const arrowClass = isIncoming ? "txIncoming" : "txOutgoing";
           const fee = item.fee_sat ? ` • Fee ${item.fee_sat} sat` : "";
           const memo = item.memo || item.identifier || "";
+          const displayMemo =
+            memo.startsWith("lnbc") ||
+            memo.startsWith("lntb") ||
+            memo.startsWith("lnbcrt")
+              ? ""
+              : memo;
+          const raw = item.raw_json || {};
+          const paymentHash = item.payment_hash || raw.payment_hash || raw.r_hash || "";
+          const preimage = raw.payment_preimage || raw.r_preimage || "";
+          const paymentRequest = raw.payment_request || raw.paymentRequest || "";
+          const paymentIndex = raw.payment_index || "";
+          const method = item.method || "unknown";
+          const methodLabel = {
+            lightning_address: "⚡ Lightning Address",
+            lnurl: "⚡ LNURL",
+            bolt11: "🧾 BOLT11 Invoice",
+            bolt12: "🎁 BOLT12 Offer",
+            offer: "🎁 Offer",
+            zap: "⚡ Nostr Zap",
+            mining: "⛏ Mining",
+            donation: "❤️ Donation",
+          }[method] || method;
+          const statusLabel = {
+            settled: "✅ Settled",
+            pending: "🟡 Pending",
+            failed: "❌ Failed",
+          }[item.status] || item.status;
+          const counterparty = item.counterparty || "";
+          const detailsJson = JSON.stringify(raw, null, 2);
 
           div.innerHTML = `
-            <div class="txHeader">
-              <span class="txArrow ${arrowClass}">${arrow}</span>
-              <span class="txAmount">${item.amount_sat} sats</span>
-            </div>
-            <div class="txMeta">${item.type} • ${item.status}${fee}</div>
-            ${memo ? `<div class="txMemo">${memo}</div>` : ""}
+            <details>
+              <summary>
+                <div class="txHeader">
+                  <span class="txArrow ${arrowClass}">${arrow}</span>
+                  <span class="txAmount">${item.amount_sat} sats</span>
+                </div>
+
+                <div class="txMeta">${methodLabel} • ${item.type} • ${statusLabel}${fee}</div>
+
+                ${counterparty ? `<div class="txMemo">${counterparty}</div>` : ""}
+                ${displayMemo ? `<div class="txMemo">${displayMemo}</div>` : ""}
+              </summary>
+
+              <div class="txMeta" style="margin-top: 10px;">
+                ${paymentHash ? `<div><details style="margin-top:8px;">
+                                 <summary><b>Payment Hash</b></summary>
+                                 <code>${paymentHash}</code>
+                                 </details></div>` : ""}
+                ${preimage ? `<div style="margin-top: 8px;"><details style="margin-top:8px;">
+                              <summary><b>Preimage</b></summary>
+                              <code>${preimage}</code>
+                              </details></div>` : ""}
+                ${paymentIndex ? `<div style="margin-top: 8px;"><b>Payment Index</b><br><code>${paymentIndex}</code></div>` : ""}
+                ${paymentRequest ? `
+                <details style="margin-top:8px;">
+                  <summary><b>▼ Invoice (BOLT11)</b></summary>
+                  <code>${paymentRequest}</code>
+                </details>
+                ` : ""}
+              <details style="margin-top:8px;">
+                 <summary><b>Raw JSON</b></summary>
+                 <pre>${detailsJson}</pre>
+              </details>
+              </div>
+            </details>
           `;
 
           list.appendChild(div);
