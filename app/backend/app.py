@@ -5029,6 +5029,7 @@ async def _process_pending_zaps_once():
         relays = item.get("relays") or NOSTR_DEFAULT_RELAYS
 
         result = await _publish_nostr_event(relays, signed)
+        print("⚡ Zap receipt:", result, flush=True)
 
         try:
             dm_message = _build_zap_dm_message(item)
@@ -5047,6 +5048,7 @@ async def _process_pending_zaps_once():
                 raise ValueError("No notification signing key configured")
             signed_dm = _sign_nostr_event_with_privkey(dm_event, notify_privkey_hex)
             dm_result = await _publish_nostr_event(relays, signed_dm)
+            print("✉️ Zap DM:", dm_result, flush=True)
             item["dm_event"] = signed_dm
             item["dm_result"] = dm_result
         except Exception as exc:
