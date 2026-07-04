@@ -377,6 +377,42 @@
         font-size: 0.92rem;
       }
 
+      .txHeader {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .txArrow {
+        font-weight: 800;
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .txIncoming {
+        color: #37d67a;
+      }
+
+      .txOutgoing {
+        color: #ff5d5d;
+      }
+
+      .txAmount {
+        font-weight: 800;
+        font-size: 16px;
+      }
+
+      .txMeta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .txMemo {
+        margin-top: 4px;
+        font-size: 13px;
+      }
+
       .emptyState {
         color: var(--muted);
         font-size: 0.95rem;
@@ -871,6 +907,13 @@
         </div>
         <div id="historyList" class="historyList"></div>
       </details>
+      <details class="section">
+       <summary>
+         <span>Transaction History</span>
+       </summary>
+
+       <div id="txHistoryList" class="historyList"></div>
+     </details>
 
       <details class="section">
         <summary>
@@ -2199,10 +2242,59 @@
         }
       }
 
+      async function loadTxHistory() {
+        const response = await fetch("/api/tx-history");
+
+        if (!response.ok) {
+          throw new Error("Failed to load tx history");
+        }
+
+        return (await response.json()).items || []; 
+      }
+
       async function addHistoryItem(item) {
         await saveHistoryItem(item);
         await renderHistory();
       }
+
+      window.renderTxHistory = async function renderTxHistory() {
+        const items = await loadTxHistory();
+
+        const list = document.getElementById("txHistoryList");
+
+        list.innerHTML = "";
+
+        if (!items.length) {
+          const empty = document.createElement("div");
+          empty.className = "emptyState";
+          empty.textContent = "No transactions yet.";
+          list.appendChild(empty);
+          return;
+        }
+
+        for (const item of items) {
+          const div = document.createElement("div");
+          div.className = "historyItem";
+
+          const isIncoming = item.direction === "incoming";
+          const arrow = isIncoming ? "↓" : "↑";
+          const arrowClass = isIncoming ? "txIncoming" : "txOutgoing";
+          const fee = item.fee_sat ? ` • Fee ${item.fee_sat} sat` : "";
+          const memo = item.memo || item.identifier || "";
+
+          div.innerHTML = `
+            <div class="txHeader">
+              <span class="txArrow ${arrowClass}">${arrow}</span>
+              <span class="txAmount">${item.amount_sat} sats</span>
+            </div>
+            <div class="txMeta">${item.type} • ${item.status}${fee}</div>
+            ${memo ? `<div class="txMemo">${memo}</div>` : ""}
+          `;
+
+          list.appendChild(div);
+        }
+
+      };
 
       window.renderHistory = async function renderHistory() {
         const items = await loadHistory();
@@ -2392,7 +2484,9 @@
           historyList.appendChild(wrap);
         }
       };
-      async function readJsonOrThrow(response) {
+      
+
+        async function readJsonOrThrow(response) {
         const rawText = await response.text();
         let data = null;
 
@@ -3624,6 +3718,7 @@
       function initAdminPageUi() {
         setCurrentOffer("");
         renderHistory();
+        renderTxHistory();
 
         requestAnimationFrame(() => {
           renderOfferQr(getActiveValue());
