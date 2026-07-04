@@ -360,6 +360,27 @@ def init_db():
         ON history_bip353(alias)
     """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tx_history (
+            payment_hash TEXT PRIMARY KEY,
+
+            direction TEXT NOT NULL,
+            type TEXT NOT NULL,
+
+            amount_sat INTEGER NOT NULL,
+            fee_sat INTEGER,
+
+            status TEXT,
+
+            memo TEXT,
+            identifier TEXT,
+
+            created_at TEXT,
+            settled_at TEXT,
+
+            raw_json TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -368,6 +389,92 @@ def _db_conn():
     conn.row_factory = sqlite3.Row
     return conn
 
+def save_tx_history_item(item: dict):
+    with _db_conn() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO tx_history (
+                payment_hash,
+                direction,
+                type,
+                amount_sat,
+                fee_sat,
+                status,
+                memo,
+                identifier,
+                created_at,
+                settled_at,
+                raw_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                item["payment_hash"],
+                item["direction"],
+                item["type"],
+                item["amount_sat"],
+                item.get("fee_sat"),
+                item.get("status"),
+                item.get("memo"),
+                item.get("identifier"),
+                item.get("created_at"),
+                item.get("settled_at"),
+                json.dumps(item.get("raw_json", {})),
+            ),
+        )
+
+def _log_tx(
+    *,
+    payment_hash: str,
+    direction: str,
+    tx_type: str,
+    amount_sat: int,
+    status: str,
+    memo: str = "",
+    identifier: str = "",
+    fee_sat: int | None = None,
+    created_at: str | None = None,
+    settled_at: str | None = None,
+    raw_json: dict | None = None,
+):
+
+    save_tx_history_item({
+        "payment_hash": payment_hash,
+        "direction": direction,
+        "type": tx_type,
+        "amount_sat": amount_sat,
+        "fee_sat": fee_sat,
+        "status": status,
+        "memo": memo,
+        "identifier": identifier,
+        "created_at": created_at or str(int(time.time())),
+        "settled_at": settled_at,
+        "raw_json": raw_json or {},
+    })
+
+def list_tx_history(limit: int = 100):
+    with _db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM tx_history
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    items = []
+
+    for row in rows:
+        item = dict(row)
+
+        if item["raw_json"]:
+            item["raw_json"] = json.loads(item["raw_json"])
+
+        items.append(item)
+
+    return items
 
 def list_offer_history(limit: int = 50):
     safe_limit = max(1, min(int(limit or 50), 200))
@@ -1567,6 +1674,17 @@ async def _create_bolt11_invoice(
     if not payment_request:
         raise HTTPException(status_code=502, detail=f"LND REST invoice missing payment_request: {data}")
 
+    _log_tx(
+        payment_hash=payment_hash,
+        direction="incoming",
+        tx_type="invoice",
+        amount_sat=amount_sat,
+        status="pending",
+        memo=memo,
+        identifier=memo,
+        raw_json=data,
+    )
+
     return {
         "payment_request": payment_request,
         "payment_hash": payment_hash,
@@ -1696,6 +1814,19 @@ async def _pay_bolt11_invoice(
 
     if failure_reason and str(failure_reason).lower() not in {"failure_reason_none", "none", ""}:
         raise HTTPException(status_code=400, detail=str(failure_reason))
+
+    _log_tx(
+        payment_hash=payment_data.get("payment_hash", ""),
+        direction="outgoing",
+        tx_type="invoice",
+        amount_sat=int(payment_data.get("value_sat") or 0),
+        fee_sat=int(payment_data.get("fee_sat") or 0),
+        status="settled",
+        memo="",
+        identifier=payment_request,
+        settled_at=str(int(time.time())),
+        raw_json=payment_data,
+    )
 
     return payment_data
 
@@ -3440,7 +3571,7 @@ def _is_pay_session_valid(request: StarletteRequest) -> bool:
     return True
 
 
-def require_pay_auth(request: Request) -> None:
+def require_pay_auth(request: StarletteRequest) -> None:
     if not _is_pay_ui_configured():
         raise HTTPException(
             status_code=403,
@@ -3490,7 +3621,7 @@ def _is_nwc_session_valid(request: StarletteRequest) -> bool:
     return True
 
 
-def require_nwc_auth(request: Request) -> None:
+def require_nwc_auth(request: StarletteRequest) -> None:
     require_pay_auth(request)
     if not _is_nwc_session_valid(request):
         raise HTTPException(status_code=401, detail="NWC unlock required")
@@ -4984,6 +5115,82 @@ async def _lookup_invoice(payment_hash):
         )
         return r.json()
 
+async def _list_invoices():
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+    headers = {"Grpc-Metadata-macaroon": macaroon_hex}
+
+    async with httpx.AsyncClient(timeout=10, verify=False) as client:
+        r = await client.get(
+            f"{LND_REST_URL}/v1/invoices",
+            headers=headers,
+        )
+
+    return r.json()
+
+def _invoice_to_tx_history(inv: dict):
+    memo = inv.get("memo") or ""
+
+    tx_type = "invoice"
+
+    if memo.startswith("Bolt12 offer"):
+        tx_type = "offer"
+
+    elif memo.startswith("BOLT12 Pay"):
+        tx_type = "payment"
+
+    elif memo.startswith("Nostr zap"):
+        tx_type = "zap"
+
+    elif memo.startswith("OCEAN"):
+        tx_type = "mining"
+
+    elif memo.startswith("Coffee"):
+        tx_type = "donation"
+    return {
+        "payment_hash": inv.get("r_hash"),
+        "direction": "incoming",
+        "type": tx_type,
+        "amount_sat": int(inv.get("value") or 0),
+        "fee_sat": None,
+        "status": "settled" if inv.get("settled") else "pending",
+        "memo": inv.get("memo") or "",
+        "identifier": memo,
+        "created_at": inv.get("creation_date"),
+        "settled_at": inv.get("settle_date"),
+        "raw_json": inv,
+    }
+
+async def sync_tx_history():
+    invoices = await _list_invoices()
+
+    count = 0
+
+    print(
+        f"Importing {len(invoices.get('invoices', []))} invoices...",
+        flush=True,
+    )
+
+    for inv in invoices.get("invoices", []):
+        item = _invoice_to_tx_history(inv)
+
+        _log_tx(
+            payment_hash=item["payment_hash"],
+            direction=item["direction"],
+            tx_type=item["type"],
+            amount_sat=item["amount_sat"],
+            fee_sat=item["fee_sat"],
+            status=item["status"],
+            memo=item["memo"],
+            identifier=item["identifier"],
+            created_at=item["created_at"],
+            settled_at=item["settled_at"],
+            raw_json=item["raw_json"],
+        )
+
+        count += 1
+
+    return count
+
 async def _process_pending_zaps_once():
     pending = _get_pending_zaps()
 
@@ -5071,11 +5278,40 @@ async def _zap_publisher_loop():
 async def startup_background_tasks():
     init_db()
 
+    await sync_tx_history()
+
     app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
     app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
 
     print("zap publisher loop started", flush=True)
     print("[NWC] startup task scheduled", flush=True)
+
+@app.get("/api/debug/invoices")
+async def api_debug_invoices(request: StarletteRequest):
+    require_pay_auth(request)
+    return await _list_invoices()
+
+@app.get("/api/debug/tx-history")
+def debug_tx_history(request: StarletteRequest):
+    require_pay_auth(request)
+    return list_tx_history()
+
+@app.get("/api/tx-history")
+def api_get_tx_history(request: StarletteRequest):
+    require_pay_auth(request)
+    return {"items": list_tx_history()}
+
+@app.post("/api/admin/sync-tx-history")
+async def api_sync_tx_history(request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    count = await sync_tx_history()
+
+    return {
+        "ok": True,
+        "imported": count,
+    }
 
 @app.get("/api/history")
 def api_get_offer_history(request: StarletteRequest, limit: int = 50):
