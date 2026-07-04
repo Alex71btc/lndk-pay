@@ -366,6 +366,8 @@ def init_db():
 
             direction TEXT NOT NULL,
             type TEXT NOT NULL,
+            method TEXT,
+            counterparty TEXT,
 
             amount_sat INTEGER NOT NULL,
             fee_sat INTEGER,
@@ -381,6 +383,15 @@ def init_db():
             raw_json TEXT
         )
     """)
+    try:
+        conn.execute("ALTER TABLE tx_history ADD COLUMN method TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute("ALTER TABLE tx_history ADD COLUMN counterparty TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -397,6 +408,8 @@ def save_tx_history_item(item: dict):
                 payment_hash,
                 direction,
                 type,
+                method,
+                counterparty,
                 amount_sat,
                 fee_sat,
                 status,
@@ -406,12 +419,14 @@ def save_tx_history_item(item: dict):
                 settled_at,
                 raw_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["payment_hash"],
                 item["direction"],
                 item["type"],
+                item.get("method"),
+                item.get("counterparty"),
                 item["amount_sat"],
                 item.get("fee_sat"),
                 item.get("status"),
@@ -428,6 +443,8 @@ def _log_tx(
     payment_hash: str,
     direction: str,
     tx_type: str,
+    method: str = "unknown",
+    counterparty: str = "",
     amount_sat: int,
     status: str,
     memo: str = "",
@@ -442,6 +459,8 @@ def _log_tx(
         "payment_hash": payment_hash,
         "direction": direction,
         "type": tx_type,
+        "method": method,
+        "counterparty": counterparty,
         "amount_sat": amount_sat,
         "fee_sat": fee_sat,
         "status": status,
@@ -1683,6 +1702,8 @@ async def _create_bolt11_invoice(
         memo=memo,
         identifier=memo,
         raw_json=data,
+        method="bolt11",
+        counterparty="",
     )
 
     return {
@@ -1696,7 +1717,11 @@ async def _pay_bolt11_invoice(
     *,
     payment_request: str,
     fee_limit_sat: int | None = None,
+    method: str = "bolt11",
+    counterparty: str = "",
+    memo: str = "",
 ) -> dict[str, Any]:
+
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
 
     headers = {
@@ -1815,19 +1840,21 @@ async def _pay_bolt11_invoice(
     if failure_reason and str(failure_reason).lower() not in {"failure_reason_none", "none", ""}:
         raise HTTPException(status_code=400, detail=str(failure_reason))
 
+
     _log_tx(
         payment_hash=payment_data.get("payment_hash", ""),
         direction="outgoing",
         tx_type="invoice",
+        method=method,
+        counterparty=counterparty,
         amount_sat=int(payment_data.get("value_sat") or 0),
         fee_sat=int(payment_data.get("fee_sat") or 0),
         status="settled",
-        memo="",
+        memo=memo,
         identifier=payment_request,
         settled_at=str(int(time.time())),
         raw_json=payment_data,
     )
-
     return payment_data
 
 
@@ -2650,8 +2677,10 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
 
         pay_result = await _pay_bolt11_invoice(
             payment_request=lnurl_result["payment_request"],
+            method="lightning_address",
+            counterparty=target,
+            memo=payload.payer_note or "",
         )
-
         raw_output = json.dumps(
             {
                 "mode": "lnurl",
@@ -2807,6 +2836,9 @@ async def pay_lnurl(payload: PayLnurlRequest, request: StarletteRequest) -> PayO
 
     pay_result = await _pay_bolt11_invoice(
         payment_request=result["payment_request"],
+        method="lnurl",
+        counterparty=payload.lnurl,
+        memo=payload.comment or ""
     )
 
     raw_output = json.dumps(
@@ -5131,25 +5163,36 @@ def _invoice_to_tx_history(inv: dict):
     memo = inv.get("memo") or ""
 
     tx_type = "invoice"
+    method = "bolt11"
+    counterparty = ""
 
     if memo.startswith("Bolt12 offer"):
         tx_type = "offer"
+        method = "bolt12"
 
     elif memo.startswith("BOLT12 Pay"):
         tx_type = "payment"
+        method = "bolt12"
 
     elif memo.startswith("Nostr zap"):
         tx_type = "zap"
+        method = "zap"
 
     elif memo.startswith("OCEAN"):
         tx_type = "mining"
+        method = "mining"
+        counterparty = "OCEAN"
 
     elif memo.startswith("Coffee"):
         tx_type = "donation"
+        method = "bolt11"
+
     return {
         "payment_hash": inv.get("r_hash"),
         "direction": "incoming",
         "type": tx_type,
+        "method": method,
+        "counterparty": counterparty,
         "amount_sat": int(inv.get("value") or 0),
         "fee_sat": None,
         "status": "settled" if inv.get("settled") else "pending",
@@ -5185,6 +5228,8 @@ async def sync_tx_history():
             created_at=item["created_at"],
             settled_at=item["settled_at"],
             raw_json=item["raw_json"],
+            method=item.get("method", "unknown"),
+            counterparty=item.get("counterparty", ""),
         )
 
         count += 1
