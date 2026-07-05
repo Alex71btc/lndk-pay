@@ -426,7 +426,10 @@ async def _handle_pay_invoice_request(
         return
 
     try:
-        pay_result = await _pay_bolt11_invoice(payment_request=invoice)
+        pay_result = await _pay_bolt11_invoice(
+        payment_request=invoice,
+        origin="nwc",
+        )
     except Exception as exc:
         _log(f"request {event_id}: payment failed: {exc}")
         await _send_nwc_error(ws, event, "PAYMENT_FAILED", str(exc))
