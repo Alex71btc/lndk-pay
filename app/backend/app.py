@@ -368,6 +368,7 @@ def init_db():
             type TEXT NOT NULL,
             method TEXT,
             counterparty TEXT,
+            origin TEXT,
 
             amount_sat INTEGER NOT NULL,
             fee_sat INTEGER,
@@ -392,6 +393,10 @@ def init_db():
         conn.execute("ALTER TABLE tx_history ADD COLUMN counterparty TEXT")
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute("ALTER TABLE tx_history ADD COLUMN origin TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -410,6 +415,7 @@ def save_tx_history_item(item: dict):
                 type,
                 method,
                 counterparty,
+                origin,
                 amount_sat,
                 fee_sat,
                 status,
@@ -419,7 +425,7 @@ def save_tx_history_item(item: dict):
                 settled_at,
                 raw_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["payment_hash"],
@@ -427,6 +433,7 @@ def save_tx_history_item(item: dict):
                 item["type"],
                 item.get("method"),
                 item.get("counterparty"),
+                item.get("origin"),
                 item["amount_sat"],
                 item.get("fee_sat"),
                 item.get("status"),
@@ -445,6 +452,7 @@ def _log_tx(
     tx_type: str,
     method: str = "unknown",
     counterparty: str = "",
+    origin: str = "web",
     amount_sat: int,
     status: str,
     memo: str = "",
@@ -461,6 +469,7 @@ def _log_tx(
         "type": tx_type,
         "method": method,
         "counterparty": counterparty,
+        "origin": origin,
         "amount_sat": amount_sat,
         "fee_sat": fee_sat,
         "status": status,
@@ -1648,7 +1657,9 @@ async def _create_bolt11_invoice(
     memo: str = "",
     expiry: int = 3600,
     description_hash: Optional[str] = None,
+    log_history: bool = True,
 ) -> dict[str, Any]:
+
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
 
     headers = {
@@ -1681,6 +1692,12 @@ async def _create_bolt11_invoice(
 
     try:
         data = response.json()
+        print(
+            "CREATED:",
+            data.get("r_hash"),
+            data.get("add_index"),
+            flush=True,
+        )
     except Exception:
         raise HTTPException(status_code=502, detail="LND REST returned invalid JSON")
 
@@ -1693,18 +1710,19 @@ async def _create_bolt11_invoice(
     if not payment_request:
         raise HTTPException(status_code=502, detail=f"LND REST invoice missing payment_request: {data}")
 
-    _log_tx(
-        payment_hash=payment_hash,
-        direction="incoming",
-        tx_type="invoice",
-        amount_sat=amount_sat,
-        status="pending",
-        memo=memo,
-        identifier=memo,
-        raw_json=data,
-        method="bolt11",
-        counterparty="",
-    )
+    if log_history:
+        _log_tx(
+            payment_hash=payment_hash,
+            direction="incoming",
+            tx_type="invoice",
+            amount_sat=amount_sat,
+            status="pending",
+            memo=memo,
+            identifier=memo,
+            raw_json=data,
+            method="bolt11",
+            counterparty="",
+        )
 
     return {
         "payment_request": payment_request,
@@ -1720,6 +1738,7 @@ async def _pay_bolt11_invoice(
     method: str = "bolt11",
     counterparty: str = "",
     memo: str = "",
+    origin: str = "web",
 ) -> dict[str, Any]:
 
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
@@ -1847,6 +1866,7 @@ async def _pay_bolt11_invoice(
         tx_type="invoice",
         method=method,
         counterparty=counterparty,
+        origin=origin,
         amount_sat=int(payment_data.get("value_sat") or 0),
         fee_sat=int(payment_data.get("fee_sat") or 0),
         status="settled",
@@ -4058,7 +4078,11 @@ async def public_alias_page(alias_name: str):
                 memo=description,
                 expiry=3600,
             )
-            bolt11_invoice = invoice["payment_request"] if isinstance(invoice, dict) else str(invoice)
+            bolt11_invoice = (
+                invoice["payment_request"]
+                if isinstance(invoice, dict)
+                else str(invoice)
+            )
     except Exception:
         bolt11_invoice = None
 
@@ -5153,9 +5177,12 @@ async def _list_invoices():
 
     async with httpx.AsyncClient(timeout=10, verify=False) as client:
         r = await client.get(
-            f"{LND_REST_URL}/v1/invoices",
+            f"{LND_REST_URL}/v1/invoices?reversed=true&num_max_invoices=100",
             headers=headers,
         )
+    data = r.json()
+
+    return data
 
     return r.json()
 
@@ -5165,6 +5192,9 @@ def _invoice_to_tx_history(inv: dict):
     tx_type = "invoice"
     method = "bolt11"
     counterparty = ""
+    state = str(inv.get("state") or "").upper()
+    settled = bool(inv.get("settled")) or state == "SETTLED"
+
 
     if memo.startswith("Bolt12 offer"):
         tx_type = "offer"
@@ -5195,7 +5225,7 @@ def _invoice_to_tx_history(inv: dict):
         "counterparty": counterparty,
         "amount_sat": int(inv.get("value") or 0),
         "fee_sat": None,
-        "status": "settled" if inv.get("settled") else "pending",
+        "status": "settled" if settled else "pending",
         "memo": inv.get("memo") or "",
         "identifier": memo,
         "created_at": inv.get("creation_date"),
@@ -5204,16 +5234,14 @@ def _invoice_to_tx_history(inv: dict):
     }
 
 async def sync_tx_history():
+
     invoices = await _list_invoices()
 
     count = 0
 
-    print(
-        f"Importing {len(invoices.get('invoices', []))} invoices...",
-        flush=True,
-    )
-
     for inv in invoices.get("invoices", []):
+
+
         item = _invoice_to_tx_history(inv)
 
         _log_tx(
@@ -5234,6 +5262,7 @@ async def sync_tx_history():
 
         count += 1
 
+    print("=== SYNC DONE ===", flush=True)
     return count
 
 async def _process_pending_zaps_once():
