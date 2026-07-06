@@ -1739,6 +1739,7 @@ async def _pay_bolt11_invoice(
     counterparty: str = "",
     memo: str = "",
     origin: str = "web",
+    amount_sat_override: int | None = None,
 ) -> dict[str, Any]:
 
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
@@ -1867,7 +1868,7 @@ async def _pay_bolt11_invoice(
         method=method,
         counterparty=counterparty,
         origin=origin,
-        amount_sat=int(payment_data.get("value_sat") or 0),
+        amount_sat=int(amount_sat_override or payment_data.get("value_sat") or 0),
         fee_sat=int(payment_data.get("fee_sat") or 0),
         status="settled",
         memo=memo,
