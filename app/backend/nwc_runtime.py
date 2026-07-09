@@ -30,7 +30,7 @@ def _build_info_event() -> dict[str, Any]:
         "kind": 13194,
         "created_at": int(time.time()),
         "tags": [],
-        "content": "get_info get_balance pay_invoice",
+        "content": "get_info get_balance pay_invoice make_invoice",
     }
 
 
@@ -294,12 +294,20 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         await _handle_pay_invoice_request(ws, event, matched, params)
         return
 
+    if method == "make_invoice":
+        await _handle_make_invoice_request(ws, event, matched, params)
+        return
+
     if method == "get_info":
         await _handle_get_info_request(ws, event, matched)
         return
 
     if method == "get_balance":
         await _handle_get_balance_request(ws, event, matched)
+        return
+
+    if method == "list_transactions":
+        await _handle_list_transactions_request(ws, event, matched, params)
         return
 
     await _send_nwc_error(ws, event, "NOT_IMPLEMENTED", f"Unsupported method: {method}")
@@ -442,6 +450,72 @@ async def _handle_pay_invoice_request(
     await _send_nwc_success(ws, event, "pay_invoice", result)
 
 
+async def _handle_make_invoice_request(
+    ws,
+    event: dict[str, Any],
+    matched: dict[str, Any],
+    params: dict[str, Any],
+) -> None:
+    from .app import _create_bolt11_invoice
+
+    event_id = str(event.get("id") or "")
+    permissions = matched.get("permissions") or {}
+
+    # No separate UI permission yet; allow receive if get_info is allowed.
+    if not bool(permissions.get("get_info", True)):
+        await _send_nwc_error(ws, event, "RESTRICTED", "make_invoice not allowed")
+        return
+
+    try:
+        amount_msat = int(params.get("amount") or params.get("amount_msat") or 0)
+    except Exception:
+        amount_msat = 0
+
+    if amount_msat <= 0:
+        await _send_nwc_error(ws, event, "INVALID_REQUEST", "Missing or invalid amount")
+        return
+
+    amount_sat = max(1, (amount_msat + 999) // 1000)
+    description = str(
+        params.get("description")
+        or params.get("memo")
+        or params.get("description_hash")
+        or "NWC invoice"
+    ).strip()
+
+    try:
+        invoice = await _create_bolt11_invoice(
+            amount_sat=amount_sat,
+            memo=description,
+            method="nwc",
+            counterparty=str(matched.get("name") or "NWC"),
+        )
+    except Exception as exc:
+        _log(f"request {event_id}: make_invoice failed: {exc}")
+        await _send_nwc_error(ws, event, "INTERNAL", f"Failed to create invoice: {exc}")
+        return
+
+    now = int(time.time())
+    expiry = int(params.get("expiry") or 3600)
+
+    result = {
+        "type": "incoming",
+        "invoice": invoice["payment_request"],
+        "payment_hash": invoice.get("payment_hash") or "",
+        "amount": amount_sat * 1000,
+        "description": description,
+        "description_hash": "",
+        "created_at": now,
+        "expires_at": now + expiry,
+        "settled_at": None,
+        "settled": False,
+        "fees_paid": 0,
+     }
+
+    _log(f"request {event_id}: make_invoice success result={result}")
+    await _send_nwc_success(ws, event, "make_invoice", result)
+
+
 async def _handle_get_info_request(
     ws,
     event: dict[str, Any],
@@ -457,7 +531,14 @@ async def _handle_get_info_request(
         "alias": "BOLT12 Pay",
         "network": "mainnet",
         "block_height": 0,
-        "methods": ["pay_invoice", "get_info", "get_balance"],
+        "methods": [
+            "pay_invoice",
+            "make_invoice",
+            "lookup_invoice",
+            "list_transactions",
+            "get_info",
+            "get_balance",
+         ],
     }
     await _send_nwc_success(ws, event, "get_info", result)
 
@@ -503,6 +584,43 @@ async def _handle_get_balance_request(
     }
     await _send_nwc_success(ws, event, "get_balance", result)
 
+async def _handle_list_transactions_request(
+    ws,
+    event: dict[str, Any],
+    matched: dict[str, Any],
+    params: dict[str, Any],
+) -> None:
+    from .app import list_tx_history
+
+    permissions = matched.get("permissions") or {}
+
+    if not bool(permissions.get("get_balance", False)):
+        await _send_nwc_error(ws, event, "RESTRICTED", "list_transactions not allowed")
+        return
+
+    limit = int(params.get("limit") or 50)
+    history = list_tx_history(limit)
+
+    transactions = []
+
+    for item in history:
+        transactions.append({
+            "type": "incoming" if item["direction"] == "incoming" else "outgoing",
+            "invoice": item.get("raw_json", {}).get("payment_request", ""),
+            "payment_hash": item.get("payment_hash", ""),
+            "amount": int(item.get("amount_sat") or 0) * 1000,
+            "fees_paid": int(item.get("fee_sat") or 0) * 1000,
+            "created_at": int(item.get("created_at") or 0),
+            "settled_at": int(item.get("settled_at") or 0) if item.get("settled_at") else None,
+            "description": item.get("memo") or "",
+        })
+
+    await _send_nwc_success(
+        ws,
+        event,
+        "list_transactions",
+        {"transactions": transactions},
+    )
 
 # ---------------------------------------------------------------------------
 # Relay message handling

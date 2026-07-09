@@ -1658,6 +1658,8 @@ async def _create_bolt11_invoice(
     expiry: int = 3600,
     description_hash: Optional[str] = None,
     log_history: bool = True,
+    method: str = "bolt11",
+    counterparty: str = "",
 ) -> dict[str, Any]:
 
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
@@ -1718,10 +1720,10 @@ async def _create_bolt11_invoice(
             amount_sat=amount_sat,
             status="pending",
             memo=memo,
-            identifier=memo,
             raw_json=data,
-            method="bolt11",
-            counterparty="",
+            method=method,
+            counterparty=counterparty,
+            identifier=counterparty or memo,
         )
 
     return {
@@ -2480,6 +2482,8 @@ async def lnurl_callback(
         amount_sat=amount_sat,
         memo=memo,
         description_hash=description_hash_b64,
+        method="lnurl",
+        counterparty=alias["identifier"],
     )
 
     payment_request = invoice["payment_request"] if isinstance(invoice, dict) else str(invoice)
@@ -5281,9 +5285,67 @@ async def sync_tx_history():
     count = 0
 
     for inv in invoices.get("invoices", []):
-
-
         item = _invoice_to_tx_history(inv)
+        payment_hash = item["payment_hash"]
+
+        existing = None
+        with _db_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM tx_history WHERE payment_hash = ?",
+                (payment_hash,),
+            ).fetchone()
+            if row:
+                existing = dict(row)
+                if existing.get("raw_json"):
+                    try:
+                        existing["raw_json"] = json.loads(existing["raw_json"])
+                    except Exception:
+                        existing["raw_json"] = {}
+
+        if existing:
+            # Preserve richer app-side classification. LND invoices only know BOLT11.
+            if item.get("method") == "bolt11" and existing.get("method") in {
+                "lnurl",
+                "lightning_address",
+                "zap",
+            }:
+                item["method"] = existing.get("method")
+                item["counterparty"] = existing.get("counterparty") or ""
+                item["identifier"] = existing.get("identifier") or item["identifier"]
+                item["origin"] = existing.get("origin") or "web"
+
+            comparable = {
+                "direction": item["direction"],
+                "type": item["type"],
+                "method": item.get("method"),
+                "counterparty": item.get("counterparty", ""),
+                "amount_sat": item["amount_sat"],
+                "fee_sat": item["fee_sat"],
+                "status": item["status"],
+                "memo": item["memo"],
+                "identifier": item["identifier"],
+                "created_at": item["created_at"],
+                "settled_at": item["settled_at"],
+                "raw_json": item["raw_json"],
+            }
+
+            existing_comparable = {
+                "direction": existing.get("direction"),
+                "type": existing.get("type"),
+                "method": existing.get("method"),
+                "counterparty": existing.get("counterparty") or "",
+                "amount_sat": existing.get("amount_sat"),
+                "fee_sat": existing.get("fee_sat"),
+                "status": existing.get("status"),
+                "memo": existing.get("memo"),
+                "identifier": existing.get("identifier"),
+                "created_at": existing.get("created_at"),
+                "settled_at": existing.get("settled_at"),
+                "raw_json": existing.get("raw_json") or {},
+            }
+
+            if json.dumps(comparable, sort_keys=True, default=str) == json.dumps(existing_comparable, sort_keys=True, default=str):
+                continue
 
         _log_tx(
             payment_hash=item["payment_hash"],
@@ -5303,7 +5365,6 @@ async def sync_tx_history():
 
         count += 1
 
-    print("=== SYNC DONE ===", flush=True)
     return count
 
 async def _process_pending_zaps_once():

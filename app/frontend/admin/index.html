@@ -2313,11 +2313,7 @@
             },
           });
 
-          const result = await response.json();
-
-          if (result.changed) {
             await renderTxHistory();
-          }
 
         } catch (e) {
           console.warn("TX sync failed", e);
@@ -2389,7 +2385,7 @@
           const preimage = raw.payment_preimage || raw.r_preimage || "";
           const paymentRequest = raw.payment_request || raw.paymentRequest || "";
           const method = item.method || "unknown";
-          const methodLabel = {
+          let methodLabel = {
             lightning_address: "⚡ Lightning Address",
             lnurl: "⚡ LNURL",
             bolt11: "🧾 BOLT11 Invoice",
@@ -2405,13 +2401,18 @@
             failed: "❌ Failed",
           }[item.status] || item.status;
 
-          const originLabel = {
+          let originLabel = {
             web: "",
             nwc: " • 🔗 NWC",
             api: " • API",
             mining: " • ⛏ Mining",
           }[item.origin] || "";
           
+          if (item.origin === "nwc") {
+            methodLabel = "🔗 NWC";
+            originLabel = "";
+          }
+
           const typeLabel =
             ["invoice", "offer", "mining", "zap"].includes(item.type)
               ? ""
