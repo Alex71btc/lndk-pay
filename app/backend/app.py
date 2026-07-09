@@ -968,7 +968,7 @@ class NwcConnectionCreateRequest(BaseModel):
     allow_get_balance: bool = True
     allow_pay_invoice: bool = True
     max_payment_sat: int = Field(default=100000, ge=1, le=100000000)
-    budget_period: Literal["none", "day", "week", "month"] = "none"
+    budget_period: Literal["none", "day", "week", "month"] = "day"
     budget_amount_sat: int = Field(default=0, ge=0, le=1000000000)
 
 
@@ -5308,6 +5308,7 @@ async def sync_tx_history():
                 "lnurl",
                 "lightning_address",
                 "zap",
+                "nwc",
             }:
                 item["method"] = existing.get("method")
                 item["counterparty"] = existing.get("counterparty") or ""
@@ -5366,6 +5367,15 @@ async def sync_tx_history():
         count += 1
 
     return count
+
+async def _tx_history_sync_loop():
+    while True:
+        try:
+            await sync_tx_history()
+        except Exception as exc:
+            print(f"tx history sync error: {exc}", flush=True)
+
+        await asyncio.sleep(5)
 
 async def _process_pending_zaps_once():
     pending = _get_pending_zaps()
@@ -5456,6 +5466,7 @@ async def startup_background_tasks():
 
     await sync_tx_history()
 
+    app.state.tx_sync_task = asyncio.create_task(_tx_history_sync_loop())
     app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
     app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
 

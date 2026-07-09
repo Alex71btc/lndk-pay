@@ -298,6 +298,10 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         await _handle_make_invoice_request(ws, event, matched, params)
         return
 
+    if method == "lookup_invoice":
+        await _handle_lookup_invoice_request(ws, event, matched, params)
+        return
+
     if method == "get_info":
         await _handle_get_info_request(ws, event, matched)
         return
@@ -515,6 +519,60 @@ async def _handle_make_invoice_request(
     _log(f"request {event_id}: make_invoice success result={result}")
     await _send_nwc_success(ws, event, "make_invoice", result)
 
+async def _handle_lookup_invoice_request(
+    ws,
+    event: dict[str, Any],
+    matched: dict[str, Any],
+    params: dict[str, Any],
+) -> None:
+    from .app import list_tx_history, sync_tx_history
+
+    await sync_tx_history()
+
+    payment_hash = str(params.get("payment_hash") or "").strip()
+
+    _log(f"lookup_invoice requested hash = {payment_hash}")
+    if not payment_hash:
+        await _send_nwc_error(ws, event, "INVALID_REQUEST", "Missing payment_hash")
+        return
+
+    tx = None
+
+    for item in list_tx_history(500):
+        _log(
+            "lookup_invoice db candidate "
+            f"hash={item.get('payment_hash')} "
+            f"status={item.get('status')} "
+            f"method={item.get('method')}"
+        )
+
+        if str(item.get("payment_hash") or "") == payment_hash:
+            tx = item
+            break
+
+    if tx is None:
+        await _send_nwc_error(ws, event, "NOT_FOUND", "Invoice not found")
+        return
+
+    raw = tx.get("raw_json") or {}
+    settled = tx.get("status") == "settled"
+
+    result = {
+        "type": "incoming" if tx.get("direction") == "incoming" else "outgoing",
+        "invoice": raw.get("payment_request", ""),
+        "payment_hash": tx.get("payment_hash", ""),
+        "amount": int(tx.get("amount_sat") or 0) * 1000,
+        "fees_paid": int(tx.get("fee_sat") or 0) * 1000,
+        "created_at": int(tx.get("created_at") or 0),
+        "expires_at": int(tx.get("created_at") or 0) + int(raw.get("expiry") or 3600),
+        "settled_at": int(tx.get("settled_at") or 0) if tx.get("settled_at") else None,
+        "settled": settled,
+        "description": tx.get("memo") or "",
+        "description_hash": raw.get("description_hash", ""),
+        "preimage": raw.get("r_preimage", ""),
+    }
+    _log(f"lookup_invoice result settled={result.get('settled')} settled_at={result.get('settled_at')}")
+    await _send_nwc_success(ws, event, "lookup_invoice", result)
 
 async def _handle_get_info_request(
     ws,

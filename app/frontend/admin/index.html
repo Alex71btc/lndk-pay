@@ -1163,11 +1163,12 @@
         <label class="label" for="nwcBudgetPeriod" style="margin-top: 14px">
           <span data-i18n="label.nwc_budget_period">Budget period</span>
         </label>
+
         <select id="nwcBudgetPeriod">
-          <option value="none" data-i18n="opt.none">None</option>
-          <option value="day" data-i18n="opt.day">Per day</option>
-          <option value="week" data-i18n="opt.week">Per week</option>
-          <option value="month" data-i18n="opt.month">Per month</option>
+           <option value="none" data-i18n="opt.none">None</option>
+           <option value="day" selected data-i18n="opt.day">Per day</option>
+           <option value="week" data-i18n="opt.week">Per week</option>
+           <option value="month" data-i18n="opt.month">Per month</option>
         </select>
 
         <label class="label" for="nwcBudgetAmount" style="margin-top: 14px">
@@ -1856,7 +1857,7 @@
         const uri = item.uri || "";
         const relay = item.relay_url || "";
         const maxSat = limits.max_payment_sat || "";
-        const budgetPeriod = limits.budget_period || "none";
+        const budgetPeriod = limits.budget_period || "day";
         const budgetAmount = limits.budget_amount_sat || 0;
         const budgetSpent = item.budget_spent_sat || 0;
         const budgetRemaining = item.budget_remaining_sat;
@@ -2051,7 +2052,7 @@
           allow_get_balance: !!nwcAllowGetBalanceInput?.checked,
           allow_pay_invoice: !!nwcAllowPayInvoiceInput?.checked,
           max_payment_sat: Number(nwcMaxPaymentInput?.value || 0),
-          budget_period: nwcBudgetPeriod?.value || "none",
+          budget_period: nwcBudgetPeriod?.value || "day",
           budget_amount_sat: Number(nwcBudgetAmount?.value || 0),
         };
 
@@ -2408,7 +2409,7 @@
             mining: " • ⛏ Mining",
           }[item.origin] || "";
           
-          if (item.origin === "nwc") {
+          if (item.origin === "nwc" || item.method === "nwc") {
             methodLabel = "🔗 NWC";
             originLabel = "";
           }
