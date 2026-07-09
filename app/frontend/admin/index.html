@@ -2306,14 +2306,18 @@
 
       async function syncTxHistory() {
         try {
-          await fetch("/api/admin/sync-tx-history", {
+          const response = await fetch("/api/admin/sync-tx-history", {
             method: "POST",
             headers: {
               "X-CSRF-Token": getCookie("csrf_token"),
             },
           });
 
-          await renderTxHistory();
+          const result = await response.json();
+
+          if (result.changed) {
+            await renderTxHistory();
+          }
 
         } catch (e) {
           console.warn("TX sync failed", e);
@@ -2329,6 +2333,18 @@
         const items = await loadTxHistory();
 
         const list = document.getElementById("txHistoryList");
+
+        const openTxDetails = new Set(
+          Array.from(list.querySelectorAll("details.txDetailsRoot[open]"))
+            .map((el) => el.dataset.txKey)
+            .filter(Boolean)
+        );
+
+        const openTxSubDetails = new Set(
+          Array.from(list.querySelectorAll("details.txSubDetails[open]"))
+            .map((el) => el.dataset.subKey)
+            .filter(Boolean)
+        );
 
         list.innerHTML = "";
 
@@ -2357,6 +2373,19 @@
               : memo;
           const raw = item.raw_json || {};
           const paymentHash = item.payment_hash || raw.payment_hash || raw.r_hash || "";
+          const txKey = [
+            paymentHash,
+            item.direction || "",
+            item.type || "",
+            item.method || "",
+            item.amount_sat || "",
+            item.created_at || "",
+            item.settled_at || "",
+            item.identifier || "",
+            memo || "",
+          ].join("|");
+          const txKeyAttr = String(txKey).replace(/"/g, "&quot;");
+          const txDetailsOpenAttr = openTxDetails.has(txKey) ? " open" : "";
           const preimage = raw.payment_preimage || raw.r_preimage || "";
           const paymentRequest = raw.payment_request || raw.paymentRequest || "";
           const method = item.method || "unknown";
@@ -2393,7 +2422,7 @@
           const detailsJson = JSON.stringify(raw, null, 2);
 
           div.innerHTML = `
-            <details>
+            <details class="txDetailsRoot" data-tx-key="${txKeyAttr}"${txDetailsOpenAttr}>
               <summary>
                 <div class="txHeader">
                   <span class="txArrow ${arrowClass}">${arrow}</span>
@@ -2414,30 +2443,30 @@
               <div class="txDetailsBody">
 
               ${paymentRequest ? `
-              <details class="txSubDetails">
+              <details class="txSubDetails" data-sub-key="${txKeyAttr}|invoice" ${openTxSubDetails.has(txKey + "|invoice") ? "open" : ""}>
                 <summary>Invoice (BOLT11)</summary>
                 <code>${paymentRequest}</code>
               </details>
               ` : ""}
 
-              <details class="txSubDetails">
+              <details class="txSubDetails" data-sub-key="${txKeyAttr}|developer" ${openTxSubDetails.has(txKey + "|developer") ? "open" : ""}>
                 <summary>🛠 Developer Details</summary>
 
               ${paymentHash ? `
-                <details class="txSubDetails">
+                <details class="txSubDetails" data-sub-key="${txKeyAttr}|paymenthash" ${openTxSubDetails.has(txKey + "|paymenthash") ? "open" : ""}>
                   <summary>Payment Hash</summary>
                   <code>${paymentHash}</code>
                  </details>
               ` : ""}
 
               ${preimage ? `
-                 <details class="txSubDetails">
+                 <details class="txSubDetails" data-sub-key="${txKeyAttr}|preimage" ${openTxSubDetails.has(txKey + "|preimage") ? "open" : ""}>
                     <summary>Preimage</summary>
                     <code>${preimage}</code>
                  </details>
               ` : ""}
 
-              <details class="txSubDetails">
+              <details class="txSubDetails" data-sub-key="${txKeyAttr}|rawjson" ${openTxSubDetails.has(txKey + "|rawjson") ? "open" : ""}>
                 <summary>Raw JSON</summary>
                 <pre>${detailsJson}</pre>
               </details>
@@ -2450,6 +2479,7 @@
           `;
 
           list.appendChild(div);
+
         }
 
       };

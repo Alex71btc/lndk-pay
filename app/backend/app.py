@@ -2653,6 +2653,26 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
         args.append(payload.payer_note)
 
     raw_output = _run_command(args)
+
+    _log_tx(
+        payment_hash=f"bolt12-outgoing-{int(time.time())}",
+        direction="outgoing",
+        tx_type="offer",
+        method="bolt12",
+        counterparty="",
+        amount_sat=payload.amount_sat,
+        fee_sat=None,
+        status="settled",
+        memo=payload.payer_note or "",
+        identifier=normalized_offer,
+        settled_at=str(int(time.time())),
+        raw_json={
+            "mode": "bolt12",
+            "offer": normalized_offer,
+            "raw_output": raw_output,
+        },
+    )
+
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 @app.post("/api/pay-address", response_model=PayOfferResponse)
 async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> PayOfferResponse:
@@ -2670,6 +2690,26 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
             args.append(payload.payer_note)
 
         raw_cli_output = _run_command(args)
+
+        _log_tx(
+            payment_hash=f"bip353-outgoing-{int(time.time())}",
+            direction="outgoing",
+            tx_type="offer",
+            method="bolt12",
+            counterparty=target,
+            amount_sat=payload.amount_sat,
+            fee_sat=None,
+            status="settled",
+            memo=payload.payer_note or "",
+            identifier=normalized_offer,
+            settled_at=str(int(time.time())),
+            raw_json={
+                "mode": "bip353",
+                "target": target,
+                "resolved_offer": normalized_offer,
+                "raw_output": raw_cli_output,
+            },
+        )
 
         raw_output = json.dumps(
             {
@@ -5189,6 +5229,7 @@ async def _list_invoices():
 
 def _invoice_to_tx_history(inv: dict):
     memo = inv.get("memo") or ""
+    memo_lower = memo.lower()
 
     tx_type = "invoice"
     method = "bolt11"
@@ -5196,8 +5237,7 @@ def _invoice_to_tx_history(inv: dict):
     state = str(inv.get("state") or "").upper()
     settled = bool(inv.get("settled")) or state == "SETTLED"
 
-
-    if memo.startswith("Bolt12 offer"):
+    if memo_lower.startswith("bolt12 offer"):
         tx_type = "offer"
         method = "bolt12"
 
@@ -5227,7 +5267,7 @@ def _invoice_to_tx_history(inv: dict):
         "amount_sat": int(inv.get("value") or 0),
         "fee_sat": None,
         "status": "settled" if settled else "pending",
-        "memo": inv.get("memo") or "",
+        "memo": memo,
         "identifier": memo,
         "created_at": inv.get("creation_date"),
         "settled_at": inv.get("settle_date"),
@@ -5386,6 +5426,7 @@ async def api_sync_tx_history(request: StarletteRequest):
     return {
         "ok": True,
         "imported": count,
+        "changed": bool(count),
     }
 
 @app.get("/api/history")
