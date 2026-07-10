@@ -72,7 +72,8 @@ PAY_UI_PASSWORD = os.getenv("PAY_UI_PASSWORD", "").strip()
 PAY_UI_SESSION_TTL = int(os.getenv("PAY_UI_SESSION_TTL", "1800"))
 PAY_UI_COOKIE_NAME = "pay_session"
 PAY_UI_COOKIE_SECURE = os.getenv("PAY_UI_COOKIE_SECURE", "false").lower() in {"1", "true", "yes", "on"}
-
+KEYSEND_MESSAGE_RECORD = "34349334"   # Textnachricht
+KEYSEND_PUBKEY_RECORD  = "34349339"   # Sender-Pubkey
 # --- Login brute-force protection (minimal v2) ---
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "900"))
 LOGIN_MAX_FAILED_ATTEMPTS = int(os.getenv("LOGIN_MAX_FAILED_ATTEMPTS", "5"))
@@ -5318,13 +5319,36 @@ async def _list_invoices():
 
 def _invoice_to_tx_history(inv: dict):
     memo = inv.get("memo") or ""
-    memo_lower = memo.lower()
 
     tx_type = "invoice"
     method = "bolt11"
     counterparty = ""
     state = str(inv.get("state") or "").upper()
     settled = bool(inv.get("settled")) or state == "SETTLED"
+
+    if inv.get("is_keysend"):
+        method = "keysend"
+        tx_type = "payment"
+
+        for htlc in inv.get("htlcs", []):
+            records = htlc.get("custom_records") or {}
+
+            sender = records.get(KEYSEND_PUBKEY_RECORD)
+            if sender:
+                counterparty = sender
+
+            msg = records.get(KEYSEND_MESSAGE_RECORD)
+            if msg:
+                try:
+                    memo = base64.b64decode(msg).decode("utf-8")
+                except Exception:
+                    try:
+                        memo = bytes.fromhex(msg).decode("utf-8")
+                    except Exception:
+                        memo = msg
+                break
+
+    memo_lower = memo.lower()
 
     if memo_lower.startswith("bolt12 offer"):
         tx_type = "offer"
