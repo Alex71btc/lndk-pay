@@ -496,13 +496,54 @@ def list_tx_history(limit: int = 100):
 
     for row in rows:
         item = dict(row)
-
         if item["raw_json"]:
             item["raw_json"] = json.loads(item["raw_json"])
 
         items.append(item)
 
     return items
+
+def update_tx_history_metadata(
+    payment_hash: str,
+    *,
+    memo: str | None = None,
+    counterparty: str | None = None,
+    method: str | None = None,
+    origin: str | None = None,
+):
+    fields = []
+    values = []
+
+    if memo is not None:
+        fields.append("memo = ?")
+        values.append(memo)
+
+    if counterparty is not None:
+        fields.append("counterparty = ?")
+        values.append(counterparty)
+
+    if method is not None:
+        fields.append("method = ?")
+        values.append(method)
+
+    if origin is not None:
+        fields.append("origin = ?")
+        values.append(origin)
+
+    if not fields:
+        return
+
+    values.append(payment_hash)
+
+    with _db_conn() as conn:
+        conn.execute(
+            f"""
+            UPDATE tx_history
+            SET {", ".join(fields)}
+            WHERE payment_hash = ?
+            """,
+            values,
+        )
 
 def list_offer_history(limit: int = 50):
     safe_limit = max(1, min(int(limit or 50), 200))
@@ -1732,6 +1773,45 @@ async def _create_bolt11_invoice(
         "raw": data,
     }
 
+async def _decode_bolt11_invoice(payment_request: str) -> dict[str, Any]:
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+
+    headers = {
+        "Grpc-Metadata-macaroon": macaroon_hex,
+    }
+
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=LND_REST_TIMEOUT,
+            verify=verify,
+        ) as client:
+            response = await client.get(
+                f"{LND_REST_URL}/v1/payreq/{payment_request}",
+                headers=headers,
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LND REST decodepayreq failed: {exc}",
+        ) from exc
+
+    try:
+        data = response.json()
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="LND REST decodepayreq returned invalid JSON",
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LND REST decodepayreq error: {data}",
+        )
+
+    return data
 
 async def _pay_bolt11_invoice(
     *,
@@ -1743,7 +1823,6 @@ async def _pay_bolt11_invoice(
     origin: str = "web",
     amount_sat_override: int | None = None,
 ) -> dict[str, Any]:
-
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
 
     headers = {
@@ -1862,6 +1941,12 @@ async def _pay_bolt11_invoice(
     if failure_reason and str(failure_reason).lower() not in {"failure_reason_none", "none", ""}:
         raise HTTPException(status_code=400, detail=str(failure_reason))
 
+    if not memo:
+        try:
+            decoded_invoice = await _decode_bolt11_invoice(payment_request)
+            memo = str(decoded_invoice.get("description") or "").strip()
+        except Exception as exc:
+            print(exc, flush=True)
 
     _log_tx(
         payment_hash=payment_data.get("payment_hash", ""),
@@ -4048,14 +4133,14 @@ def service_worker() -> FileResponse:
     return resp
 
 
-@app.get("/icon.svg")
-def icon_svg() -> FileResponse:
-    file = PUBLIC_DIR / "icon.svg"
-    if not file.exists():
-        raise HTTPException(status_code=404, detail="icon.svg not found")
-    return FileResponse(file, media_type="image/svg+xml")
+from fastapi.responses import FileResponse
 
-from fastapi.responses import RedirectResponse
+@app.get("/icon.svg")
+def icon_svg():
+    return FileResponse(
+        PROJECT_ROOT / "assets" / "icon.png",
+        media_type="image/png",
+    )
 
 @app.get("/alias/{alias_name}", response_class=HTMLResponse)
 async def public_alias_page(alias_name: str):

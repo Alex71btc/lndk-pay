@@ -394,7 +394,10 @@ async def _handle_pay_invoice_request(
     matched: dict[str, Any],
     params: dict[str, Any],
 ) -> None:
-    from .app import _pay_bolt11_invoice
+    from .app import (
+        _pay_bolt11_invoice,
+        update_tx_history_metadata,
+    )
     import bolt11
 
     event_id = str(event.get("id") or "")
@@ -440,9 +443,13 @@ async def _handle_pay_invoice_request(
     try:
         pay_result = await _pay_bolt11_invoice(
             payment_request=invoice,
+            method="nwc",
             origin="nwc",
+            counterparty=str(matched.get("name") or ""),
+            memo=str(params.get("description") or ""),
             amount_sat_override=invoice_sat,
         )
+
     except Exception as exc:
         _log(f"request {event_id}: payment failed: {exc}")
         await _send_nwc_error(ws, event, "PAYMENT_FAILED", str(exc))

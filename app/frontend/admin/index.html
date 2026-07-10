@@ -462,6 +462,13 @@
         font-size: 13px;
       }
 
+      .txWallet {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-top: 4px;
+      }
+
       .emptyState {
         color: var(--muted);
         font-size: 0.95rem;
@@ -2418,6 +2425,11 @@
             ["invoice", "offer", "mining", "zap"].includes(item.type)
               ? ""
               : ` • ${item.type}`;
+          let walletLine = "";
+
+          if (item.method === "nwc" && item.counterparty) {
+          walletLine = `<div class="txWallet">🔌 Wallet: ${item.counterparty}</div>`;
+          }
 
           const counterparty = item.counterparty || "";
 
@@ -2435,8 +2447,11 @@
                     ${methodLabel}${typeLabel}${originLabel} • ${statusLabel}${fee}
                 </div>
 
-                ${counterparty ? `<div class="txMemo">${counterparty}</div>` : ""}
-                ${displayMemo ? `<div class="txMemo">${displayMemo}</div>` : ""}
+                ${walletLine}
+
+                ${displayMemo ? `
+                <div class="txMemo">${displayMemo}</div>
+               ` : ""}
                <div class="txExpandHint"></div>
               </summary>
 
