@@ -1448,11 +1448,11 @@ async def _lnd_getinfo() -> dict[str, Any]:
         timeout=LND_REST_TIMEOUT,
         verify=_lnd_rest_verify_setting(),
     ) as client:
+
         response = await client.get(
             f"{LND_REST_URL}/v1/getinfo",
             headers=headers,
         )
-
     response.raise_for_status()
     data = response.json()
 
@@ -5317,6 +5317,45 @@ async def _list_invoices():
 
     return r.json()
 
+async def _list_payments() -> dict[str, Any]:
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+
+    headers = {
+        "Grpc-Metadata-macaroon": macaroon_hex,
+    }
+
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+    async with httpx.AsyncClient(
+        timeout=LND_REST_TIMEOUT,
+        verify=verify,
+    ) as client:
+
+        response = await client.get(
+            f"{LND_REST_URL}/v1/payments",
+            headers=headers,
+            params={
+                "max_payments": 200,
+                "reversed": True,
+            },
+        )
+
+    try:
+        data = response.json()
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="LND payments returned invalid JSON",
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LND payments error: {data}",
+        )
+
+    return data
+
 def _invoice_to_tx_history(inv: dict):
     memo = inv.get("memo") or ""
 
@@ -5385,6 +5424,109 @@ def _invoice_to_tx_history(inv: dict):
         "created_at": inv.get("creation_date"),
         "settled_at": inv.get("settle_date"),
         "raw_json": inv,
+    }
+
+async def _payment_to_tx_history(payment: dict):
+    payment_request = str(payment.get("payment_request") or "")
+    memo = ""
+    method = "bolt11"
+    tx_type = "payment"
+    counterparty = ""
+
+    status_raw = str(payment.get("status") or "").upper()
+
+    if status_raw == "SUCCEEDED":
+        status = "settled"
+    elif status_raw == "FAILED":
+        status = "failed"
+    else:
+        status = "pending"
+
+    # Final destination and custom records are normally on the final hop
+    # of the successful HTLC attempt.
+    for htlc in payment.get("htlcs") or []:
+        if str(htlc.get("status") or "").upper() != "SUCCEEDED":
+            continue
+
+        route = htlc.get("route") or {}
+        hops = route.get("hops") or []
+
+        if not hops:
+            continue
+
+        final_hop = hops[-1]
+        counterparty = str(final_hop.get("pub_key") or "")
+        records = final_hop.get("custom_records") or {}
+
+        keysend_message = records.get(KEYSEND_MESSAGE_RECORD)
+
+        # No payment_request + Keysend TLV/preimage record = outgoing Keysend.
+        if not payment_request and (
+            keysend_message or records.get("5482373484")
+        ):
+            method = "keysend"
+
+            if keysend_message:
+                try:
+                    memo = base64.b64decode(keysend_message).decode("utf-8")
+                except Exception:
+                    try:
+                        memo = bytes.fromhex(keysend_message).decode("utf-8")
+                    except Exception:
+                        memo = str(keysend_message)
+
+        break
+
+    # Normal outgoing BOLT11/LNURL/Lightning Address payment.
+    if payment_request:
+        try:
+            decoded = await _decode_bolt11_invoice(payment_request)
+
+            memo = str(decoded.get("description") or "").strip()
+
+            if not counterparty:
+                counterparty = str(decoded.get("destination") or "")
+
+            # LNURL-pay and Lightning Address invoices commonly commit to
+            # metadata through description_hash instead of containing text.
+            if decoded.get("description_hash") and not memo:
+                method = "lnurl"
+
+        except Exception:
+            # Payment history should still sync if invoice decoding fails.
+            pass
+
+    creation_time_ns = int(payment.get("creation_time_ns") or 0)
+    created_at = (
+        str(creation_time_ns // 1_000_000_000)
+        if creation_time_ns
+        else str(payment.get("creation_date") or int(time.time()))
+    )
+
+    settled_at = created_at if status == "settled" else None
+
+    return {
+        "payment_hash": str(payment.get("payment_hash") or ""),
+        "direction": "outgoing",
+        "type": tx_type,
+        "method": method,
+        "counterparty": counterparty,
+        "amount_sat": int(
+            payment.get("value_sat")
+            or payment.get("value")
+            or 0
+        ),
+        "fee_sat": int(
+            payment.get("fee_sat")
+            or payment.get("fee")
+            or 0
+        ),
+        "status": status,
+        "memo": memo,
+        "identifier": payment_request,
+        "created_at": created_at,
+        "settled_at": settled_at,
+        "raw_json": payment,
     }
 
 async def sync_tx_history():
@@ -5456,6 +5598,44 @@ async def sync_tx_history():
 
             if json.dumps(comparable, sort_keys=True, default=str) == json.dumps(existing_comparable, sort_keys=True, default=str):
                 continue
+
+        _log_tx(
+            payment_hash=item["payment_hash"],
+            direction=item["direction"],
+            tx_type=item["type"],
+            amount_sat=item["amount_sat"],
+            fee_sat=item["fee_sat"],
+            status=item["status"],
+            memo=item["memo"],
+            identifier=item["identifier"],
+            created_at=item["created_at"],
+            settled_at=item["settled_at"],
+            raw_json=item["raw_json"],
+            method=item.get("method", "unknown"),
+            counterparty=item.get("counterparty", ""),
+        )
+
+        count += 1
+
+    payments = await _list_payments()
+
+    for payment in payments.get("payments", []):
+        item = await _payment_to_tx_history(payment)
+        payment_hash = item["payment_hash"]
+
+        existing = None
+
+        with _db_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM tx_history WHERE payment_hash = ?",
+                (payment_hash,),
+            ).fetchone()
+
+            if row:
+                existing = dict(row)
+
+        if existing:
+            continue
 
         _log_tx(
             payment_hash=item["payment_hash"],
@@ -5591,6 +5771,10 @@ async def api_debug_invoices(request: StarletteRequest):
 def debug_tx_history(request: StarletteRequest):
     require_pay_auth(request)
     return list_tx_history()
+
+@app.get("/api/debug/payments")
+async def api_debug_payments():
+    return await _list_payments()
 
 @app.get("/api/tx-history")
 def api_get_tx_history(request: StarletteRequest):
