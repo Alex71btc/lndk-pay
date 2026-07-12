@@ -464,6 +464,8 @@ def _log_tx(
     raw_json: dict | None = None,
 ):
 
+    payment_hash = _normalize_payment_hash(payment_hash)
+
     save_tx_history_item({
         "payment_hash": payment_hash,
         "direction": direction,
@@ -1773,6 +1775,30 @@ async def _create_bolt11_invoice(
         "payment_hash": payment_hash,
         "raw": data,
     }
+
+def _normalize_payment_hash(value: Any) -> str:
+    raw = str(value or "").strip()
+
+    if not raw:
+        return ""
+
+    # Already a 32-byte hash encoded as 64 hex characters.
+    if len(raw) == 64:
+        try:
+            bytes.fromhex(raw)
+            return raw.lower()
+        except ValueError:
+            pass
+
+    # Some LND REST responses encode byte fields as Base64.
+    try:
+        decoded = base64.b64decode(raw, validate=True)
+        if len(decoded) == 32:
+            return decoded.hex()
+    except Exception:
+        pass
+
+    return raw
 
 async def _decode_bolt11_invoice(payment_request: str) -> dict[str, Any]:
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
@@ -5411,7 +5437,9 @@ def _invoice_to_tx_history(inv: dict):
         method = "bolt11"
 
     return {
-        "payment_hash": inv.get("r_hash"),
+        "payment_hash": _normalize_payment_hash(
+            inv.get("r_hash")
+        ),
         "direction": "incoming",
         "type": tx_type,
         "method": method,
@@ -5506,7 +5534,9 @@ async def _payment_to_tx_history(payment: dict):
     settled_at = created_at if status == "settled" else None
 
     return {
-        "payment_hash": str(payment.get("payment_hash") or ""),
+        "payment_hash": _normalize_payment_hash(
+            payment.get("payment_hash")
+        ),
         "direction": "outgoing",
         "type": tx_type,
         "method": method,
