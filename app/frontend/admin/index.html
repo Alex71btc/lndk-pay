@@ -2374,7 +2374,8 @@
           list.appendChild(empty);
           return;
         }
-
+        
+        console.time("render tx");
         for (const item of items) {
           const div = document.createElement("div");
           div.className = "historyItem";
@@ -2512,7 +2513,7 @@
           `;
 
           list.appendChild(div);
-
+          console.timeEnd("render tx");
         }
 
       };
