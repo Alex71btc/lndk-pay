@@ -5664,8 +5664,28 @@ async def sync_tx_history():
             if row:
                 existing = dict(row)
 
+
         if existing:
-            continue
+            # Preserve metadata known only to Bolt12 Pay while allowing
+            # the complete LND payment record to update amount, fees and status.
+            if existing.get("method") in {
+                "lnurl",
+                "lightning_address",
+                "bolt12",
+                "zap",
+                "nwc",
+                "keysend",
+            }:
+                item["method"] = existing.get("method")
+                item["counterparty"] = existing.get("counterparty") or ""
+
+            if existing.get("memo"):
+                item["memo"] = existing.get("memo")
+
+            if existing.get("identifier"):
+                item["identifier"] = existing.get("identifier")
+
+            item["origin"] = existing.get("origin") or item.get("origin") or "web"
 
         _log_tx(
             payment_hash=item["payment_hash"],
@@ -5681,6 +5701,7 @@ async def sync_tx_history():
             raw_json=item["raw_json"],
             method=item.get("method", "unknown"),
             counterparty=item.get("counterparty", ""),
+            origin=item.get("origin", "web"),
         )
 
         count += 1
