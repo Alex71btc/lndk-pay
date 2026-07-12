@@ -5696,6 +5696,58 @@ async def sync_tx_history():
 
             item["origin"] = existing.get("origin") or item.get("origin") or "web"
 
+        if existing:
+            existing_raw = existing.get("raw_json") or {}
+
+            if isinstance(existing_raw, str):
+                try:
+                    existing_raw = json.loads(existing_raw)
+                except Exception:
+                    existing_raw = {}
+
+            comparable = {
+                "direction": item["direction"],
+                "type": item["type"],
+                "method": item.get("method"),
+                "counterparty": item.get("counterparty") or "",
+                "origin": item.get("origin") or "web",
+                "amount_sat": item["amount_sat"],
+                "fee_sat": item["fee_sat"],
+                "status": item["status"],
+                "memo": item["memo"],
+                "identifier": item["identifier"],
+                "created_at": item["created_at"],
+                "settled_at": item["settled_at"],
+                "raw_json": item["raw_json"],
+            }
+
+            existing_comparable = {
+                "direction": existing.get("direction"),
+                "type": existing.get("type"),
+                "method": existing.get("method"),
+                "counterparty": existing.get("counterparty") or "",
+                "origin": existing.get("origin") or "web",
+                "amount_sat": existing.get("amount_sat"),
+                "fee_sat": existing.get("fee_sat"),
+                "status": existing.get("status"),
+                "memo": existing.get("memo"),
+                "identifier": existing.get("identifier"),
+                "created_at": existing.get("created_at"),
+                "settled_at": existing.get("settled_at"),
+                "raw_json": existing_raw,
+            }
+
+            if json.dumps(
+                comparable,
+                sort_keys=True,
+                default=str,
+            ) == json.dumps(
+                existing_comparable,
+                sort_keys=True,
+                default=str,
+            ):
+                continue
+
         _log_tx(
             payment_hash=item["payment_hash"],
             direction=item["direction"],
