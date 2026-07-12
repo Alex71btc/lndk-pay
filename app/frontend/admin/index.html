@@ -2313,18 +2313,29 @@
       }
 
       async function syncTxHistory() {
+
+        if (syncingTxHistory) return;
+
+        syncingTxHistory = true;
+
         try {
           const response = await fetch("/api/admin/sync-tx-history", {
             method: "POST",
             headers: {
               "X-CSRF-Token": getCookie("csrf_token"),
-            },
+           },
           });
 
-            await renderTxHistory();
+          if (!response.ok) {
+            throw new Error("TX sync failed");
+          }
+
+          await renderTxHistory();
 
         } catch (e) {
           console.warn("TX sync failed", e);
+        } finally {
+          syncingTxHistory = false;
         }
       }
 
@@ -2504,6 +2515,7 @@
 
       let txHistoryRefreshTimer = null;
       let lastTxSync = 0;
+      let syncingTxHistory = false;
 
       function startTxHistoryAutoRefresh() {
         stopTxHistoryAutoRefresh();
