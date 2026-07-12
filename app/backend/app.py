@@ -483,7 +483,7 @@ def _log_tx(
         "raw_json": raw_json or {},
     })
 
-def list_tx_history(limit: int = 10):
+def list_tx_history(limit: int = 200):
     with _db_conn() as conn:
         rows = conn.execute(
             """
