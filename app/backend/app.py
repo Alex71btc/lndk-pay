@@ -5572,9 +5572,10 @@ async def _payment_to_tx_history(payment: dict, existing: dict | None = None):
     }
 
 async def sync_tx_history():
+    start = time.monotonic()
 
     invoices = await _list_invoices()
-
+    print("Invoices:", time.monotonic() - start)
     count = 0
 
     for inv in invoices.get("invoices", []):
@@ -5661,7 +5662,7 @@ async def sync_tx_history():
 
 
     payments = await _list_payments()
-
+    print("Payments:", time.monotonic() - start)
     for payment in payments.get("payments", []):
 
         payment_hash = _normalize_payment_hash(
@@ -5722,9 +5723,8 @@ async def sync_tx_history():
         )
 
         count += 1
-
     return count
-
+    print("TOTAL:", time.monotonic() - start)
 async def _tx_history_sync_loop():
     while True:
         try:

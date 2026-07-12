@@ -1982,9 +1982,9 @@
           renderNwcConnections(nwcConnectionsCache);
         }
       }
-      document.addEventListener("DOMContentLoaded", async () => {
-        initNwcUi();
-        await initNwcData();
+       document.addEventListener("DOMContentLoaded", async () => {
+          await initAdminPageData();
+          initAdminPageUi();
       });
 
       function initNwcUi() {
