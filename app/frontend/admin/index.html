@@ -2336,7 +2336,7 @@
           }
 
           await renderTxHistory();
-
+          lastTxSync = Date.now();
         } catch (e) {
           console.warn("TX sync failed", e);
         } finally {
@@ -2527,18 +2527,11 @@
         stopTxHistoryAutoRefresh();
 
         txHistoryRefreshTimer = setInterval(async () => {
-          try {
-              const now = Date.now();
-
-              if (now - lastTxSync > 10000) {
-                  await syncTxHistory();
-                  lastTxSync = now;
-              } else {
-                  await renderTxHistory();
-              }
-          } catch (e) {
-              console.error(e);
-          }
+            try {
+                await syncTxHistory();
+            } catch (e) {
+                console.error(e);
+            }
         }, 10000);
       }
 
@@ -3968,23 +3961,22 @@
       });
 
       function initAdminPageUi() {
-        console.log("initAdminPageUi");
-
         setCurrentOffer("");
 
-        console.time("renderHistory call");
         renderHistory();
-        console.timeEnd("renderHistory call");
 
-        console.time("syncTxHistory call");
-        syncTxHistory();
-        console.timeEnd("syncTxHistory call");
+        (async () => {
+            await syncTxHistory();
 
-        startTxHistoryAutoRefresh();
+            lastTxSync = Date.now();
+
+            startTxHistoryAutoRefresh();
+        })();
 
         requestAnimationFrame(() => {
-        renderOfferQr(getActiveValue());
+            renderOfferQr(getActiveValue());
         });
+
         document
           .getElementById("loadIdentityBtn")
           ?.addEventListener("click", async () => {
