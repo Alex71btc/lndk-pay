@@ -1738,12 +1738,7 @@ async def _create_bolt11_invoice(
 
     try:
         data = response.json()
-        print(
-            "CREATED:",
-            data.get("r_hash"),
-            data.get("add_index"),
-            flush=True,
-        )
+
     except Exception:
         raise HTTPException(status_code=502, detail="LND REST returned invalid JSON")
 
@@ -1972,8 +1967,8 @@ async def _pay_bolt11_invoice(
         try:
             decoded_invoice = await _decode_bolt11_invoice(payment_request)
             memo = str(decoded_invoice.get("description") or "").strip()
-        except Exception as exc:
-            print(exc, flush=True)
+        except Exception:
+            pass
 
     _log_tx(
         payment_hash=payment_data.get("payment_hash", ""),
@@ -5454,7 +5449,7 @@ def _invoice_to_tx_history(inv: dict):
         "raw_json": inv,
     }
 
-async def _payment_to_tx_history(payment: dict):
+async def _payment_to_tx_history(payment: dict, existing: dict | None = None):
     payment_request = str(payment.get("payment_request") or "")
     memo = ""
     method = "bolt11"
@@ -5506,22 +5501,39 @@ async def _payment_to_tx_history(payment: dict):
         break
 
     # Normal outgoing BOLT11/LNURL/Lightning Address payment.
-    if payment_request:
+    if existing:
+        if existing.get("memo"):
+            memo = existing["memo"]
+
+        if existing.get("counterparty"):
+            counterparty = existing["counterparty"]
+
+        if existing.get("method"):
+            method = existing["method"]
+
+    needs_decode = (
+        payment_request
+        and (
+            not memo
+            or not counterparty
+            or method in ("bolt11", "unknown")
+        )
+    )
+
+    if needs_decode:
         try:
             decoded = await _decode_bolt11_invoice(payment_request)
 
-            memo = str(decoded.get("description") or "").strip()
+            if not memo:
+                memo = str(decoded.get("description") or "").strip()
 
             if not counterparty:
                 counterparty = str(decoded.get("destination") or "")
 
-            # LNURL-pay and Lightning Address invoices commonly commit to
-            # metadata through description_hash instead of containing text.
-            if decoded.get("description_hash") and not memo:
+            if decoded.get("description_hash") and method == "bolt11":
                 method = "lnurl"
 
         except Exception:
-            # Payment history should still sync if invoice decoding fails.
             pass
 
     creation_time_ns = int(payment.get("creation_time_ns") or 0)
@@ -5647,11 +5659,14 @@ async def sync_tx_history():
 
         count += 1
 
+
     payments = await _list_payments()
 
     for payment in payments.get("payments", []):
-        item = await _payment_to_tx_history(payment)
-        payment_hash = item["payment_hash"]
+
+        payment_hash = _normalize_payment_hash(
+            payment.get("payment_hash") or payment.get("payment_hash_hex") or ""
+        )
 
         existing = None
 
@@ -5664,6 +5679,7 @@ async def sync_tx_history():
             if row:
                 existing = dict(row)
 
+        item = await _payment_to_tx_history(payment, existing)
 
         if existing:
             # Preserve metadata known only to Bolt12 Pay while allowing
@@ -5687,6 +5703,7 @@ async def sync_tx_history():
 
             item["origin"] = existing.get("origin") or item.get("origin") or "web"
 
+    
         _log_tx(
             payment_hash=item["payment_hash"],
             direction=item["direction"],
