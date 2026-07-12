@@ -5511,14 +5511,7 @@ async def _payment_to_tx_history(payment: dict, existing: dict | None = None):
         if existing.get("method"):
             method = existing["method"]
 
-    needs_decode = (
-        payment_request
-        and (
-            not memo
-            or not counterparty
-            or method in ("bolt11", "unknown")
-        )
-    )
+    needs_decode = bool(payment_request and existing is None)
 
     if needs_decode:
         try:
@@ -5660,11 +5653,12 @@ async def sync_tx_history():
 
         count += 1
 
-
     payments = await _list_payments()
-    print("Payments:", time.monotonic() - start)
-    for payment in payments.get("payments", []):
+    print("Payments fetched:", time.monotonic() - start, flush=True)
 
+    payment_loop_start = time.monotonic()
+
+    for payment in payments.get("payments", []):
         payment_hash = _normalize_payment_hash(
             payment.get("payment_hash") or payment.get("payment_hash_hex") or ""
         )
@@ -5683,8 +5677,6 @@ async def sync_tx_history():
         item = await _payment_to_tx_history(payment, existing)
 
         if existing:
-            # Preserve metadata known only to Bolt12 Pay while allowing
-            # the complete LND payment record to update amount, fees and status.
             if existing.get("method") in {
                 "lnurl",
                 "lightning_address",
@@ -5704,7 +5696,6 @@ async def sync_tx_history():
 
             item["origin"] = existing.get("origin") or item.get("origin") or "web"
 
-    
         _log_tx(
             payment_hash=item["payment_hash"],
             direction=item["direction"],
@@ -5723,8 +5714,16 @@ async def sync_tx_history():
         )
 
         count += 1
+
+    print(
+        "Payment loop:",
+        time.monotonic() - payment_loop_start,
+        flush=True,
+    )
+    print("TOTAL:", time.monotonic() - start, flush=True)
+
     return count
-    print("TOTAL:", time.monotonic() - start)
+
 async def _tx_history_sync_loop():
     while True:
         try:
