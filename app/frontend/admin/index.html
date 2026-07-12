@@ -2317,12 +2317,13 @@
       }
 
       async function syncTxHistory() {
-
+        console.log("syncTxHistory entered");
         if (syncingTxHistory) return;
 
         syncingTxHistory = true;
         console.time("POST sync");
         try {
+          console.log("before fetch");
           const response = await fetch("/api/admin/sync-tx-history", {
             method: "POST",
             headers: {
@@ -3967,14 +3968,23 @@
       });
 
       function initAdminPageUi() {
-        setCurrentOffer("");
-        renderHistory();
-        syncTxHistory();
-        startTxHistoryAutoRefresh();
-        requestAnimationFrame(() => {
-          renderOfferQr(getActiveValue());
-        });
+        console.log("initAdminPageUi");
 
+        setCurrentOffer("");
+
+        console.time("renderHistory call");
+        renderHistory();
+        console.timeEnd("renderHistory call");
+
+        console.time("syncTxHistory call");
+        syncTxHistory();
+        console.timeEnd("syncTxHistory call");
+
+        startTxHistoryAutoRefresh();
+
+        requestAnimationFrame(() => {
+        renderOfferQr(getActiveValue());
+        });
         document
           .getElementById("loadIdentityBtn")
           ?.addEventListener("click", async () => {
@@ -4021,8 +4031,13 @@
       }
 
       async function initAdminPageData() {
+        console.time("checkPaySession");
         await checkPaySession();
+        console.timeEnd("checkPaySession");
+
+        console.time("loadNostrStatus");
         await loadNostrStatus();
+        console.timeEnd("loadNostrStatus");
       }
 
       async function checkPaySession() {
