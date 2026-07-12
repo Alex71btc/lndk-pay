@@ -2303,7 +2303,11 @@
       }
 
       async function loadTxHistory() {
+        console.time("GET /api/tx-history");
+
         const response = await fetch("/api/tx-history");
+
+        console.timeEnd("GET /api/tx-history");
 
         if (!response.ok) {
           throw new Error("Failed to load tx history");
@@ -2317,7 +2321,7 @@
         if (syncingTxHistory) return;
 
         syncingTxHistory = true;
-
+        console.time("POST sync");
         try {
           const response = await fetch("/api/admin/sync-tx-history", {
             method: "POST",
@@ -2325,7 +2329,7 @@
               "X-CSRF-Token": getCookie("csrf_token"),
            },
           });
-
+          console.timeEnd("POST sync");
           if (!response.ok) {
             throw new Error("TX sync failed");
           }
