@@ -2317,11 +2317,9 @@
       }
 
       async function syncTxHistory() {
-        console.log("syncTxHistory entered");
         if (syncingTxHistory) return;
 
         syncingTxHistory = true;
-        console.time("POST sync");
         try {
           console.log("before fetch");
           const response = await fetch("/api/admin/sync-tx-history", {
@@ -2330,7 +2328,6 @@
               "X-CSRF-Token": getCookie("csrf_token"),
            },
           });
-          console.timeEnd("POST sync");
           if (!response.ok) {
             throw new Error("TX sync failed");
           }
@@ -2338,7 +2335,6 @@
           await renderTxHistory();
           lastTxSync = Date.now();
         } catch (e) {
-          console.warn("TX sync failed", e);
         } finally {
           syncingTxHistory = false;
         }
