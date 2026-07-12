@@ -1982,10 +1982,6 @@
           renderNwcConnections(nwcConnectionsCache);
         }
       }
-       document.addEventListener("DOMContentLoaded", async () => {
-          await initAdminPageData();
-          initAdminPageUi();
-      });
 
       function initNwcUi() {
         setNwcUnlockedState(false);
@@ -3957,6 +3953,8 @@
       });
 
       function initAdminPageUi() {
+          initNwcUi();
+
           setCurrentOffer("");
 
           renderHistory();
@@ -4025,13 +4023,16 @@
       }
 
       async function initAdminPageData() {
-        console.time("checkPaySession");
-        await checkPaySession();
-        console.timeEnd("checkPaySession");
+          console.time("checkPaySession");
+          await checkPaySession();
+          console.timeEnd("checkPaySession");
 
-        console.time("loadNostrStatus");
-        await loadNostrStatus();
-        console.timeEnd("loadNostrStatus");
+          // NWC-Daten nach erfolgreicher Auth laden
+          await initNwcData();
+
+          console.time("loadNostrStatus");
+          await loadNostrStatus();
+          console.timeEnd("loadNostrStatus");
       }
 
       async function checkPaySession() {
