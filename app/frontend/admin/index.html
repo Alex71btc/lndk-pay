@@ -3961,21 +3961,27 @@
       });
 
       function initAdminPageUi() {
-        setCurrentOffer("");
+          setCurrentOffer("");
 
-        renderHistory();
+          renderHistory();
 
-        (async () => {
-            await syncTxHistory();
+          (async () => {
 
-            lastTxSync = Date.now();
+              console.log("calling sync", Date.now());
 
-            startTxHistoryAutoRefresh();
-        })();
+              await syncTxHistory();
 
-        requestAnimationFrame(() => {
-            renderOfferQr(getActiveValue());
-        });
+              console.log("after sync", Date.now());
+
+              lastTxSync = Date.now();
+
+              startTxHistoryAutoRefresh();
+
+          })();
+
+          requestAnimationFrame(() => {
+              renderOfferQr(getActiveValue());
+          });
 
         document
           .getElementById("loadIdentityBtn")
