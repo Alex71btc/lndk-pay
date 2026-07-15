@@ -385,6 +385,41 @@ def init_db():
             raw_json TEXT
         )
     """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            alias TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contact_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            contact_id INTEGER NOT NULL,
+
+            type TEXT NOT NULL,
+            identifier TEXT NOT NULL,
+
+            label TEXT NOT NULL DEFAULT '',
+
+            created_at INTEGER NOT NULL,
+
+            FOREIGN KEY(contact_id) REFERENCES contacts(id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_contact_entries_identifier
+        ON contact_entries(identifier)
+    """)
+
     try:
         conn.execute("ALTER TABLE tx_history ADD COLUMN method TEXT")
     except sqlite3.OperationalError:
