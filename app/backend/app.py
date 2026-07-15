@@ -5935,6 +5935,17 @@ async def api_sync_tx_history(request: StarletteRequest):
         "changed": bool(count),
     }
 
+
+# ============================================================================
+# Contacts
+# ============================================================================
+
+@app.get("/api/contacts")
+async def api_contacts():
+    return {
+        "contacts": []
+    }
+
 @app.get("/api/history")
 def api_get_offer_history(request: StarletteRequest, limit: int = 50):
     require_pay_auth(request)
