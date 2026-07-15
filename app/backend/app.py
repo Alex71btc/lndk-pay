@@ -329,7 +329,17 @@ CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(APP_DATA_DIR / "config.json")))
 SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
 DB_PATH = APP_DATA_DIR / "bolt12pay.db"
-
+CONTACT_ENTRY_TYPES = {
+    "lightning_address",
+    "bolt12",
+    "lnurl",
+    "bolt11",
+    "nwc",
+    "wallet",
+    "npub",
+    "node",
+    "other",
+}
 
 def init_db():
     APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -603,6 +613,98 @@ def list_offer_history(limit: int = 50):
         item["bip353_aliases"] = list_history_bip353(item["id"])
 
     return items
+
+def create_contact(alias: str = "", notes: str = "") -> int:
+    now = int(time.time())
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO contacts (
+            alias,
+            notes,
+            created_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            alias,
+            notes,
+            now,
+            now,
+        ),
+    )
+
+    contact_id = cur.lastrowid
+
+    conn.commit()
+    conn.close()
+
+    return contact_id
+
+def add_contact_entry(
+    contact_id: int,
+    entry_type: str,
+    identifier: str,
+    label: str = "",
+):
+    if entry_type not in CONTACT_ENTRY_TYPES:
+        raise ValueError(f"Unknown contact entry type: {entry_type}")
+
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute(
+        """
+        INSERT INTO contact_entries (
+            contact_id,
+            type,
+            identifier,
+            label,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            contact_id,
+            entry_type,
+            identifier,
+            label,
+            int(time.time()),
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+def list_contacts():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    rows = conn.execute(
+        """
+        SELECT
+            id,
+            alias,
+            notes,
+            created_at,
+            updated_at
+        FROM contacts
+        ORDER BY
+            CASE
+                WHEN alias = '' THEN 1
+                ELSE 0
+            END,
+            LOWER(alias),
+            created_at
+        """
+    ).fetchall()
+
+    conn.close()
+
+    return [dict(row) for row in rows]
 
 def get_offer_history_item(item_id: str):
     with _db_conn() as conn:
@@ -5943,7 +6045,7 @@ async def api_sync_tx_history(request: StarletteRequest):
 @app.get("/api/contacts")
 async def api_contacts():
     return {
-        "contacts": []
+        "contacts": list_contacts()
     }
 
 @app.get("/api/history")
