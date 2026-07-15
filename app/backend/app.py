@@ -6048,6 +6048,39 @@ async def api_contacts():
         "contacts": list_contacts()
     }
 
+@app.post("/api/contacts")
+async def api_create_contact(payload: dict, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    entries = payload.get("entries") or []
+
+    if not entries:
+        raise HTTPException(status_code=400, detail="entries required")
+
+    contact_id = create_contact(
+        alias=str(payload.get("alias") or "").strip(),
+        notes=str(payload.get("notes") or "").strip(),
+    )
+
+    for entry in entries:
+        identifier = str(entry.get("identifier") or "").strip()
+
+        if not identifier:
+            continue
+
+        add_contact_entry(
+            contact_id=contact_id,
+            entry_type=str(entry.get("type") or "other"),
+            identifier=identifier,
+            label=str(entry.get("label") or "").strip(),
+        )
+
+    return {
+        "ok": True,
+        "contact_id": contact_id,
+    }
+
 @app.get("/api/history")
 def api_get_offer_history(request: StarletteRequest, limit: int = 50):
     require_pay_auth(request)
