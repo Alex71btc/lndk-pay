@@ -341,12 +341,18 @@
           margin-top: 10px;
           padding-top: 8px;
           border-top: 1px solid rgba(255,255,255,.06);
-      }
-
-      .txExpandHint::before {
-          content: "▶ Show Details";
           color: var(--muted);
           font-size: 12px;
+          font-weight: normal;
+      }
+
+      .txExpandArrow {
+          display: inline-block;
+          width: 12px;
+      }
+
+      .txExpandText {
+          font-weight: 600;
       }
 
       .txDetailsBody {
@@ -354,9 +360,6 @@
         margin-top: 10px;
       }
 
-      details[open] > summary .txExpandHint::before {
-          content: "▼ Hide Details";
-      }
 
       details.section {
         padding-top: 14px;
@@ -954,7 +957,9 @@
 
       <details class="section">
        <summary>
-         <span>⚡ Lightning Activity</span>
+        <span data-i18n="title.lightning_activity">
+          ⚡ Lightning Activity
+        </span>
        </summary>
 
        <div id="txHistoryList" class="historyList"></div>
@@ -2376,7 +2381,9 @@
           const isIncoming = item.direction === "incoming";
           const arrow = isIncoming ? "↓" : "↑";
           const arrowClass = isIncoming ? "txIncoming" : "txOutgoing";
-          const fee = item.fee_sat ? ` • Fee ${item.fee_sat} sat` : "";
+          const fee = item.fee_sat
+            ? ` • ${window.__t("history.fee")} ${item.fee_sat} sat`
+            : "";
           const memo = item.memo || item.identifier || "";
           const displayMemo =
             memo.startsWith("lnbc") ||
@@ -2403,42 +2410,47 @@
           const paymentRequest = raw.payment_request || raw.paymentRequest || "";
           const method = item.method || "unknown";
           let methodLabel = {
-            lightning_address: "⚡ Lightning Address",
-            lnurl: "⚡ LNURL",
-            bolt11: "🧾 BOLT11 Invoice",
-            bolt12: '<img src="/assets/icon.png" class="txMethodIcon"> BOLT12 Offer',
-            offer: '<img src="/assets/icon.png" class="txMethodIcon"> BOLT12 Offer',
-            keysend: "🔑 Keysend",
-            zap: "⚡ Nostr Zap",
-            mining: "⛏ Mining",
-            donation: "❤️ Donation",
+            lightning_address: `⚡ ${window.__t("history.lightning_address")}`,
+            lnurl: `⚡ ${window.__t("history.lnurl")}`,
+            bolt11: `🧾 ${window.__t("history.bolt11_invoice")}`,
+            bolt12: `<img src="/assets/icon.png" class="txMethodIcon"> ${window.__t("history.bolt12_offer")}`,
+            offer: `<img src="/assets/icon.png" class="txMethodIcon"> ${window.__t("history.bolt12_offer")}`,
+            keysend: `🔑 ${window.__t("history.keysend")}`,
+            zap: `⚡ ${window.__t("history.nostr_zap")}`,
+            mining: `⛏ ${window.__t("history.mining")}`,
+            donation: `❤️ ${window.__t("history.donation")}`,
           }[method] || method;
+
           const statusLabel = {
-            settled: "✅ Settled",
-            pending: "🟡 Pending",
-            failed: "❌ Failed",
+            settled: `✅ ${window.__t("history.settled")}`,
+            pending: `🟡 ${window.__t("history.pending")}`,
+            failed: `❌ ${window.__t("history.failed")}`,
           }[item.status] || item.status;
 
           let originLabel = {
             web: "",
-            nwc: " • 🔗 NWC",
-            api: " • API",
-            mining: " • ⛏ Mining",
+            nwc: ` • 🔗 ${window.__t("history.nwc")}`,
+            api: ` • ${window.__t("history.api")}`,
+            mining: ` • ⛏ ${window.__t("history.mining")}`,
           }[item.origin] || "";
-          
+
           if (item.origin === "nwc" || item.method === "nwc") {
-            methodLabel = "🔗 NWC";
+            methodLabel = `🔗 ${window.__t("history.nwc")}`;
             originLabel = "";
           }
+
+          const typeText = {
+            payment: window.__t("history.payment"),
+          }[item.type] || item.type;
 
           const typeLabel =
             ["invoice", "offer", "mining", "zap"].includes(item.type)
               ? ""
-              : ` • ${item.type}`;
+              : ` • ${typeText}`;
           let walletLine = "";
 
           if (item.method === "nwc" && item.counterparty) {
-          walletLine = `<div class="txWallet">🔌 Wallet: ${item.counterparty}</div>`;
+            walletLine = `<div class="txWallet">🔌 ${window.__t("history.wallet")}: ${item.counterparty}</div>`;
           }
 
           const counterparty = item.counterparty || "";
@@ -2462,7 +2474,17 @@
                 ${displayMemo ? `
                 <div class="txMemo">${displayMemo}</div>
                ` : ""}
-               <div class="txExpandHint"></div>
+               <div class="txExpandHint">
+                 <span class="txExpandArrow">${openTxDetails.has(txKey) ? "▼" : "▶"}</span>
+                 <span class="txExpandText">
+                   ${window.__t(
+                     openTxDetails.has(txKey)
+                       ? "history.hide_details"
+                       : "history.show_details"
+                   )}
+                 </span>
+               </div>
+              </div>
               </summary>
 
               <div class="txMeta" style="margin-top: 10px;">
@@ -2471,30 +2493,30 @@
 
               ${paymentRequest ? `
               <details class="txSubDetails" data-sub-key="${txKeyAttr}|invoice" ${openTxSubDetails.has(txKey + "|invoice") ? "open" : ""}>
-                <summary>Invoice (BOLT11)</summary>
+                <summary>${window.__t("history.invoice")} (BOLT11)</summary>
                 <code>${paymentRequest}</code>
               </details>
               ` : ""}
 
               <details class="txSubDetails" data-sub-key="${txKeyAttr}|developer" ${openTxSubDetails.has(txKey + "|developer") ? "open" : ""}>
-                <summary>🛠 Developer Details</summary>
+                <summary>🛠 ${window.__t("history.developer_details")}</summary>
 
               ${paymentHash ? `
                 <details class="txSubDetails" data-sub-key="${txKeyAttr}|paymenthash" ${openTxSubDetails.has(txKey + "|paymenthash") ? "open" : ""}>
-                  <summary>Payment Hash</summary>
+                  <summary>${window.__t("history.payment_hash")}</summary>
                   <code>${paymentHash}</code>
                  </details>
               ` : ""}
 
               ${preimage ? `
                  <details class="txSubDetails" data-sub-key="${txKeyAttr}|preimage" ${openTxSubDetails.has(txKey + "|preimage") ? "open" : ""}>
-                    <summary>Preimage</summary>
+                    <summary>${window.__t("history.preimage")}</summary>
                     <code>${preimage}</code>
                  </details>
               ` : ""}
 
               <details class="txSubDetails" data-sub-key="${txKeyAttr}|rawjson" ${openTxSubDetails.has(txKey + "|rawjson") ? "open" : ""}>
-                <summary>Raw JSON</summary>
+                <summary>${window.__t("history.raw_json")}</summary>
                 <pre>${detailsJson}</pre>
               </details>
 
@@ -2504,6 +2526,24 @@
               </div>
             </details>
           `;
+
+          const rootDetails = div.querySelector(".txDetailsRoot");
+          const expandArrow = div.querySelector(".txExpandArrow");
+          const expandText = div.querySelector(".txExpandText");
+
+          rootDetails?.addEventListener("toggle", () => {
+            if (expandArrow) {
+              expandArrow.textContent = rootDetails.open ? "▼" : "▶";
+            }
+
+            if (expandText) {
+              expandText.textContent = window.__t(
+                rootDetails.open
+                  ? "history.hide_details"
+                  : "history.show_details",
+              );
+            }
+          });
 
           list.appendChild(div);
           console.timeEnd("render tx");
@@ -4257,6 +4297,30 @@
             "label.payment_output": "Payment-Ausgabe",
             "ph.payment_output":
               "Hier erscheint das letzte Zahlungsergebnis...",
+            "title.lightning_activity": "⚡ Lightning-Aktivität",
+            "history.payment": "Zahlung",
+            "history.show_details": "Details anzeigen",
+            "history.hide_details": "Details ausblenden",
+            "history.fee": "Gebühr",
+            "history.wallet": "Wallet",
+            "history.api": "API",
+            "history.invoice": "Rechnung",
+            "history.bolt11_invoice": "BOLT11-Rechnung",
+            "history.developer_details": "Entwicklerdetails",
+            "history.payment_hash": "Payment Hash",
+            "history.preimage": "Preimage",
+            "history.raw_json": "Rohdaten (JSON)",
+            "history.bolt12_offer": "BOLT12 Offer",
+            "history.lightning_address": "Lightning-Adresse",
+            "history.lnurl": "LNURL",
+            "history.keysend": "Keysend",
+            "history.nwc": "NWC",
+            "history.nostr_zap": "Nostr Zap",
+            "history.mining": "Mining",
+            "history.donation": "Spende",
+            "history.settled": "Abgeschlossen",
+            "history.pending": "Ausstehend",
+            "history.failed": "Fehlgeschlagen",
             "title.offer_history": "Generierte Offers",
             "title.notification_keys": "Nostr Notification Keys",
             "title.nwc_wallet": "NWC / Zap Wallet",
@@ -4521,6 +4585,30 @@
             "label.payment_output": "Payment output",
             "ph.payment_output":
               "The latest payment result will appear here...",
+            "title.lightning_activity": "⚡ Lightning Activity",
+            "history.show_details": "Show Details",
+            "history.hide_details": "Hide Details",
+            "history.payment": "Payment",
+            "history.wallet": "Wallet",
+            "history.api": "API",
+            "history.bolt11_invoice": "BOLT11 Invoice",
+            "history.invoice": "Invoice",
+            "history.fee": "Fee",
+            "history.developer_details": "Developer Details",
+            "history.payment_hash": "Payment Hash",
+            "history.preimage": "Preimage",
+            "history.raw_json": "Raw JSON",
+            "history.bolt12_offer": "BOLT12 Offer",
+            "history.lightning_address": "Lightning Address",
+            "history.lnurl": "LNURL",
+            "history.keysend": "Keysend",
+            "history.nwc": "NWC",
+            "history.nostr_zap": "Nostr Zap",
+            "history.mining": "Mining",
+            "history.donation": "Donation",
+            "history.settled": "Settled",
+            "history.pending": "Pending",
+            "history.failed": "Failed",
             "title.offer_history": "Generated Offers",
             "title.notification_keys": "Nostr Notification Keys",
             "title.nwc_wallet": "NWC / Zap Wallet",
