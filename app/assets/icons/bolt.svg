@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 495" role="img" aria-labelledby="title desc">
+  <title id="title">BOLT12 Pay lightning bolt</title>
+  <desc id="desc">Master vector of the purple lightning bolt used in the BOLT12 Pay logo.</desc>
+  <defs>
+    <linearGradient id="bolt-gradient" x1="0.12" y1="0.08" x2="0.86" y2="0.94">
+      <stop offset="0" stop-color="#3c087f"/>
+      <stop offset="0.38" stop-color="#7a16cf"/>
+      <stop offset="0.66" stop-color="#b51ce2"/>
+      <stop offset="1" stop-color="#50108f"/>
+    </linearGradient>
+    <linearGradient id="bolt-highlight" x1="0.16" y1="0.08" x2="0.78" y2="0.84">
+      <stop offset="0" stop-color="#6d13c4"/>
+      <stop offset="0.62" stop-color="#c328ea"/>
+      <stop offset="1" stop-color="#8d18cf"/>
+    </linearGradient>
+    <linearGradient id="bolt-shadow" x1="0.1" y1="0.18" x2="0.88" y2="0.9">
+      <stop offset="0" stop-color="#7d18c7"/>
+      <stop offset="1" stop-color="#38056f"/>
+    </linearGradient>
+    <clipPath id="bolt-clip">
+      <path d="M198 0 0 279 131 284 132 495 330 213 197 211Z"/>
+    </clipPath>
+    <filter id="subtle-shadow" x="-15%" y="-10%" width="135%" height="140%">
+      <feDropShadow dx="2" dy="5" stdDeviation="4" flood-color="#21002f" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#subtle-shadow)">
+    <path d="M198 0 0 279 131 284 132 495 330 213 197 211Z" fill="url(#bolt-gradient)"/>
+
+    <!-- Upper polished face, following the curved highlight visible in the app icon. -->
+    <path
+      d="M198 0 0 279 131 284 132 319
+         C183 310 231 291 268 261
+         C292 242 311 224 330 213
+         L197 211Z"
+      fill="url(#bolt-highlight)"
+      clip-path="url(#bolt-clip)"
+    />
+
+    <!-- Lower, darker facet. -->
+    <path
+      d="M132 319
+         C183 310 231 291 268 261
+         C292 242 311 224 330 213
+         L132 495Z"
+      fill="url(#bolt-shadow)"
+      clip-path="url(#bolt-clip)"
+      opacity="0.92"
+    />
+
+    <!-- Very restrained edge accents; no outer glow. -->
+    <path d="M198 0 197 211 330 213" fill="none" stroke="#d04bf2" stroke-width="2" stroke-linejoin="round" opacity="0.72"/>
+    <path d="M0 279 131 284 132 495" fill="none" stroke="#5b0a9b" stroke-width="2" stroke-linejoin="round" opacity="0.66"/>
+  </g>
+</svg>
