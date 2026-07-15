@@ -679,6 +679,28 @@ def add_contact_entry(
     conn.commit()
     conn.close()
 
+def list_contact_entries(contact_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    rows = conn.execute(
+        """
+        SELECT
+            type,
+            identifier,
+            label,
+            created_at
+        FROM contact_entries
+        WHERE contact_id = ?
+        ORDER BY created_at
+        """,
+        (contact_id,),
+    ).fetchall()
+
+    conn.close()
+
+    return [dict(row) for row in rows]
+
 def list_contacts():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -704,7 +726,12 @@ def list_contacts():
 
     conn.close()
 
-    return [dict(row) for row in rows]
+    contacts = [dict(row) for row in rows]
+
+    for contact in contacts:
+        contact["entries"] = list_contact_entries(contact["id"])
+
+    return contacts
 
 def get_offer_history_item(item_id: str):
     with _db_conn() as conn:
