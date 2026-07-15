@@ -341,17 +341,18 @@
           margin-top: 10px;
           padding-top: 8px;
           border-top: 1px solid rgba(255,255,255,.06);
-      }
-
-      .txExpandHint::before {
-          content: "▶";
           color: var(--muted);
           font-size: 12px;
-          margin-right: 4px;
+          font-weight: normal;
       }
 
-      details[open] > summary .txExpandHint::before {
-          content: "▼";
+      .txExpandArrow {
+          display: inline-block;
+          width: 12px;
+      }
+
+      .txExpandText {
+          font-weight: 600;
       }
 
       .txDetailsBody {
@@ -2473,12 +2474,16 @@
                 ${displayMemo ? `
                 <div class="txMemo">${displayMemo}</div>
                ` : ""}
-              <div class="txExpandHint">
-                ${window.__t(
-                  openTxDetails.has(txKey)
-                    ? "history.hide_details"
-                    : "history.show_details"
-                )}
+               <div class="txExpandHint">
+                 <span class="txExpandArrow">${openTxDetails.has(txKey) ? "▼" : "▶"}</span>
+                 <span class="txExpandText">
+                   ${window.__t(
+                     openTxDetails.has(txKey)
+                       ? "history.hide_details"
+                       : "history.show_details"
+                   )}
+                 </span>
+               </div>
               </div>
               </summary>
 
@@ -2521,6 +2526,24 @@
               </div>
             </details>
           `;
+
+          const rootDetails = div.querySelector(".txDetailsRoot");
+          const expandArrow = div.querySelector(".txExpandArrow");
+          const expandText = div.querySelector(".txExpandText");
+
+          rootDetails?.addEventListener("toggle", () => {
+            if (expandArrow) {
+              expandArrow.textContent = rootDetails.open ? "▼" : "▶";
+            }
+
+            if (expandText) {
+              expandText.textContent = window.__t(
+                rootDetails.open
+                  ? "history.hide_details"
+                  : "history.show_details",
+              );
+            }
+          });
 
           list.appendChild(div);
           console.timeEnd("render tx");
