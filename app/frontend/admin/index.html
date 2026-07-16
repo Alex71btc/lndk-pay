@@ -365,11 +365,11 @@
         overflow: auto;
         white-space: pre-wrap;
       }
+
       .txMethodIcon {
-          width: 14px;
-          height: 14px;
-          vertical-align: -2px;
-          margin-right: 4px;
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
       }
 
       .txExpandHint {
@@ -607,22 +607,25 @@
         }
       }
 
-      .sectionIcon {
-        width: 24px;
-        height: 24px;
-        margin-right: 10px;
-        vertical-align: -5px;
-        flex-shrink: 0;
-      }
-
-
       .sectionTitle {
-          display: inline-flex;
-          align-items: center;
-          font-size: 17px;
-          font-weight: 600;
-          gap: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
       }
+
+      .sectionIcon[src$="nwc.png"] {
+          width: 25px;
+          height: 25px;
+      }
+
+      .sectionIcon,
+      .txMethodIcon {
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
+            vertical-align: middle;
+      }
+
 
       .langSwitch {
         position: absolute;
@@ -1043,10 +1046,20 @@
 
 
       <details class="section">
-        <summary>
-          <img src="/assets/icon.png" class="txMethodIcon">
-          <span data-i18n="title.offer_history">Generated Offers</span>
-       </summary>
+      <summary>
+            <span class="sectionTitle">
+                  <img
+                        src="/assets/icon.png"
+                        class="txMethodIcon"
+                        alt=""
+                        aria-hidden="true"
+                  />
+                  <span data-i18n="title.offer_history">
+                        Generated Offers
+                  </span>
+            </span>
+      </summary>
+
         <div class="row">
           <button class="secondary" id="clearHistoryBtn" type="button">
             <span data-i18n="btn.clear_history">History löschen</span>
@@ -1057,7 +1070,17 @@
 
       <details class="section">
      <summary>
-       👤 <span data-i18n="title.nostr_identity">Nostr / Identity</span>
+      <span class="sectionTitle">
+        <img
+          src="/assets/icons/nostr.svg"
+          class="sectionIcon"
+          alt=""
+          aria-hidden="true"
+        />
+        <span data-i18n="title.nostr_identity">
+          Nostr / Identity
+        </span>
+      </span>
      </summary>
 
         <label class="label" for="identityAliasInput"
@@ -1209,9 +1232,19 @@
       </details>
 
       <details class="section">
-     <summary>
-       🔗 <span data-i18n="title.nwc_wallet">NWC / Zap Wallet</span>
-     </summary>
+        <summary>
+          <span class="sectionTitle">
+            <img
+              src="/assets/icons/nwc.png"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span data-i18n="title.nwc_wallet">
+              NWC / Zap Wallet
+            </span>
+          </span>
+        </summary>
 
         <label class="label" for="nwcNameInput"
           ><span data-i18n="label.nwc_name">Connection Name</span></label
@@ -1397,9 +1430,19 @@
       </details>
 
       <details class="section">
-       <summary>
-         🌐 <span data-i18n="title.alias_cloudflare">Alias / Cloudflare BIP353</span>
-       </summary>
+        <summary>
+          <span class="sectionTitle">
+            <img
+              src="/assets/icons/cloudflare.svg"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span data-i18n="title.alias_cloudflare">
+              Alias / Cloudflare BIP353
+            </span>
+          </span>
+        </summary>
 
         <label class="label" for="cfRecordNameInput" style="margin-top: 14px"
           ><span data-i18n="label.record_name">Record Name</span></label
