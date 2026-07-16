@@ -1475,11 +1475,12 @@
           </label>
 
           <select id="saveContactType">
-            <option value="lightning_address">⚡ Lightning Address</option>
-            <option value="bip353">🌐 BIP353 Address</option>
-            <option value="bolt12">⚡ BOLT12 Offer</option>
-            <option value="lnurl">🔗 LNURL</option>
-            <option value="node">⚡ Node ID (Keysend)</option>
+            <option value="lightning_address">Lightning Address</option>
+            <option value="bip353">BIP353 Address</option>
+            <option value="bolt12">BOLT12 Offer</option>
+            <option value="lnurl">LNURL</option>
+            <option value="node">Node ID (Keysend)</option>
+            <option value="nostr">Nostr npub</option>
           </select>
 
           <label class="label" style="margin-top:14px">
@@ -2591,19 +2592,33 @@
           .replaceAll("'", "&#039;");
       }
 
-      function getContactEntryIcon(type) {
-        const icons = {
-          lightning_address: "⚡",
-          lightning: "⚡",
-          bolt12: "⚡",
-          bip353: "🌐",
-          nostr: "🟣",
-          npub: "🟣",
-          other: "•",
-        };
+function getContactEntryIcon(type) {
+  const icon = (src, alt = "") => `
+    <img
+      src="${src}"
+      class="txMethodIcon"
+      alt="${alt}"
+    >
+  `;
 
-        return icons[type] || "•";
-      }
+  const icons = {
+    lightning_address: icon("/assets/icons/bolt.svg"),
+    lightning: icon("/assets/icons/bolt.svg"),
+    lnurl: icon("/assets/icons/bolt.svg"),
+
+    bolt12: icon("/assets/icon.png"),
+    bip353: icon("/assets/icon.png"),
+
+    nostr: icon("/assets/icons/nostr.svg"),
+    npub: icon("/assets/icons/nostr.svg"),
+
+    node: "🔑",
+
+    other: "•",
+  };
+
+  return icons[type] || "•";
+}
 
       function renderContacts(contacts) {
         loadedContacts = Array.isArray(contacts) ? contacts : [];
