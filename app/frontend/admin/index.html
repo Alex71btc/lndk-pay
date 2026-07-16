@@ -292,6 +292,13 @@
             background: rgba(255, 255, 255, 0.05);
       }
 
+      .contactCard {
+        margin-top: 10px;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: rgba(255,255,255,.02);
+      }
 
       textarea {
         min-height: 180px;
@@ -1429,6 +1436,72 @@
         </div>
       </details>
 
+      <div
+        id="contactsModal"
+        class="scannerModal"
+        aria-hidden="true"
+        style="display: none"
+      >
+        <div class="scannerCard" style="width: min(700px, 92vw)">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 16px;
+            "
+          >
+            <h2
+              style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin: 0;
+              "
+            >
+              <img
+                src="/assets/icons/contacts.svg"
+                alt=""
+                aria-hidden="true"
+                style="width: 34px; height: 34px"
+              />
+              <span>Contacts</span>
+            </h2>
+
+            <button
+              class="secondary"
+              id="closeContactsBtn"
+              type="button"
+              aria-label="Close contacts"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            id="contactsList"
+            class="historyList"
+            style="
+              margin-top: 18px;
+              max-height: 420px;
+              overflow: auto;
+            "
+          >
+            Loading...
+          </div>
+
+          <div class="row" style="margin-top: 16px">
+            <button
+              class="secondary"
+              id="closeContactsBottomBtn"
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+
       <details class="section">
         <summary>
           <span class="sectionTitle">
@@ -1697,6 +1770,15 @@
       const scannerReader = document.getElementById("scannerReader");
       const scannerTitle = document.getElementById("scannerTitle");
 
+      const contactPickerBtn = document.getElementById("contactPickerBtn");
+      const contactsModal = document.getElementById("contactsModal");
+      const contactsList = document.getElementById("contactsList");
+      const closeContactsBtn = document.getElementById("closeContactsBtn");
+      const closeContactsBottomBtn = document.getElementById(
+        "closeContactsBottomBtn",
+      );
+
+
       document
         .getElementById("createNwcConnectionBtn")
         ?.addEventListener("click", createNwcConnection);
@@ -1711,6 +1793,52 @@
       nwcQrBox?.addEventListener("click", () =>
         copyText(nwcUriOutput?.value || "", window.__t("toast.nwc_uri_copied")),
       );
+      contactPickerBtn?.addEventListener("click", loadContacts);
+      closeContactsBtn?.addEventListener("click", closeContactsModal);
+      closeContactsBottomBtn?.addEventListener(
+        "click",
+        closeContactsModal,
+      );
+
+      contactsModal?.addEventListener("click", (event) => {
+        if (event.target === contactsModal) {
+          closeContactsModal();
+        }
+      });
+
+      contactsList?.addEventListener("click", (event) => {
+        const entryButton = event.target.closest(".contactEntryBtn");
+
+        if (!entryButton) return;
+
+        const value = String(
+          entryButton.dataset.contactValue || "",
+        ).trim();
+
+        if (!value) return;
+
+        payOfferInput.value = value;
+
+        payAmountInput.value = "";
+        payerNoteInput.value = "";
+
+        if (paymentResultOutput) {
+          paymentResultOutput.value = "";
+        }
+
+        if (payLivePreview) {
+          payLivePreview.style.display = "none";
+        }
+
+        updatePayUiForInput();
+        closeContactsModal();
+
+        payOfferInput.dispatchEvent(new Event("input", {
+          bubbles: true,
+        }));
+
+        payOfferInput.focus();
+      });
 
       let statusTimer = null;
       let deferredPrompt = null;
@@ -2262,6 +2390,155 @@
           );
         }
       }
+
+      function escapeContactHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function getContactEntryIcon(type) {
+        const icons = {
+          lightning_address: "⚡",
+          lightning: "⚡",
+          bolt12: "⚡",
+          bip353: "🌐",
+          nostr: "🟣",
+          npub: "🟣",
+          other: "•",
+        };
+
+        return icons[type] || "•";
+      }
+
+      function renderContacts(contacts) {
+        if (!contactsList) return;
+
+        if (!Array.isArray(contacts) || contacts.length === 0) {
+          contactsList.innerHTML = `
+            <div class="hint">
+              No contacts yet.
+            </div>
+          `;
+          return;
+        }
+
+        contactsList.innerHTML = contacts
+          .map((contact) => {
+            const alias = escapeContactHtml(
+              contact.alias || "(unnamed contact)",
+            );
+
+            const notes = contact.notes
+              ? `
+                <div class="hint" style="margin-top: 8px">
+                  ${escapeContactHtml(contact.notes)}
+                </div>
+              `
+              : "";
+
+            const entries = Array.isArray(contact.entries)
+              ? contact.entries
+                  .map((entry) => {
+                    const type = String(entry.type || "other");
+                    const icon = getContactEntryIcon(type);
+                    const identifier = escapeContactHtml(entry.identifier);
+                    const label = entry.label
+                      ? `<span class="muted"> · ${escapeContactHtml(entry.label)}</span>`
+                      : "";
+
+                    return `
+                      <button
+                        type="button"
+                        class="secondary contactEntryBtn"
+                        data-contact-value="${escapeContactHtml(entry.identifier)}"
+                        style="
+                          width: 100%;
+                          display: flex;
+                          align-items: center;
+                          gap: 10px;
+                          justify-content: flex-start;
+                          margin-top: 8px;
+                          text-align: left;
+                        "
+                      >
+                        <span aria-hidden="true">${icon}</span>
+                        <span style="overflow-wrap: anywhere">
+                          ${identifier}${label}
+                        </span>
+                      </button>
+                    `;
+                  })
+                  .join("")
+              : "";
+
+            return `
+              <div
+                class="contactCard"
+                style="
+                  padding: 14px;
+                  margin-top: 10px;
+                "
+              >
+                <strong>${alias}</strong>
+                ${notes}
+                ${
+                  entries ||
+                  `
+                    <div class="hint" style="margin-top: 8px">
+                      No entries
+                    </div>
+                  `
+                }
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      function openContactsModal() {
+        if (!contactsModal) return;
+
+        contactsModal.style.display = "flex";
+        contactsModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeContactsModal() {
+        if (!contactsModal) return;
+
+        contactsModal.style.display = "none";
+        contactsModal.setAttribute("aria-hidden", "true");
+      }
+
+      async function loadContacts() {
+        if (!contactsList) return;
+
+        openContactsModal();
+        contactsList.textContent = "Loading...";
+
+        try {
+          const res = await fetch("/api/contacts");
+
+          if (!res.ok) {
+            throw new Error(`Contacts request failed: HTTP ${res.status}`);
+          }
+
+          const data = await res.json();
+          renderContacts(data.contacts || []);
+        } catch (error) {
+          console.error("Unable to load contacts:", error);
+
+          contactsList.innerHTML = `
+            <div class="hint" style="color: #ff8d8d">
+              Unable to load contacts.
+            </div>
+          `;
+        }
+      }
+
 
       function normalizeScannedText(raw) {
         let value = String(raw || "").trim();
