@@ -258,6 +258,41 @@
         font-size: 1rem;
       }
 
+      .payInputRow {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .payInputRow input {
+        flex: 1;
+      }
+
+      #contactPickerBtn {
+          width: 52px;
+          height: 52px;
+          padding: 0;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+      }
+
+      .contactButtonIcon {
+          width: 48px;
+          height: 48px;
+          display: block;
+      }
+
+      #contactPickerBtn:hover {
+            background: rgba(255, 255, 255, 0.05);
+      }
+
+
       textarea {
         min-height: 180px;
         resize: vertical;
@@ -572,6 +607,23 @@
         }
       }
 
+      .sectionIcon {
+        width: 24px;
+        height: 24px;
+        margin-right: 10px;
+        vertical-align: -5px;
+        flex-shrink: 0;
+      }
+
+
+      .sectionTitle {
+          display: inline-flex;
+          align-items: center;
+          font-size: 17px;
+          font-weight: 600;
+          gap: 10px;
+      }
+
       .langSwitch {
         position: absolute;
         top: 24px;
@@ -700,11 +752,27 @@
               >Offer, Invoice oder Lightning Address</span
             ></label
           >
-          <input
-            id="payOfferInput"
-            type="text"
-            placeholder="lno... oder lnbc... oder name@domain"
-          />
+      <div class="payInputRow">
+        <input
+          id="payOfferInput"
+          type="text"
+          placeholder="lno... oder lnbc... oder name@domain"
+        />
+
+      <button
+        id="contactPickerBtn"
+        class="secondary"
+        type="button"
+        title="Contacts"
+      >
+        <img
+          src="/assets/icons/contacts.svg"
+          class="contactButtonIcon"
+          alt=""
+          aria-hidden="true"
+        />
+      </button>
+      </div>
 
           <div
             id="payLivePreview"
@@ -956,11 +1024,19 @@
       </div>
 
       <details class="section">
-       <summary>
-        <span data-i18n="title.lightning_activity">
-          ⚡ Lightning Activity
-        </span>
-       </summary>
+        <summary>
+          <span class="sectionTitle">
+            <img
+              src="/assets/icons/bolt.svg"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span data-i18n="title.lightning_activity">
+              Lightning Activity
+            </span>
+          </span>
+        </summary>
 
        <div id="txHistoryList" class="historyList"></div>
      </details>
@@ -4297,7 +4373,7 @@
             "label.payment_output": "Payment-Ausgabe",
             "ph.payment_output":
               "Hier erscheint das letzte Zahlungsergebnis...",
-            "title.lightning_activity": "⚡ Lightning-Aktivität",
+            "title.lightning_activity": " Lightning-Aktivität",
             "history.payment": "Zahlung",
             "history.show_details": "Details anzeigen",
             "history.hide_details": "Details ausblenden",
@@ -4585,7 +4661,7 @@
             "label.payment_output": "Payment output",
             "ph.payment_output":
               "The latest payment result will appear here...",
-            "title.lightning_activity": "⚡ Lightning Activity",
+            "title.lightning_activity": "Lightning Activity",
             "history.show_details": "Show Details",
             "history.hide_details": "Hide Details",
             "history.payment": "Payment",

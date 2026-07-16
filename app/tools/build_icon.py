@@ -13,41 +13,40 @@ frame = Path(sys.argv[1]).read_text(encoding="utf-8")
 bolt = Path(sys.argv[2]).read_text(encoding="utf-8")
 
 #
-# defs
+# Blitzposition
 #
+
+BOLT_TRANSLATE_X = 28.7
+BOLT_TRANSLATE_Y = 15.2
+BOLT_SCALE = 0.069
+
+#
+# defs übernehmen
+#
+
 m = re.search(r"<defs>(.*?)</defs>", bolt, re.S)
 if not m:
     raise RuntimeError("No <defs> found in bolt.svg")
 
 defs = "<defs>" + m.group(1) + "</defs>"
 
+frame = frame.replace("<!-- DEFS -->", defs)
+
 #
-# bolt group
+# Blitzgruppe holen
 #
+
 m = re.search(r"(<g.*?</g>)\s*</svg>", bolt, re.S)
 if not m:
     raise RuntimeError("No bolt group found")
 
-group = m.group(1)
-
-#
-# scale + move
-#
-group = f"""
-<g transform="translate(28.7 15.2) scale(0.066)">
-{group}
+bolt_group = f"""
+<g transform="translate({BOLT_TRANSLATE_X} {BOLT_TRANSLATE_Y}) scale({BOLT_SCALE})">
+{m.group(1)}
 </g>
 """
 
-#
-# insert defs
-#
-frame = frame.replace("<!-- DEFS -->", defs)
-
-#
-# replace bolt marker
-#
-frame = frame.replace("<!-- BOLT -->", group)
+frame = frame.replace("<!-- BOLT -->", bolt_group)
 
 Path(sys.argv[3]).write_text(frame, encoding="utf-8")
 
