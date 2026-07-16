@@ -1437,6 +1437,92 @@
       </details>
 
       <div
+        id="saveContactModal"
+        class="scannerModal"
+        aria-hidden="true"
+        style="display:none"
+      >
+        <div class="scannerCard" style="width:min(520px,92vw)">
+
+      <h2
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 0;
+        "
+      >
+        <img
+          src="/assets/icons/contacts.svg"
+          class="sectionIcon"
+          alt=""
+          aria-hidden="true"
+        />
+        <span>Save Contact</span>
+       </h2>
+          <label class="label" style="margin-top:16px">
+            Identifier
+          </label>
+
+          <input
+            id="saveContactIdentifier"
+            type="text"
+            readonly
+          />
+
+          <label class="label" style="margin-top:14px">
+            Type
+          </label>
+
+          <select id="saveContactType">
+            <option value="lightning_address">⚡ Lightning Address</option>
+            <option value="bip353">🌐 BIP353 Address</option>
+            <option value="bolt12">⚡ BOLT12 Offer</option>
+            <option value="lnurl">🔗 LNURL</option>
+            <option value="node">⚡ Node ID (Keysend)</option>
+          </select>
+
+          <label class="label" style="margin-top:14px">
+            Name
+          </label>
+
+          <input
+            id="saveContactAlias"
+            type="text"
+            placeholder="Alice"
+          />
+
+          <label class="label" style="margin-top:14px">
+            Notes
+          </label>
+
+          <textarea
+            id="saveContactNotes"
+            rows="3"
+            placeholder="optional"
+          ></textarea>
+
+          <div class="row" style="margin-top:18px">
+            <button
+              class="secondary"
+              id="cancelSaveContactBtn"
+              type="button"
+            >
+              Cancel
+            </button>
+
+            <button
+              id="confirmSaveContactBtn"
+              type="button"
+            >
+              Save
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <div
         id="contactsModal"
         class="scannerModal"
         aria-hidden="true"
@@ -1479,10 +1565,44 @@
           </div>
 
           <div
+            id="currentContactCandidate"
+            style="display: none; margin-top: 18px"
+          >
+            <div
+              id="currentContactIdentifier"
+              class="hint"
+              style="
+                font-size: 15px;
+                overflow-wrap: anywhere;
+              "
+            ></div>
+
+            <div class="row" style="margin-top: 12px">
+              <button
+                id="saveCurrentContactBtn"
+                class="secondary"
+                type="button"
+              >
+                💾 Save as new contact
+              </button>
+            </div>
+            <div
+              id="currentContactStatus"
+              class="hint"
+              style="
+                display: none;
+                margin-top: 12px;
+                font-size: 15px;
+              "
+            ></div>
+
+            <hr style="margin: 18px 0" />
+          </div>
+
+          <div
             id="contactsList"
             class="historyList"
             style="
-              margin-top: 18px;
               max-height: 420px;
               overflow: auto;
             "
@@ -1720,6 +1840,38 @@
       const nostrNotifyPubkey = document.getElementById("nostrNotifyPubkey");
 
       // ------------------------------------------------------------------
+      // Contacts DOM references
+      // ------------------------------------------------------------------
+
+      const saveContactModal = document.getElementById(
+        "saveContactModal",
+      );
+
+      const saveContactIdentifier = document.getElementById(
+        "saveContactIdentifier",
+      );
+
+      const saveContactType = document.getElementById(
+        "saveContactType",
+      );
+
+      const saveContactAlias = document.getElementById(
+        "saveContactAlias",
+      );
+
+      const saveContactNotes = document.getElementById(
+        "saveContactNotes",
+      );
+
+      const confirmSaveContactBtn = document.getElementById(
+        "confirmSaveContactBtn",
+      );
+
+      const cancelSaveContactBtn = document.getElementById(
+        "cancelSaveContactBtn",
+      );
+
+      // ------------------------------------------------------------------
       // NWC DOM references
       // ------------------------------------------------------------------
 
@@ -1773,10 +1925,27 @@
       const contactPickerBtn = document.getElementById("contactPickerBtn");
       const contactsModal = document.getElementById("contactsModal");
       const contactsList = document.getElementById("contactsList");
+      const currentContactCandidate = document.getElementById(
+        "currentContactCandidate",
+      );
+
+      const currentContactIdentifier = document.getElementById(
+        "currentContactIdentifier",
+      );
+
+      const currentContactStatus = document.getElementById(
+        "currentContactStatus",
+      );
+
+      const saveCurrentContactBtn = document.getElementById(
+        "saveCurrentContactBtn",
+      );
+
       const closeContactsBtn = document.getElementById("closeContactsBtn");
       const closeContactsBottomBtn = document.getElementById(
         "closeContactsBottomBtn",
       );
+
 
 
       document
@@ -1794,6 +1963,28 @@
         copyText(nwcUriOutput?.value || "", window.__t("toast.nwc_uri_copied")),
       );
       contactPickerBtn?.addEventListener("click", loadContacts);
+
+      saveCurrentContactBtn?.addEventListener(
+        "click",
+        openSaveContactModal,
+      );
+
+      cancelSaveContactBtn?.addEventListener(
+        "click",
+        closeSaveContactModal,
+      );
+
+      saveContactModal?.addEventListener("click", (event) => {
+        if (event.target === saveContactModal) {
+          closeSaveContactModal();
+        }
+      });
+
+      confirmSaveContactBtn?.addEventListener(
+        "click",
+        saveCurrentContact,
+      );
+
       closeContactsBtn?.addEventListener("click", closeContactsModal);
       closeContactsBottomBtn?.addEventListener(
         "click",
@@ -2415,6 +2606,8 @@
       }
 
       function renderContacts(contacts) {
+        loadedContacts = Array.isArray(contacts) ? contacts : [];
+
         if (!contactsList) return;
 
         if (!Array.isArray(contacts) || contacts.length === 0) {
@@ -2513,8 +2706,172 @@
         contactsModal.setAttribute("aria-hidden", "true");
       }
 
+      function openSaveContactModal() {
+        closeContactsModal();
+
+        if (!saveContactModal) return;
+
+        const identifier = payOfferInput.value.trim();
+
+        if (
+          identifier.toLowerCase().startsWith("lnbc") ||
+          identifier.toLowerCase().startsWith("lntb") ||
+          identifier.toLowerCase().startsWith("lnbcrt")
+        ) {
+          setStatus(
+            "Temporary BOLT11 invoices cannot be saved as contacts.",
+            "error",
+          );
+          return;
+        }
+
+        saveContactIdentifier.value = identifier;
+
+        saveContactAlias.value = guessContactAlias(identifier);
+        saveContactNotes.value = "";
+        saveContactType.value = guessContactType(identifier);
+
+        saveContactModal.style.display = "flex";
+        saveContactModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeSaveContactModal() {
+        if (!saveContactModal) return;
+
+        saveContactModal.style.display = "none";
+        saveContactModal.setAttribute("aria-hidden", "true");
+      }
+
+      async function saveCurrentContact() {
+        const alias = saveContactAlias.value.trim();
+        const identifier = saveContactIdentifier.value.trim();
+        const notes = saveContactNotes.value.trim();
+        const type = saveContactType.value;
+
+        if (!identifier) {
+          setStatus("Identifier required.", "error");
+          return;
+        }
+
+        confirmSaveContactBtn.disabled = true;
+
+        try {
+          const response = await fetch("/api/contacts", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": getCookie("csrf_token"),
+            },
+            body: JSON.stringify({
+              alias,
+              notes,
+              entries: [
+                {
+                  type,
+                  identifier,
+                },
+              ],
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          closeSaveContactModal();
+
+          setStatus("Contact saved.");
+
+          await loadContacts();
+        } catch (err) {
+          console.error(err);
+          setStatus("Unable to save contact.", "error", true);
+        } finally {
+          confirmSaveContactBtn.disabled = false;
+        }
+      }
+
+      function guessContactAlias(identifier) {
+        const value = String(identifier || "").trim();
+
+        if (value.includes("@")) {
+          return value.split("@")[0];
+        }
+
+        return "";
+      }
+
+      function guessContactType(identifier) {
+        const value = String(identifier || "").trim().toLowerCase();
+
+        if (value.startsWith("lno")) {
+          return "bolt12";
+        }
+
+        if (value.startsWith("lnurl1")) {
+          return "lnurl";
+        }
+
+        if (
+          value.startsWith("lnbc") ||
+          value.startsWith("lntb") ||
+          value.startsWith("lnbcrt")
+        ) {
+          return "";
+        }
+
+        if (/^0[2-3][0-9a-f]{64}$/i.test(value)) {
+          return "node";
+        }
+
+        if (value.includes("@")) {
+          return "lightning_address";
+        }
+
+        return "lightning_address";
+      }
+
       async function loadContacts() {
         if (!contactsList) return;
+
+        const current = payOfferInput.value.trim();
+
+        if (current) {
+          currentContactCandidate.style.display = "";
+
+          const lower = current.toLowerCase();
+
+          const isBolt11 =
+            lower.startsWith("lnbc") ||
+            lower.startsWith("lntb") ||
+            lower.startsWith("lnbcrt");
+
+          saveCurrentContactBtn.style.display = isBolt11 ? "none" : "";
+
+          currentContactIdentifier.textContent = `⚡ ${current}`;
+          const existing = loadedContacts.find((contact) =>
+            (contact.entries || []).some(
+              (entry) => entry.identifier.trim().toLowerCase() === current.trim().toLowerCase(),
+            ),
+          );
+
+          if (existing) {
+            saveCurrentContactBtn.style.display = "none";
+
+            currentContactStatus.style.display = "";
+            currentContactStatus.textContent =
+              `✓ Already saved as "${existing.alias || "(unnamed)"}"`;
+          } else {
+            saveCurrentContactBtn.style.display = "";
+
+            currentContactStatus.style.display = "none";
+            currentContactStatus.textContent = "";
+          }
+
+        } else {
+          currentContactCandidate.style.display = "none";
+          saveCurrentContactBtn.style.display = "none";
+        }
 
         openContactsModal();
         contactsList.textContent = "Loading...";
@@ -2527,6 +2884,7 @@
           }
 
           const data = await res.json();
+          loadedContacts = data.contacts || [];
           renderContacts(data.contacts || []);
         } catch (error) {
           console.error("Unable to load contacts:", error);
@@ -3243,6 +3601,8 @@
       }
 
       let payPreviewTimer = null;
+
+      let loadedContacts = [];
 
       function resetPayUiState() {
         payAmountInput.disabled = false;
