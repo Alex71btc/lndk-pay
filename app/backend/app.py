@@ -686,6 +686,7 @@ def list_contact_entries(contact_id: int):
     rows = conn.execute(
         """
         SELECT
+            id,
             type,
             identifier,
             label,
@@ -732,6 +733,63 @@ def list_contacts():
         contact["entries"] = list_contact_entries(contact["id"])
 
     return contacts
+
+def update_contact(
+    contact_id: int,
+    alias: str,
+    notes: str,
+):
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute(
+        """
+        UPDATE contacts
+        SET
+            alias = ?,
+            notes = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            alias,
+            notes,
+            int(time.time()),
+            contact_id,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def delete_contact_entries(contact_id: int):
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute(
+        """
+        DELETE FROM contact_entries
+        WHERE contact_id = ?
+        """,
+        (contact_id,),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def delete_contact(contact_id: int):
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute(
+        """
+        DELETE FROM contacts
+        WHERE id = ?
+        """,
+        (contact_id,),
+    )
+
+    conn.commit()
+    conn.close()
 
 def get_offer_history_item(item_id: str):
     with _db_conn() as conn:
@@ -6106,6 +6164,60 @@ async def api_create_contact(payload: dict, request: StarletteRequest):
     return {
         "ok": True,
         "contact_id": contact_id,
+    }
+
+@app.put("/api/contacts/{contact_id}")
+async def api_update_contact(
+    contact_id: int,
+    payload: dict,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    entries = payload.get("entries") or []
+
+    if not entries:
+        raise HTTPException(status_code=400, detail="entries required")
+
+    update_contact(
+        contact_id=contact_id,
+        alias=str(payload.get("alias") or "").strip(),
+        notes=str(payload.get("notes") or "").strip(),
+    )
+
+    delete_contact_entries(contact_id)
+
+    for entry in entries:
+        identifier = str(entry.get("identifier") or "").strip()
+
+        if not identifier:
+            continue
+
+        add_contact_entry(
+            contact_id=contact_id,
+            entry_type=str(entry.get("type") or "other"),
+            identifier=identifier,
+            label=str(entry.get("label") or "").strip(),
+        )
+
+    return {
+        "ok": True,
+    }
+
+@app.delete("/api/contacts/{contact_id}")
+async def api_delete_contact(
+    contact_id: int,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    delete_contact_entries(contact_id)
+    delete_contact(contact_id)
+
+    return {
+        "ok": True,
     }
 
 @app.get("/api/history")

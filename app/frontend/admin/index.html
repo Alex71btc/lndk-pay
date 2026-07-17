@@ -1522,7 +1522,75 @@
 
         </div>
       </div>
+      <div
+        id="editContactModal"
+        class="scannerModal"
+        aria-hidden="true"
+        style="display:none"
+      >
+        <div class="scannerCard" style="width:min(520px,92vw)">
 
+          <h2
+            style="
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin: 0;
+            "
+          >
+            <img
+              src="/assets/icons/contacts.svg"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span>Edit Contact</span>
+          </h2>
+
+          <label class="label" style="margin-top:14px">
+            Name
+          </label>
+
+          <input
+            id="editContactAlias"
+            type="text"
+          />
+
+          <label class="label" style="margin-top:14px">
+            Notes
+          </label>
+
+          <textarea
+            id="editContactNotes"
+            rows="3"
+          ></textarea>
+
+          <div
+            class="row"
+            style="
+              margin-top:18px;
+              display:flex;
+              justify-content:space-between;
+              gap:12px;
+            "
+          >
+            <button
+              class="secondary"
+              id="closeEditContactBtn"
+              type="button"
+            >
+              Close
+            </button>
+
+            <button
+              id="saveEditContactBtn"
+              type="button"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
       <div
         id="contactsModal"
         class="scannerModal"
@@ -1872,6 +1940,26 @@
         "cancelSaveContactBtn",
       );
 
+      const editContactModal = document.getElementById(
+        "editContactModal",
+      );
+
+      const editContactAlias = document.getElementById(
+        "editContactAlias",
+      );
+
+      const editContactNotes = document.getElementById(
+        "editContactNotes",
+      );
+
+      const closeEditContactBtn = document.getElementById(
+        "closeEditContactBtn",
+      );
+
+      const saveEditContactBtn = document.getElementById(
+        "saveEditContactBtn",
+      );
+
       // ------------------------------------------------------------------
       // NWC DOM references
       // ------------------------------------------------------------------
@@ -1974,6 +2062,22 @@
         "click",
         closeSaveContactModal,
       );
+
+      closeEditContactBtn?.addEventListener(
+        "click",
+        closeEditContactModal,
+      );
+
+      saveEditContactBtn?.addEventListener(
+        "click",
+        saveEditedContact,
+      );
+
+      editContactModal?.addEventListener("click", (event) => {
+        if (event.target === editContactModal) {
+          closeEditContactModal();
+        }
+      });
 
       saveContactModal?.addEventListener("click", (event) => {
         if (event.target === saveContactModal) {
@@ -2780,22 +2884,76 @@ function getContactEntryIcon(type) {
       }
 
       function openEditContact(contactId) {
-          const contact = loadedContacts.find(
-            (c) => String(c.id) === String(contactId),
-          );
+        const contact = loadedContacts.find(
+          (c) => String(c.id) === String(contactId),
+        );
 
-          if (!contact) return;
+        if (!contact) return;
 
-          console.log(contact);
+        editingContact = contact;
+
+        closeContactsModal();
+
+        editContactAlias.value = contact.alias || "";
+        editContactNotes.value = contact.notes || "";
+
+        editContactModal.style.display = "flex";
+        editContactModal.setAttribute("aria-hidden", "false");
       }
-
-
 
       function closeSaveContactModal() {
         if (!saveContactModal) return;
 
         saveContactModal.style.display = "none";
         saveContactModal.setAttribute("aria-hidden", "true");
+      }
+
+      function closeEditContactModal() {
+        if (!editContactModal) return;
+
+        editContactModal.style.display = "none";
+        editContactModal.setAttribute("aria-hidden", "true");
+      }
+
+      async function saveEditedContact() {
+        if (!editingContact) return;
+
+        saveEditContactBtn.disabled = true;
+
+        try {
+          const response = await fetch(
+            `/api/contacts/${editingContact.id}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": getCookie("csrf_token"),
+              },
+              body: JSON.stringify({
+                alias: editContactAlias.value.trim(),
+                notes: editContactNotes.value.trim(),
+                entries: editingContact.entries || [],
+              }),
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          closeEditContactModal();
+
+          editingContact = null;
+
+          await loadContacts();
+
+          setStatus("Contact updated.");
+        } catch (err) {
+          console.error(err);
+          setStatus("Unable to update contact.", "error", true);
+        } finally {
+          saveEditContactBtn.disabled = false;
+        }
       }
 
       async function saveCurrentContact() {
@@ -3659,6 +3817,7 @@ function getContactEntryIcon(type) {
       let payPreviewTimer = null;
 
       let loadedContacts = [];
+      let editingContact = null;
 
       function resetPayUiState() {
         payAmountInput.disabled = false;
