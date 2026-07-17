@@ -1548,9 +1548,9 @@
             >
               <img
                 src="/assets/icons/contacts.svg"
+                class="sectionIcon"
                 alt=""
                 aria-hidden="true"
-                style="width: 34px; height: 34px"
               />
               <span>Contacts</span>
             </h2>
@@ -1587,6 +1587,7 @@
                 💾 Save as new contact
               </button>
             </div>
+
             <div
               id="currentContactStatus"
               class="hint"
@@ -1599,7 +1600,6 @@
 
             <hr style="margin: 18px 0" />
           </div>
-
           <div
             id="contactsList"
             class="historyList"
@@ -1999,6 +1999,13 @@
       });
 
       contactsList?.addEventListener("click", (event) => {
+        const editButton = event.target.closest(".editContactBtn");
+
+        if (editButton) {
+          openEditContact(editButton.dataset.contactId);
+          return;
+        }
+
         const entryButton = event.target.closest(".contactEntryBtn");
 
         if (!entryButton) return;
@@ -2691,7 +2698,30 @@ function getContactEntryIcon(type) {
                   margin-top: 10px;
                 "
               >
-                <strong>${alias}</strong>
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 12px;
+                  "
+                >
+                  <strong>${alias}</strong>
+
+                  <button
+                    type="button"
+                    class="secondary editContactBtn"
+                    data-contact-id="${contact.id}"
+                    aria-label="Edit contact"
+                    style="
+                      padding: 4px 10px;
+                      min-width: auto;
+                    "
+                  >
+                    ✏️
+                  </button>
+                </div>
+
                 ${notes}
                 ${
                   entries ||
@@ -2739,7 +2769,6 @@ function getContactEntryIcon(type) {
           );
           return;
         }
-
         saveContactIdentifier.value = identifier;
 
         saveContactAlias.value = guessContactAlias(identifier);
@@ -2749,6 +2778,18 @@ function getContactEntryIcon(type) {
         saveContactModal.style.display = "flex";
         saveContactModal.setAttribute("aria-hidden", "false");
       }
+
+      function openEditContact(contactId) {
+          const contact = loadedContacts.find(
+            (c) => String(c.id) === String(contactId),
+          );
+
+          if (!contact) return;
+
+          console.log(contact);
+      }
+
+
 
       function closeSaveContactModal() {
         if (!saveContactModal) return;
