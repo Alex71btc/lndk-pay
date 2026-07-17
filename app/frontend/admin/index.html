@@ -1566,6 +1566,32 @@
           ></textarea>
 
           <div
+            style="
+              margin-top:18px;
+              border-top:1px solid var(--border-color);
+              padding-top:18px;
+            "
+          >
+            <div
+              class="label"
+              style="margin-bottom:10px"
+            >
+              Payment Targets
+            </div>
+
+            <div id="editContactEntries"></div>
+
+            <button
+              class="secondary"
+              id="addContactEntryBtn"
+              type="button"
+              style="margin-top:12px"
+            >
+              +Add Payment Targets
+            </button>
+          </div>
+
+          <div
             class="row"
             style="
               margin-top:18px;
@@ -1948,6 +1974,14 @@
         "editContactAlias",
       );
 
+      const editContactEntries = document.getElementById(
+        "editContactEntries",
+      );
+
+      const addContactEntryBtn = document.getElementById(
+        "addContactEntryBtn",
+      );
+
       const editContactNotes = document.getElementById(
         "editContactNotes",
       );
@@ -2071,6 +2105,11 @@
       saveEditContactBtn?.addEventListener(
         "click",
         saveEditedContact,
+      );
+
+      addContactEntryBtn?.addEventListener(
+        "click",
+        addPaymentTarget,
       );
 
       editContactModal?.addEventListener("click", (event) => {
@@ -2891,11 +2930,14 @@ function getContactEntryIcon(type) {
         if (!contact) return;
 
         editingContact = contact;
+        editingContactDraft = structuredClone(contact);
 
         closeContactsModal();
 
-        editContactAlias.value = contact.alias || "";
-        editContactNotes.value = contact.notes || "";
+        editContactAlias.value = editingContactDraft.alias || "";
+        editContactNotes.value = editingContactDraft.notes || "";
+
+        renderEditContactEntries();
 
         editContactModal.style.display = "flex";
         editContactModal.setAttribute("aria-hidden", "false");
@@ -2911,12 +2953,173 @@ function getContactEntryIcon(type) {
       function closeEditContactModal() {
         if (!editContactModal) return;
 
+        editingContact = null;
+        editingContactDraft = null;
+
         editContactModal.style.display = "none";
         editContactModal.setAttribute("aria-hidden", "true");
       }
 
+      function renderEditContactEntries() {
+        if (!editContactEntries) return;
+
+        editContactEntries.replaceChildren();
+
+        const entries = editingContactDraft?.entries || [];
+
+        if (!entries.length) {
+          const emptyMessage = document.createElement("div");
+          emptyMessage.className = "hint";
+          emptyMessage.textContent = "No payment targets.";
+          editContactEntries.appendChild(emptyMessage);
+          return;
+        }
+
+        const typeOptions = [
+          ["lightning_address", "⚡ Lightning Address"],
+          ["bolt12", "🟣 BOLT12 Offer"],
+          ["lnurl", "⚡ LNURL"],
+          ["bip353", "🟣 BIP353"],
+          ["nostr", "🟣 Nostr"],
+          ["node", "🔑 Node ID"],
+          ["other", "Other"],
+        ];
+
+        entries.forEach((entry) => {
+          const card = document.createElement("div");
+
+          card.style.cssText = `
+            margin-top:12px;
+            padding:14px;
+            border:1px solid rgba(255,255,255,.12);
+            border-radius:10px;
+          `;
+
+          //
+          // Type
+          //
+
+          const header = document.createElement("div");
+          header.style.cssText = `
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:8px;
+          `;
+
+          const typeLabel = document.createElement("div");
+          typeLabel.className = "label";
+          typeLabel.textContent = "Payment Method";
+
+          const deleteButton = document.createElement("button");
+          deleteButton.type = "button";
+          deleteButton.className = "secondary";
+          deleteButton.style.cssText = `
+            padding:4px 10px;
+            min-width:auto;
+          `;
+          deleteButton.textContent = "🗑";
+
+          const typeSelect = document.createElement("select");
+
+          typeOptions.forEach(([value, label]) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+
+            if (entry.type === value) {
+              option.selected = true;
+            }
+
+            typeSelect.appendChild(option);
+          });
+
+          typeSelect.addEventListener("change", () => {
+            entry.type = typeSelect.value;
+          });
+
+          deleteButton.addEventListener("click", () => {
+            if (editingContactDraft.entries.length <= 1) {
+              setStatus(
+                "A contact must have at least one payment target.",
+                "error",
+              );
+              return;
+            }
+
+            editingContactDraft.entries =
+              editingContactDraft.entries.filter(
+                (e) => e !== entry,
+              );
+
+            renderEditContactEntries();
+          });
+
+          //
+          // Identifier
+          //
+
+          const identifierLabel = document.createElement("div");
+          identifierLabel.className = "label";
+          identifierLabel.style.marginTop = "12px";
+          identifierLabel.textContent = "Payment Target";
+
+          const identifierInput = document.createElement("input");
+          identifierInput.type = "text";
+          identifierInput.value = entry.identifier || "";
+
+          identifierInput.addEventListener("input", () => {
+            entry.identifier = identifierInput.value;
+          });
+
+          //
+          // Label
+          //
+
+          const labelLabel = document.createElement("div");
+          labelLabel.className = "label";
+          labelLabel.style.marginTop = "12px";
+          labelLabel.textContent = "Label (optional)";
+
+          const labelInput = document.createElement("input");
+          labelInput.type = "text";
+          labelInput.value = entry.label || "";
+
+          labelInput.addEventListener("input", () => {
+            entry.label = labelInput.value;
+          });
+
+          header.appendChild(typeLabel);
+          header.appendChild(deleteButton);
+
+          card.appendChild(header);
+          card.appendChild(typeSelect);
+
+          card.appendChild(identifierLabel);
+          card.appendChild(identifierInput);
+
+          card.appendChild(labelLabel);
+          card.appendChild(labelInput);
+
+          editContactEntries.appendChild(card);
+        });
+      }
+
+      function addPaymentTarget() {
+        if (!editingContactDraft) return;
+
+        editingContactDraft.entries.push({
+          id: null,
+          type: "lightning_address",
+          identifier: "",
+          label: "",
+        });
+
+        renderEditContactEntries();
+      }
+
       async function saveEditedContact() {
-        if (!editingContact) return;
+        if (!editingContact || !editingContactDraft) return;
 
         saveEditContactBtn.disabled = true;
 
@@ -2932,7 +3135,7 @@ function getContactEntryIcon(type) {
               body: JSON.stringify({
                 alias: editContactAlias.value.trim(),
                 notes: editContactNotes.value.trim(),
-                entries: editingContact.entries || [],
+                entries: editingContactDraft.entries || [],
               }),
             },
           );
@@ -2942,8 +3145,6 @@ function getContactEntryIcon(type) {
           }
 
           closeEditContactModal();
-
-          editingContact = null;
 
           await loadContacts();
 
@@ -3818,6 +4019,7 @@ function getContactEntryIcon(type) {
 
       let loadedContacts = [];
       let editingContact = null;
+      let editingContactDraft = null;
 
       function resetPayUiState() {
         payAmountInput.disabled = false;
