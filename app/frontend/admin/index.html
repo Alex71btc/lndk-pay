@@ -1546,6 +1546,105 @@
         </div>
       </div>
       <div
+        id="deleteContactModal"
+        class="scannerModal"
+        aria-hidden="true"
+        style="display:none"
+      >
+        <div class="scannerCard" style="width:min(460px,92vw)">
+
+          <h2
+            style="
+              display:flex;
+              align-items:center;
+              gap:10px;
+              margin:0;
+            "
+          >
+            <img
+              src="/assets/icons/contacts.svg"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span>Delete Contact</span>
+          </h2>
+
+          <p
+            id="deleteContactMessage"
+            style="
+              margin-top:20px;
+              line-height:1.5;
+              color:var(--text);
+            "
+          >
+            Delete contact?
+          </p>
+          <p
+            style="
+              margin-top:18px;
+              margin-bottom:8px;
+              color:var(--muted);
+            "
+          >
+            This will permanently delete:
+          </p>
+
+          <div
+            style="
+              margin-top:0;
+              padding:14px;
+              border:1px solid var(--border-color);
+              border-radius:10px;
+              background:rgba(255,255,255,.02);
+            "
+          >
+            <div
+              style="
+                color:var(--muted);
+                line-height:1.6;
+              "
+            >
+              • Contact<br />
+              • All payment targets
+            </div>
+
+            <div
+              style="
+                margin-top:14px;
+                color:#d86c6c;
+                font-size:14px;
+              "
+            >
+              This action cannot be undone.
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:22px">
+            <button
+              class="secondary"
+              id="cancelDeleteContactBtn"
+              type="button"
+            >
+              Cancel
+            </button>
+
+            <button
+              id="confirmDeleteContactBtn"
+              type="button"
+              style="
+                background:#b54343;
+                border-color:#b54343;
+              "
+            >
+              Delete
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <div
         id="editContactModal"
         class="scannerModal"
         aria-hidden="true"
@@ -1996,6 +2095,22 @@
         "cancelSaveContactBtn",
       );
 
+      const deleteContactModal = document.getElementById(
+        "deleteContactModal",
+      );
+
+      const deleteContactMessage = document.getElementById(
+        "deleteContactMessage",
+      );
+
+      const cancelDeleteContactBtn = document.getElementById(
+        "cancelDeleteContactBtn",
+      );
+
+      const confirmDeleteContactBtn = document.getElementById(
+        "confirmDeleteContactBtn",
+      );
+
       const editContactModal = document.getElementById(
         "editContactModal",
       );
@@ -2127,6 +2242,14 @@
         closeSaveContactModal,
       );
 
+      cancelDeleteContactBtn?.addEventListener(
+        "click",
+        () => {
+          closeDeleteContactModal();
+          openContactsModal();
+        },
+      );
+
       closeEditContactBtn?.addEventListener(
         "click",
         closeEditContactModal,
@@ -2154,9 +2277,21 @@
         }
       });
 
+      deleteContactModal?.addEventListener("click", (event) => {
+        if (event.target === deleteContactModal) {
+          closeDeleteContactModal();
+          openContactsModal();
+        }
+      });
+
       confirmSaveContactBtn?.addEventListener(
         "click",
         saveCurrentContact,
+      );
+
+      confirmDeleteContactBtn?.addEventListener(
+        "click",
+        deleteCurrentContact,
       );
 
       closeContactsBtn?.addEventListener("click", closeContactsModal);
@@ -2176,6 +2311,17 @@
 
         if (editButton) {
           openEditContact(editButton.dataset.contactId);
+          return;
+        }
+
+        const deleteButton = event.target.closest(
+          ".deleteContactBtn",
+        );
+
+        if (deleteButton) {
+          openDeleteContactModal(
+            deleteButton.dataset.contactId,
+          );
           return;
         }
 
@@ -3083,6 +3229,33 @@ function getContactEntryIcon(type) {
         editContactModal.setAttribute("aria-hidden", "false");
       }
 
+      function openDeleteContactModal(contactId) {
+        const contact = loadedContacts.find(
+          (c) => String(c.id) === String(contactId),
+        );
+
+        if (!contact || !deleteContactModal) return;
+
+        contactPendingDeletion = contact;
+
+        deleteContactMessage.textContent =
+          `Delete contact "${contact.alias}"?`;
+
+        closeContactsModal();
+
+        deleteContactModal.style.display = "flex";
+        deleteContactModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeDeleteContactModal() {
+        if (!deleteContactModal) return;
+
+        contactPendingDeletion = null;
+
+        deleteContactModal.style.display = "none";
+        deleteContactModal.setAttribute("aria-hidden", "true");
+      }
+
       function closeSaveContactModal() {
         if (!saveContactModal) return;
 
@@ -3373,6 +3546,45 @@ function getContactEntryIcon(type) {
           setStatus("Unable to update contact.", "error", true);
         } finally {
           saveEditContactBtn.disabled = false;
+        }
+      }
+
+      async function deleteCurrentContact() {
+        if (!contactPendingDeletion) return;
+
+        confirmDeleteContactBtn.disabled = true;
+
+        try {
+          const response = await fetch(
+            `/api/contacts/${contactPendingDeletion.id}`,
+            {
+              method: "DELETE",
+              headers: {
+                "X-CSRF-Token": getCookie("csrf_token"),
+              },
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          closeDeleteContactModal();
+
+          await loadContacts();
+
+          openContactsModal();
+
+          setStatus("Contact deleted.");
+        } catch (err) {
+          console.error(err);
+          setStatus(
+            "Unable to delete contact.",
+            "error",
+            true,
+          );
+        } finally {
+          confirmDeleteContactBtn.disabled = false;
         }
       }
 
@@ -4239,6 +4451,8 @@ function getContactEntryIcon(type) {
       let loadedContacts = [];
       let editingContact = null;
       let editingContactDraft = null;
+      let contactPendingDeletion = null;
+
       let lastPaymentTargetInput = null;
       let focusNewPaymentTarget = false;
 
