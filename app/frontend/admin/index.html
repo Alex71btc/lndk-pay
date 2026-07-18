@@ -1579,7 +1579,14 @@
               Payment Targets
             </div>
 
-            <div id="editContactEntries"></div>
+           <div
+             id="editContactEntries"
+             style="
+               max-height:320px;
+               overflow-y:auto;
+               padding-right:6px;
+             "
+           ></div>
 
             <button
               class="secondary"
@@ -2937,6 +2944,8 @@ function getContactEntryIcon(type) {
         editContactAlias.value = editingContactDraft.alias || "";
         editContactNotes.value = editingContactDraft.notes || "";
 
+        focusNewPaymentTarget = true;
+
         renderEditContactEntries();
 
         editContactModal.style.display = "flex";
@@ -2964,6 +2973,8 @@ function getContactEntryIcon(type) {
         if (!editContactEntries) return;
 
         editContactEntries.replaceChildren();
+        
+        lastPaymentTargetInput = null;
 
         const entries = editingContactDraft?.entries || [];
 
@@ -3067,6 +3078,22 @@ function getContactEntryIcon(type) {
           const identifierInput = document.createElement("input");
           identifierInput.type = "text";
           identifierInput.value = entry.identifier || "";
+          lastPaymentTargetInput = identifierInput;
+          if (
+            focusNewPaymentTarget &&
+            entry === editingContactDraft.entries.at(-1)
+          ) {
+            requestAnimationFrame(() => {
+              identifierInput.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+              });
+
+              identifierInput.focus();
+
+              focusNewPaymentTarget = false;
+            });
+          }
 
           identifierInput.addEventListener("input", () => {
             entry.identifier = identifierInput.value;
@@ -3116,6 +3143,17 @@ function getContactEntryIcon(type) {
         });
 
         renderEditContactEntries();
+
+        requestAnimationFrame(() => {
+          if (!lastPaymentTargetInput) return;
+
+          lastPaymentTargetInput.focus();
+
+          lastPaymentTargetInput.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+          });
+        });
       }
 
       async function saveEditedContact() {
@@ -4020,6 +4058,8 @@ function getContactEntryIcon(type) {
       let loadedContacts = [];
       let editingContact = null;
       let editingContactDraft = null;
+      let lastPaymentTargetInput = null;
+      let focusNewPaymentTarget = false;
 
       function resetPayUiState() {
         payAmountInput.disabled = false;
