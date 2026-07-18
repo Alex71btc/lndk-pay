@@ -2832,6 +2832,21 @@ function getContactEntryIcon(type) {
                       categoryNames[type] ||
                       "Other";
                     const identifier = escapeContactHtml(entry.identifier);
+                    const defaultStar = entry.isDefault
+                      ? `
+                        <span
+                          aria-label="Default payment target"
+                          title="Default payment target"
+                          style="
+                            color:#f7b731;
+                            margin-left:4px;
+                          "
+                        >
+                          ⭐
+                        </span>
+                      `
+                      : "";
+
                     const subtitle = `
                       <div
                         class="muted"
@@ -2843,10 +2858,9 @@ function getContactEntryIcon(type) {
                           line-height:1.2;
                         "
                       >
-                        ${escapeContactHtml(category)}
+                       ${escapeContactHtml(category)}
                       </div>
                     `;
-
                     return `
                       <button
                         type="button"
@@ -2865,20 +2879,44 @@ function getContactEntryIcon(type) {
                         <span aria-hidden="true">${icon}</span>
                         <div
                           style="
-                            display:flex;
-                            flex-direction:column;
-                            align-items:flex-start;
+                            flex:1;
                             overflow:hidden;
                           "
                         >
                           <div
                             style="
-                              overflow-wrap:anywhere;
-                              font-weight:500;
-                              line-height:1.25;
+                              display:flex;
+                              justify-content:space-between;
+                              align-items:flex-start;
+                              gap:10px;
                             "
                           >
-                            ${identifier}
+                            <div
+                              style="
+                                overflow-wrap:anywhere;
+                                font-weight:500;
+                                flex:1;
+                              "
+                            >
+                              ${identifier}
+                            </div>
+
+                            ${
+                              entry.isDefault
+                                ? `
+                                  <span
+                                    title="Default payment target"
+                                    style="
+                                      color:#f7b731;
+                                      font-size:15px;
+                                      flex-shrink:0;
+                                    "
+                                  >
+                                    ⭐
+                                  </span>
+                                `
+                                : ""
+                            }
                           </div>
 
                           ${subtitle}
@@ -2987,13 +3025,19 @@ function getContactEntryIcon(type) {
 
         editingContact = contact;
         editingContactDraft = structuredClone(contact);
+        if (
+          editingContactDraft.entries?.length &&
+          !editingContactDraft.entries.some(
+            (entry) => entry.isDefault,
+          )
+        ) {
+          editingContactDraft.entries[0].isDefault = true;
+        }
 
         closeContactsModal();
 
         editContactAlias.value = editingContactDraft.alias || "";
         editContactNotes.value = editingContactDraft.notes || "";
-
-        focusNewPaymentTarget = true;
 
         renderEditContactEntries();
 
@@ -3107,10 +3151,49 @@ function getContactEntryIcon(type) {
               return;
             }
 
-            editingContactDraft.entries =
-              editingContactDraft.entries.filter(
-                (e) => e !== entry,
-              );
+          const wasDefault = entry.isDefault;
+
+          editingContactDraft.entries =
+            editingContactDraft.entries.filter(
+              (e) => e !== entry,
+            );
+
+          if (
+            wasDefault &&
+            editingContactDraft.entries.length
+          ) {
+            editingContactDraft.entries[0].isDefault = true;
+          }
+
+          renderEditContactEntries();
+          });
+
+          //
+          // Default payment target
+          //
+
+          const defaultStar = document.createElement("span");
+
+          defaultStar.style.cssText = `
+            cursor:pointer;
+            user-select:none;
+            font-size:18px;
+            line-height:1;
+            color:${entry.isDefault ? "#f7b731" : "var(--muted)"};
+            transition:color .15s;
+          `;
+
+          defaultStar.textContent =
+            entry.isDefault ? "⭐" : "☆";
+
+          defaultStar.title = "Set as default payment target";
+
+          defaultStar.addEventListener("click", () => {
+            editingContactDraft.entries.forEach((e) => {
+              e.isDefault = false;
+            });
+
+            entry.isDefault = true;
 
             renderEditContactEntries();
           });
@@ -3165,8 +3248,18 @@ function getContactEntryIcon(type) {
             entry.label = labelInput.value;
           });
 
+          const headerActions = document.createElement("div");
+          headerActions.style.cssText = `
+            display:flex;
+            align-items:center;
+            gap:12px;
+          `;
+
+          headerActions.appendChild(defaultStar);
+          headerActions.appendChild(deleteButton);
+
           header.appendChild(typeLabel);
-          header.appendChild(deleteButton);
+          header.appendChild(headerActions);
 
           card.appendChild(header);
           card.appendChild(typeSelect);
@@ -3189,6 +3282,7 @@ function getContactEntryIcon(type) {
           type: "lightning_address",
           identifier: "",
           label: "",
+          isDefault: editingContactDraft.entries.length === 0,
         });
 
         renderEditContactEntries();

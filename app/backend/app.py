@@ -419,6 +419,8 @@ def init_db():
 
             label TEXT NOT NULL DEFAULT '',
 
+            is_default INTEGER NOT NULL DEFAULT 0,
+
             created_at INTEGER NOT NULL,
 
             FOREIGN KEY(contact_id) REFERENCES contacts(id)
@@ -429,6 +431,13 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_contact_entries_identifier
         ON contact_entries(identifier)
     """)
+    try:
+        conn.execute("""
+            ALTER TABLE contact_entries
+            ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0
+        """)
+    except sqlite3.OperationalError:
+        pass
 
     try:
         conn.execute("ALTER TABLE tx_history ADD COLUMN method TEXT")
@@ -650,6 +659,7 @@ def add_contact_entry(
     entry_type: str,
     identifier: str,
     label: str = "",
+    is_default: bool = False,
 ):
     if entry_type not in CONTACT_ENTRY_TYPES:
         raise ValueError(f"Unknown contact entry type: {entry_type}")
@@ -663,15 +673,17 @@ def add_contact_entry(
             type,
             identifier,
             label,
+            is_default,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             contact_id,
             entry_type,
             identifier,
             label,
+            int(bool(is_default)),
             int(time.time()),
         ),
     )
@@ -690,6 +702,7 @@ def list_contact_entries(contact_id: int):
             type,
             identifier,
             label,
+            is_default,
             created_at
         FROM contact_entries
         WHERE contact_id = ?
@@ -700,7 +713,17 @@ def list_contact_entries(contact_id: int):
 
     conn.close()
 
-    return [dict(row) for row in rows]
+    return [
+        {
+            "id": row["id"],
+            "type": row["type"],
+            "identifier": row["identifier"],
+            "label": row["label"],
+            "isDefault": bool(row["is_default"]),
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
 
 def list_contacts():
     conn = sqlite3.connect(DB_PATH)
@@ -6139,14 +6162,8 @@ async def api_create_contact(payload: dict, request: StarletteRequest):
     _require_csrf(request)
 
     entries = payload.get("entries") or []
-
-    if not entries:
-        raise HTTPException(status_code=400, detail="entries required")
-
-    contact_id = create_contact(
-        alias=str(payload.get("alias") or "").strip(),
-        notes=str(payload.get("notes") or "").strip(),
-    )
+    prepared_entries = []
+    default_assigned = False
 
     for entry in entries:
         identifier = str(entry.get("identifier") or "").strip()
@@ -6154,11 +6171,40 @@ async def api_create_contact(payload: dict, request: StarletteRequest):
         if not identifier:
             continue
 
+        requested_default = bool(entry.get("isDefault", False))
+        is_default = requested_default and not default_assigned
+
+        if is_default:
+            default_assigned = True
+
+        prepared_entries.append({
+            "type": str(entry.get("type") or "other"),
+            "identifier": identifier,
+            "label": str(entry.get("label") or "").strip(),
+            "is_default": is_default,
+        })
+
+    if not prepared_entries:
+        raise HTTPException(
+            status_code=400,
+            detail="at least one valid entry required",
+        )
+
+    if not default_assigned:
+        prepared_entries[0]["is_default"] = True
+
+    contact_id = create_contact(
+        alias=str(payload.get("alias") or "").strip(),
+        notes=str(payload.get("notes") or "").strip(),
+    )
+
+    for entry in prepared_entries:
         add_contact_entry(
             contact_id=contact_id,
-            entry_type=str(entry.get("type") or "other"),
-            identifier=identifier,
-            label=str(entry.get("label") or "").strip(),
+            entry_type=entry["type"],
+            identifier=entry["identifier"],
+            label=entry["label"],
+            is_default=entry["is_default"],
         )
 
     return {
@@ -6176,9 +6222,36 @@ async def api_update_contact(
     _require_csrf(request)
 
     entries = payload.get("entries") or []
+    prepared_entries = []
+    default_assigned = False
 
-    if not entries:
-        raise HTTPException(status_code=400, detail="entries required")
+    for entry in entries:
+        identifier = str(entry.get("identifier") or "").strip()
+
+        if not identifier:
+            continue
+
+        requested_default = bool(entry.get("isDefault", False))
+        is_default = requested_default and not default_assigned
+
+        if is_default:
+            default_assigned = True
+
+        prepared_entries.append({
+            "type": str(entry.get("type") or "other"),
+            "identifier": identifier,
+            "label": str(entry.get("label") or "").strip(),
+            "is_default": is_default,
+        })
+
+    if not prepared_entries:
+        raise HTTPException(
+            status_code=400,
+            detail="at least one valid entry required",
+        )
+
+    if not default_assigned:
+        prepared_entries[0]["is_default"] = True
 
     update_contact(
         contact_id=contact_id,
@@ -6188,17 +6261,13 @@ async def api_update_contact(
 
     delete_contact_entries(contact_id)
 
-    for entry in entries:
-        identifier = str(entry.get("identifier") or "").strip()
-
-        if not identifier:
-            continue
-
+    for entry in prepared_entries:
         add_contact_entry(
             contact_id=contact_id,
-            entry_type=str(entry.get("type") or "other"),
-            identifier=identifier,
-            label=str(entry.get("label") or "").strip(),
+            entry_type=entry["type"],
+            identifier=entry["identifier"],
+            label=entry["label"],
+            is_default=entry["is_default"],
         )
 
     return {
