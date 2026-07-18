@@ -2799,7 +2799,14 @@ function getContactEntryIcon(type) {
 
             const notes = contact.notes
               ? `
-                <div class="hint" style="margin-top: 8px">
+                <div
+                  class="hint"
+                  style="
+                    margin-top:6px;
+                    font-size:0.92rem;
+                    line-height:1.35;
+                  "
+                >
                   ${escapeContactHtml(contact.notes)}
                 </div>
               `
@@ -2810,10 +2817,35 @@ function getContactEntryIcon(type) {
                   .map((entry) => {
                     const type = String(entry.type || "other");
                     const icon = getContactEntryIcon(type);
+                    const categoryNames = {
+                      lightning_address: "Lightning Address",
+                      bolt12: "BOLT12 Offer",
+                      lnurl: "LNURL",
+                      bip353: "BIP353",
+                      nostr: "Nostr",
+                      node: "Node ID",
+                      other: "Other",
+                    };
+
+                    const category =
+                      entry.label ||
+                      categoryNames[type] ||
+                      "Other";
                     const identifier = escapeContactHtml(entry.identifier);
-                    const label = entry.label
-                      ? `<span class="muted"> · ${escapeContactHtml(entry.label)}</span>`
-                      : "";
+                    const subtitle = `
+                      <div
+                        class="muted"
+                        style="
+                          font-size:0.76rem;
+                          font-weight:400;
+                          opacity:.70;
+                          margin-top:2px;
+                          line-height:1.2;
+                        "
+                      >
+                        ${escapeContactHtml(category)}
+                      </div>
+                    `;
 
                     return `
                       <button
@@ -2831,9 +2863,26 @@ function getContactEntryIcon(type) {
                         "
                       >
                         <span aria-hidden="true">${icon}</span>
-                        <span style="overflow-wrap: anywhere">
-                          ${identifier}${label}
-                        </span>
+                        <div
+                          style="
+                            display:flex;
+                            flex-direction:column;
+                            align-items:flex-start;
+                            overflow:hidden;
+                          "
+                        >
+                          <div
+                            style="
+                              overflow-wrap:anywhere;
+                              font-weight:500;
+                              line-height:1.25;
+                            "
+                          >
+                            ${identifier}
+                          </div>
+
+                          ${subtitle}
+                        </div>
                       </button>
                     `;
                   })
