@@ -3319,6 +3319,7 @@ function getContactEntryIcon(type) {
             display:flex;
             justify-content:space-between;
             align-items:center;
+            gap:12px;
             margin-bottom:8px;
           `;
 
@@ -3326,14 +3327,11 @@ function getContactEntryIcon(type) {
           typeLabel.className = "label";
           typeLabel.textContent = "Payment Method";
 
-          const deleteButton = document.createElement("button");
-          deleteButton.type = "button";
-          deleteButton.className = "secondary";
-          deleteButton.style.cssText = `
-            padding:4px 10px;
-            min-width:auto;
-          `;
-          deleteButton.textContent = "🗑";
+          const deleteButton = document.createElement("span");
+          deleteButton.className =
+            "contactAction contactActionDelete";
+          deleteButton.textContent = "Remove";
+          deleteButton.title = "Remove payment target";
 
           const typeSelect = document.createElement("select");
 
