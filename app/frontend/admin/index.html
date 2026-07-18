@@ -292,6 +292,29 @@
             background: rgba(255, 255, 255, 0.05);
       }
 
+      .contactAction {
+        cursor: pointer;
+        user-select: none;
+        transition: color .15s ease;
+      }
+
+      .contactActionEdit {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .contactActionEdit:hover {
+        color: var(--accent);
+      }
+
+      .contactActionDelete {
+        color: var(--muted);
+        font-weight: 400;
+      }
+
+      .contactActionDelete:hover {
+        color: #d86c6c;
+      }
       .contactCard {
         margin-top: 10px;
         padding: 14px;
@@ -2945,18 +2968,6 @@ function getContactEntryIcon(type) {
                 >
                   <strong>${alias}</strong>
 
-                  <button
-                    type="button"
-                    class="secondary editContactBtn"
-                    data-contact-id="${contact.id}"
-                    aria-label="Edit contact"
-                    style="
-                      padding: 4px 10px;
-                      min-width: auto;
-                    "
-                  >
-                    ✏️
-                  </button>
                 </div>
 
                 ${notes}
@@ -2968,6 +2979,33 @@ function getContactEntryIcon(type) {
                     </div>
                   `
                 }
+                <div
+                  style="
+                    display:flex;
+                    justify-content:flex-end;
+                    align-items:center;
+                    gap:36px;
+                    margin-top:18px;
+                    font-size:13px;
+                  "
+                >
+                  <span
+                    class="contactAction contactActionDelete deleteContactBtn"
+                    data-contact-id="${contact.id}"
+                    data-contact-alias="${alias}"
+                    title="Delete contact"
+                  >
+                    Delete
+                  </span>
+
+                  <span
+                    class="contactAction contactActionEdit editContactBtn"
+                    data-contact-id="${contact.id}"
+                    title="Edit contact"
+                  >
+                    Edit
+                  </span>
+                </div>
               </div>
             `;
           })
