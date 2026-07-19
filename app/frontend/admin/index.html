@@ -3290,15 +3290,47 @@ function getContactEntryIcon(type) {
           return;
         }
 
-        const typeOptions = [
-          ["lightning_address", "⚡ Lightning Address"],
-          ["bolt12", "🟣 BOLT12 Offer"],
-          ["lnurl", "⚡ LNURL"],
-          ["bip353", "🟣 BIP353"],
-          ["nostr", "🟣 Nostr"],
-          ["node", "🔑 Node ID"],
-          ["other", "Other"],
-        ];
+        const paymentTypes = {
+          lightning_address: {
+            label: "Lightning Address",
+            icon: "assets/icons/bolt.svg",
+            iconType: "image",
+          },
+          bolt12: {
+            label: "BOLT12 Offer",
+            icon: "assets/icon.png",
+            iconType: "image",
+          },
+          lnurl: {
+            label: "LNURL",
+            icon: "assets/icons/bolt.svg",
+            iconType: "image",
+          },
+          bip353: {
+            label: "BIP353",
+            icon: "assets/icon.png",
+            iconType: "image",
+          },
+          nostr: {
+            label: "Nostr",
+            icon: "assets/icons/nostr.svg",
+            iconType: "image",
+          },
+          node: {
+            label: "Node ID",
+            icon: "🔑",
+            iconType: "emoji",
+          },
+          other: {
+            label: "Other",
+            icon: "•••",
+            iconType: "emoji",
+          },
+        };
+
+        const typeOptions = Object.entries(paymentTypes).map(
+          ([value, config]) => [value, config.label]
+        );
 
         entries.forEach((entry) => {
           const card = document.createElement("div");
@@ -3333,18 +3365,216 @@ function getContactEntryIcon(type) {
           deleteButton.textContent = "Remove";
           deleteButton.title = "Remove payment target";
 
+          const typeSelector = document.createElement("button");
+          typeSelector.type = "button";
+
+          typeSelector.style.cssText = `
+            width:100%;
+            height:42px;
+            margin-top:6px;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+            padding:0 12px;
+            border:1px solid var(--border);
+            border-radius:10px;
+            background:var(--surface);
+            color:var(--text);
+            cursor:pointer;
+            font:inherit;
+          `;
+
+          const selectorLeft = document.createElement("div");
+          selectorLeft.style.cssText = `
+            display:flex;
+            align-items:center;
+            gap:10px;
+          `;
+
+          const selectorIcon = document.createElement("img");
+          selectorIcon.style.cssText = `
+            width:18px;
+            height:18px;
+            flex:none;
+          `;
+
+          const selectorLabel = document.createElement("span");
+
+          const selectorArrow = document.createElement("span");
+          selectorArrow.textContent = "▾";
+          selectorArrow.style.fontSize = "13px";
+
+          selectorLeft.appendChild(selectorIcon);
+          selectorLeft.appendChild(selectorLabel);
+
+          typeSelector.appendChild(selectorLeft);
+          typeSelector.appendChild(selectorArrow);
+
           const typeSelect = document.createElement("select");
 
-          typeOptions.forEach(([value, label]) => {
-            const option = document.createElement("option");
-            option.value = value;
-            option.textContent = label;
+          function updateTypeSelector() {
+            const config = paymentTypes[entry.type];
 
-            if (entry.type === value) {
-              option.selected = true;
+            selectorLabel.textContent = config.label;
+
+            if (config.iconType === "image") {
+              selectorIcon.src = config.icon;
+              selectorIcon.style.display = "";
+
+              if (
+                entry.type === "bolt12" ||
+                entry.type === "bip353"
+              ) {
+                selectorIcon.style.width = "20px";
+                selectorIcon.style.height = "20px";
+              } else {
+                selectorIcon.style.width = "18px";
+                selectorIcon.style.height = "18px";
+              }
+            } else {
+              selectorIcon.removeAttribute("src");
+              selectorIcon.style.display = "none";
+
+              selectorLeft.querySelector(".emojiIcon")?.remove();
+
+              const emoji = document.createElement("span");
+              emoji.className = "emojiIcon";
+              emoji.textContent = config.icon;
+              emoji.style.cssText = `
+                width:20px;
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                flex:none;
+                font-size:18px;
+                line-height:1;
+              `;
+
+              selectorLeft.prepend(emoji);
             }
 
-            typeSelect.appendChild(option);
+            if (config.iconType === "image") {
+              selectorLeft.querySelector(".emojiIcon")?.remove();
+            }
+          }
+
+          updateTypeSelector();
+          typeSelector.addEventListener("click", () => {
+            typeMenu.style.display =
+              typeMenu.style.display === "block"
+                ? "none"
+                : "block";
+          });
+
+          const typeMenu = document.createElement("div");
+
+          typeMenu.style.cssText = `
+            display:none;
+            position:absolute;
+            left:0;
+            right:0;
+            top:100%;
+            margin-top:4px;
+            background:#1b2233;
+            border:1px solid var(--border);
+            border-radius:10px;
+            overflow:hidden;
+            box-shadow:0 10px 30px rgba(0,0,0,.45);
+            z-index:1000;
+          `;
+
+          const selectorWrapper = document.createElement("div");
+
+          selectorWrapper.style.cssText = `
+            position:relative;
+            margin-top:6px;
+          `;
+
+          selectorWrapper.appendChild(typeSelector);
+          selectorWrapper.appendChild(typeMenu);
+
+          Object.entries(paymentTypes).forEach(([value, config]) => {
+            const row = document.createElement("div");
+
+            const isCurrent = value === entry.type;
+
+            row.style.cssText = `
+              display:flex;
+              align-items:center;
+              gap:10px;
+              padding:10px 12px;
+              cursor:pointer;
+              background:${isCurrent ? "rgba(255,255,255,.08)" : "transparent"};
+            `;
+
+            row.addEventListener("mouseenter", () => {
+              row.style.background = "rgba(255,255,255,.12)";
+            });
+
+            row.addEventListener("mouseleave", () => {
+              row.style.background =
+                isCurrent
+                  ? "rgba(255,255,255,.08)"
+                  : "transparent";
+            });
+
+            //
+            // icon
+            //
+
+            if (config.iconType === "image") {
+              const img = document.createElement("img");
+              img.src = config.icon;
+
+              img.style.cssText = `
+                width:${value === "bolt12" || value === "bip353" ? "20px" : "18px"};
+                height:${value === "bolt12" || value === "bip353" ? "20px" : "18px"};
+                object-fit:contain;
+                flex:none;
+              `;
+
+              row.appendChild(img);
+            } else {
+              const icon = document.createElement("span");
+
+              icon.textContent = config.icon;
+
+              icon.style.cssText = `
+                width:20px;
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                flex:none;
+                font-size:18px;
+                line-height:1;
+              `;
+
+              row.appendChild(icon);
+            }
+
+            const text = document.createElement("span");
+            text.textContent = config.label;
+
+            if (isCurrent) {
+              text.style.fontWeight = "600";
+            }
+
+            row.appendChild(text);
+
+            row.addEventListener("click", () => {
+              entry.type = value;
+
+              updateTypeSelector();
+
+              typeSelect.value = value;
+
+              typeMenu.style.display = "none";
+
+              renderEditContactEntries();
+            });
+
+            typeMenu.appendChild(row);
           });
 
           typeSelect.addEventListener("change", () => {
@@ -3471,7 +3701,8 @@ function getContactEntryIcon(type) {
           header.appendChild(headerActions);
 
           card.appendChild(header);
-          card.appendChild(typeSelect);
+          card.appendChild(selectorWrapper);
+          // card.appendChild(typeSelect);
 
           card.appendChild(identifierLabel);
           card.appendChild(identifierInput);
