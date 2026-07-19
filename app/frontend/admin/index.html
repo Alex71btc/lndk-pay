@@ -1823,6 +1823,45 @@
 
             <hr style="margin: 18px 0" />
           </div>
+
+          <div
+            style="
+              position:relative;
+              margin-bottom:14px;
+            "
+          >
+            <input
+              id="contactSearchInput"
+              type="text"
+              placeholder="Search contacts..."
+              style="
+                width:100%;
+                padding-right:38px;
+              "
+            />
+
+            <button
+              id="clearContactSearchBtn"
+              type="button"
+              style="
+                display:none;
+                position:absolute;
+                right:10px;
+                top:50%;
+                transform:translateY(-50%);
+                border:none;
+                background:none;
+                color:var(--muted);
+                cursor:pointer;
+                font-size:18px;
+                padding:0;
+                line-height:1;
+              "
+            >
+              ✕
+            </button>
+          </div>
+
           <div
             id="contactsList"
             class="historyList"
@@ -2193,6 +2232,15 @@
       const contactPickerBtn = document.getElementById("contactPickerBtn");
       const contactsModal = document.getElementById("contactsModal");
       const contactsList = document.getElementById("contactsList");
+
+      const contactSearchInput = document.getElementById(
+        "contactSearchInput",
+      );
+
+      const clearContactSearchBtn = document.getElementById(
+        "clearContactSearchBtn",
+      );
+
       const currentContactCandidate = document.getElementById(
         "currentContactCandidate",
       );
@@ -2231,6 +2279,50 @@
         copyText(nwcUriOutput?.value || "", window.__t("toast.nwc_uri_copied")),
       );
       contactPickerBtn?.addEventListener("click", loadContacts);
+
+      contactSearchInput?.addEventListener(
+        "input",
+        () => {
+          contactSearchQuery =
+            contactSearchInput.value;
+
+          clearContactSearchBtn.style.display =
+            contactSearchQuery.trim()
+              ? ""
+              : "none";
+
+          renderContacts(loadedContacts);
+        },
+      );
+
+      clearContactSearchBtn?.addEventListener(
+        "click",
+        () => {
+          contactSearchQuery = "";
+
+          contactSearchInput.value = "";
+
+          clearContactSearchBtn.style.display =
+            "none";
+
+          contactSearchInput.focus();
+
+          renderContacts(loadedContacts);
+        },
+      );
+
+      contactSearchInput?.addEventListener(
+        "keydown",
+        (event) => {
+          if (
+            event.key === "Escape" &&
+            contactSearchInput.value
+          ) {
+            event.preventDefault();
+            clearContactSearchBtn.click();
+          }
+        },
+      );
 
       saveCurrentContactBtn?.addEventListener(
         "click",
@@ -2918,43 +3010,88 @@
           .replaceAll("'", "&#039;");
       }
 
-function getContactEntryIcon(type) {
-  const icon = (src, alt = "") => `
-    <img
-      src="${src}"
-      class="txMethodIcon"
-      alt="${alt}"
-    >
-  `;
+      function getContactEntryIcon(type) {
+        const icon = (src, alt = "") => `
+          <img
+            src="${src}"
+            class="txMethodIcon"
+            alt="${alt}"
+          >
+        `;
 
-  const icons = {
-    lightning_address: icon("/assets/icons/bolt.svg"),
-    lightning: icon("/assets/icons/bolt.svg"),
-    lnurl: icon("/assets/icons/bolt.svg"),
+        const icons = {
+          lightning_address: icon("/assets/icons/bolt.svg"),
+          lightning: icon("/assets/icons/bolt.svg"),
+          lnurl: icon("/assets/icons/bolt.svg"),
 
-    bolt12: icon("/assets/icon.png"),
-    bip353: icon("/assets/icon.png"),
+          bolt12: icon("/assets/icon.png"),
+          bip353: icon("/assets/icon.png"),
 
-    nostr: icon("/assets/icons/nostr.svg"),
-    npub: icon("/assets/icons/nostr.svg"),
+          nostr: icon("/assets/icons/nostr.svg"),
+          npub: icon("/assets/icons/nostr.svg"),
 
-    node: "🔑",
+          node: "🔑",
 
-    other: "•",
-  };
+          other: "•",
+        };
 
-  return icons[type] || "•";
-}
+        return icons[type] || "•";
+      }
 
+      function filterContacts(contacts) {
+        const query = contactSearchQuery
+          .trim()
+          .toLowerCase();
+
+        if (!query) {
+          return contacts;
+        }
+
+        return contacts.filter((contact) => {
+          const haystack = [
+            contact.alias,
+            contact.notes,
+
+            ...(contact.entries || []).flatMap((entry) => [
+              entry.identifier,
+              entry.label,
+              entry.type,
+
+              {
+                lightning_address: "Lightning Address",
+                bolt12: "BOLT12 Offer",
+                lnurl: "LNURL",
+                bip353: "BIP353",
+                nostr: "Nostr",
+                node: "Node ID",
+                other: "Other",
+              }[entry.type],
+            ]),
+          ]
+            .filter(Boolean)
+            .join("\n")
+            .toLowerCase();
+
+          return haystack.includes(query);
+        });
+      }
       function renderContacts(contacts) {
-        loadedContacts = Array.isArray(contacts) ? contacts : [];
+        loadedContacts = Array.isArray(contacts)
+          ? contacts
+          : [];
+
+        contacts = filterContacts(loadedContacts);
 
         if (!contactsList) return;
 
         if (!Array.isArray(contacts) || contacts.length === 0) {
           contactsList.innerHTML = `
             <div class="hint">
-              No contacts yet.
+              ${
+                contactSearchQuery
+                  ? "No matching contacts."
+                  : "No contacts yet."
+              }
             </div>
           `;
           return;
@@ -3161,8 +3298,24 @@ function getContactEntryIcon(type) {
       function openContactsModal() {
         if (!contactsModal) return;
 
+        contactSearchQuery = "";
+
+        if (contactSearchInput) {
+          contactSearchInput.value = "";
+        }
+
+        if (clearContactSearchBtn) {
+          clearContactSearchBtn.style.display = "none";
+        }
+
         contactsModal.style.display = "flex";
         contactsModal.setAttribute("aria-hidden", "false");
+
+        renderContacts(loadedContacts);
+
+        requestAnimationFrame(() => {
+          contactSearchInput?.focus();
+        });
       }
 
       function closeContactsModal() {
@@ -4869,6 +5022,7 @@ function getContactEntryIcon(type) {
       let payPreviewTimer = null;
 
       let loadedContacts = [];
+      let contactSearchQuery = "";
       let editingContact = null;
       let editingContactDraft = null;
       let contactPendingDeletion = null;
