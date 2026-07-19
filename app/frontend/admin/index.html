@@ -3263,8 +3263,32 @@ function getContactEntryIcon(type) {
         saveContactModal.setAttribute("aria-hidden", "true");
       }
 
+      let activePaymentTypeDropdown = null;
+
+      function closeActivePaymentTypeDropdown() {
+        if (!activePaymentTypeDropdown) return;
+
+        const {
+          menu,
+          arrow,
+          cleanup,
+        } = activePaymentTypeDropdown;
+
+        cleanup?.();
+
+        menu.remove();
+
+        arrow.style.transform = "";
+        arrow.style.transition = "transform .15s";
+
+        activePaymentTypeDropdown = null;
+      }
+
+
       function closeEditContactModal() {
         if (!editContactModal) return;
+
+        closeActivePaymentTypeDropdown();
 
         editingContact = null;
         editingContactDraft = null;
@@ -3276,6 +3300,7 @@ function getContactEntryIcon(type) {
       function renderEditContactEntries() {
         if (!editContactEntries) return;
 
+        closeActivePaymentTypeDropdown();
         editContactEntries.replaceChildren();
         
         lastPaymentTargetInput = null;
@@ -3460,28 +3485,20 @@ function getContactEntryIcon(type) {
           }
 
           updateTypeSelector();
-          typeSelector.addEventListener("click", () => {
-            typeMenu.style.display =
-              typeMenu.style.display === "block"
-                ? "none"
-                : "block";
-          });
 
           const typeMenu = document.createElement("div");
 
           typeMenu.style.cssText = `
             display:none;
-            position:absolute;
-            left:0;
-            right:0;
-            top:100%;
-            margin-top:4px;
+            position:fixed;
             background:#1b2233;
             border:1px solid var(--border);
             border-radius:10px;
-            overflow:hidden;
-            box-shadow:0 10px 30px rgba(0,0,0,.45);
-            z-index:1000;
+            overflow-x:hidden;
+            overflow-y:auto;
+            max-height:300px;
+            box-shadow:0 10px 30px rgba(0,0,0,.55);
+            z-index:100000;
           `;
 
           const selectorWrapper = document.createElement("div");
@@ -3492,7 +3509,185 @@ function getContactEntryIcon(type) {
           `;
 
           selectorWrapper.appendChild(typeSelector);
-          selectorWrapper.appendChild(typeMenu);
+
+          function positionTypeMenu() {
+            if (!document.body.contains(typeMenu)) return;
+
+            const selectorRect =
+              typeSelector.getBoundingClientRect();
+
+            const viewportPadding = 8;
+            const menuGap = 4;
+
+            const menuWidth = selectorRect.width;
+
+            typeMenu.style.width = `${menuWidth}px`;
+            typeMenu.style.maxHeight = "300px";
+
+            const availableBelow =
+              window.innerHeight -
+              selectorRect.bottom -
+              viewportPadding;
+
+            const availableAbove =
+              selectorRect.top -
+              viewportPadding;
+
+            const naturalHeight =
+              typeMenu.scrollHeight;
+
+            const preferredHeight =
+              Math.min(naturalHeight, 300);
+
+            const openAbove =
+              availableBelow < preferredHeight &&
+              availableAbove > availableBelow;
+
+            const availableSpace =
+              openAbove
+                ? availableAbove - menuGap
+                : availableBelow - menuGap;
+
+            const finalHeight =
+              Math.max(
+                80,
+                Math.min(preferredHeight, availableSpace),
+              );
+
+            typeMenu.style.maxHeight = `${finalHeight}px`;
+
+            let left = selectorRect.left;
+
+            if (
+              left + menuWidth >
+              window.innerWidth - viewportPadding
+            ) {
+              left =
+                window.innerWidth -
+                menuWidth -
+                viewportPadding;
+            }
+
+            left = Math.max(viewportPadding, left);
+
+            typeMenu.style.left = `${left}px`;
+
+            if (openAbove) {
+              typeMenu.style.top = "auto";
+              typeMenu.style.bottom =
+                `${
+                  window.innerHeight -
+                  selectorRect.top +
+                  menuGap
+                }px`;
+            } else {
+              typeMenu.style.bottom = "auto";
+              typeMenu.style.top =
+                `${selectorRect.bottom + menuGap}px`;
+            }
+          }
+
+          function openTypeMenu() {
+            if (
+              activePaymentTypeDropdown?.menu ===
+              typeMenu
+            ) {
+              closeActivePaymentTypeDropdown();
+              return;
+            }
+
+            closeActivePaymentTypeDropdown();
+
+            document.body.appendChild(typeMenu);
+            typeMenu.style.display = "block";
+
+            selectorArrow.style.transition =
+              "transform .15s";
+            selectorArrow.style.transform =
+              "rotate(180deg)";
+
+            const handleOutsideClick = (event) => {
+              if (
+                typeMenu.contains(event.target) ||
+                typeSelector.contains(event.target)
+              ) {
+                return;
+              }
+
+              closeActivePaymentTypeDropdown();
+            };
+
+            const handleEscape = (event) => {
+              if (event.key !== "Escape") return;
+
+              event.preventDefault();
+              event.stopPropagation();
+
+              closeActivePaymentTypeDropdown();
+              typeSelector.focus();
+            };
+
+            const handleViewportChange = () => {
+              positionTypeMenu();
+            };
+
+            document.addEventListener(
+              "mousedown",
+              handleOutsideClick,
+              true,
+            );
+
+            document.addEventListener(
+              "keydown",
+              handleEscape,
+              true,
+            );
+
+            window.addEventListener(
+              "resize",
+              handleViewportChange,
+            );
+
+            editContactEntries?.addEventListener(
+              "scroll",
+              handleViewportChange,
+            );
+
+            activePaymentTypeDropdown = {
+              menu: typeMenu,
+              arrow: selectorArrow,
+              cleanup: () => {
+                document.removeEventListener(
+                  "mousedown",
+                  handleOutsideClick,
+                  true,
+                );
+
+                document.removeEventListener(
+                  "keydown",
+                  handleEscape,
+                  true,
+                );
+
+                window.removeEventListener(
+                  "resize",
+                  handleViewportChange,
+                );
+
+                editContactEntries?.removeEventListener(
+                  "scroll",
+                  handleViewportChange,
+                );
+              },
+            };
+
+            positionTypeMenu();
+          }
+
+          typeSelector.addEventListener(
+            "click",
+            openTypeMenu,
+          );
 
           Object.entries(paymentTypes).forEach(([value, config]) => {
             const row = document.createElement("div");
@@ -3564,13 +3759,9 @@ function getContactEntryIcon(type) {
 
             row.addEventListener("click", () => {
               entry.type = value;
-
-              updateTypeSelector();
-
               typeSelect.value = value;
 
-              typeMenu.style.display = "none";
-
+              closeActivePaymentTypeDropdown();
               renderEditContactEntries();
             });
 
