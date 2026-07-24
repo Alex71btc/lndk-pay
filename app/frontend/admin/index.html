@@ -563,6 +563,46 @@
         margin-top: 4px;
       }
 
+      .txContact {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        margin-left: 8px;
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+
+
+      .txContactIcon {
+          width: 28px;
+          height: 28px;
+          flex-shrink: 0;
+      }
+
+      .txContactExisting span:last-child {
+          color: var(--text);
+          font-weight: 600;
+      }
+
+      .txContact img {
+        flex-shrink: 0;
+      }
+
+      .txContactExisting {
+        cursor: pointer;
+      }
+
+      .txContactAdd {
+        cursor: pointer;
+        color: var(--accent);
+      }
+
+      .txContactExisting:hover,
+      .txContactAdd:hover {
+        text-decoration: underline;
+      }
+
       .emptyState {
         color: var(--muted);
         font-size: 0.95rem;
@@ -823,6 +863,7 @@
         class="secondary"
         type="button"
         title="Contacts"
+        data-i18n-title="contacts.title"
       >
         <img
           src="/assets/icons/contacts.svg"
@@ -4459,6 +4500,20 @@
         return "lightning_address";
       }
 
+
+      async function fetchContacts() {
+        const res = await fetch("/api/contacts");
+
+        if (!res.ok) {
+          throw new Error(`Contacts request failed: HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        loadedContacts = data.contacts || [];
+
+        return loadedContacts;
+      }
+
       async function loadContacts() {
         if (!contactsList) return;
 
@@ -4504,16 +4559,10 @@
         openContactsModal();
         contactsList.textContent = window.__t("contacts.loading");
 
+
         try {
-          const res = await fetch("/api/contacts");
-
-          if (!res.ok) {
-            throw new Error(`Contacts request failed: HTTP ${res.status}`);
-          }
-
-          const data = await res.json();
-          loadedContacts = data.contacts || [];
-          renderContacts(data.contacts || []);
+          const contacts = await fetchContacts();
+          renderContacts(contacts);
         } catch (error) {
           console.error("Unable to load contacts:", error);
 
@@ -4837,6 +4886,21 @@
 
           const counterparty = item.counterparty || "";
 
+          const matchingContact =
+            loadedContacts.find((contact) =>
+              (contact.entries || []).some(
+                (entry) =>
+                  String(entry.identifier || "")
+                    .trim()
+                    .toLowerCase() ===
+                  String(
+                    counterparty || item.identifier || "",
+                  )
+                    .trim()
+                    .toLowerCase(),
+              ),
+            );
+
           const detailsJson = JSON.stringify(raw, null, 2);
 
           div.innerHTML = `
@@ -4856,6 +4920,30 @@
                 ${displayMemo ? `
                 <div class="txMemo">${displayMemo}</div>
                ` : ""}
+
+                ${
+                  matchingContact
+                    ? `
+                <div class="txContact txContactExisting">
+                  <img
+                    src="/assets/icons/contacts.svg"
+                    class="txContactIcon"
+                  />
+                  <span>${escapeContactHtml(
+                    matchingContact.alias,
+                  )}</span>
+                </div>
+                    `
+                    : `
+                <div class="txContact txContactAdd">
+                  <img
+                    src="/assets/icons/contacts.svg"
+                    class="txContactIcon"
+                  />
+                </div>
+                    `
+                }
+
                <div class="txExpandHint">
                  <span class="txExpandArrow">${openTxDetails.has(txKey) ? "▼" : "▶"}</span>
                  <span class="txExpandText">
@@ -6394,6 +6482,12 @@
 
               console.log("calling sync", Date.now());
 
+          try {
+              await fetchContacts();
+          } catch (err) {
+              console.warn("Failed to load contacts", err);
+          }
+
               await syncTxHistory();
 
               console.log("after sync", Date.now());
@@ -6403,6 +6497,7 @@
               startTxHistoryAutoRefresh();
 
           })();
+
 
           requestAnimationFrame(() => {
               renderOfferQr(getActiveValue());
@@ -6781,6 +6876,8 @@
             "history.as_qr": "Als QR",
             "history.copy": "Kopieren",
             "history.delete": "Löschen",
+            "history.contact": "Kontakt",
+            "history.add_to_contact": "Zu Kontakten hinzufügen...",
             "title.nostr_identity": "Nostr / Identity",
             "label.identity_alias": "Lightning Address Alias",
             "label.nostr_pubkey": "Nostr Pubkey (hex oder npub)",
@@ -7127,6 +7224,8 @@
             "history.as_qr": "As QR",
             "history.copy": "Copy",
             "history.delete": "Delete",
+            "history.contact": "Contact",
+            "history.add_to_contact": "Add to Contact...",
             "title.nostr_identity": "Nostr / Identity",
             "label.identity_alias": "Lightning Address Alias",
             "label.nostr_pubkey": "Nostr pubkey (hex or npub)",
