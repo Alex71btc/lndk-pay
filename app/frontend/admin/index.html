@@ -1478,7 +1478,9 @@
                 <span data-i18n="btn.nwc_unlock">Unlock</span>
               </button>
               <button class="secondary" id="cancelNwcUnlockBtn" type="button">
-                Cancel
+                <span data-i18n="contacts.cancel">
+                  Cancel
+                </span>
               </button>
             </div>
           </div>
@@ -1507,7 +1509,9 @@
           alt=""
           aria-hidden="true"
         />
-        <span>Save Contact</span>
+       <span data-i18n="contacts.save_title">
+          Save Contact
+       </span>
        </h2>
           <label class="label" style="margin-top:16px">
             Identifier
@@ -1558,7 +1562,9 @@
               id="cancelSaveContactBtn"
               type="button"
             >
-              Cancel
+              <span data-i18n="contacts.cancel">
+                Cancel
+              </span>
             </button>
 
             <button
@@ -1593,7 +1599,9 @@
               alt=""
               aria-hidden="true"
             />
-            <span>Delete Contact</span>
+            <span data-i18n="contacts.delete_title">
+              Delete Contact
+            </span>            
           </h2>
 
           <p
@@ -1604,7 +1612,9 @@
               color:var(--text);
             "
           >
-            Delete contact?
+            <span data-i18n="contacts.delete_text">
+              Delete contact?
+            </span>
           </p>
           <p
             style="
@@ -1613,7 +1623,9 @@
               color:var(--muted);
             "
           >
-            This will permanently delete:
+            <span data-i18n="contacts.delete_warning">
+              This will permanently delete:
+            </span>
           </p>
 
           <div
@@ -1631,8 +1643,12 @@
                 line-height:1.6;
               "
             >
-              • Contact<br />
-              • All payment targets
+              • <span data-i18n="contacts.delete_contact">
+                  Contact
+                </span><br />
+              • <span data-i18n="contacts.delete_targets">
+                  All payment targets
+                </span>
             </div>
 
             <div
@@ -1642,7 +1658,9 @@
                 font-size:14px;
               "
             >
-              This action cannot be undone.
+            <span data-i18n="contacts.delete_irreversible">
+               This action cannot be undone.
+            </span>
             </div>
           </div>
 
@@ -1652,7 +1670,9 @@
               id="cancelDeleteContactBtn"
               type="button"
             >
-              Cancel
+              <span data-i18n="contacts.cancel">
+                Cancel
+              </span>
             </button>
 
             <button
@@ -1692,11 +1712,13 @@
               alt=""
               aria-hidden="true"
             />
-            <span>Edit Contact</span>
+            <span data-i18n="contacts.edit_title">
+              Edit Contact
+          </span>
           </h2>
 
           <label class="label" style="margin-top:14px">
-            Name
+            <span data-i18n="contacts.name">Name</span>
           </label>
 
           <input
@@ -1705,7 +1727,7 @@
           />
 
           <label class="label" style="margin-top:14px">
-            Notes
+            <span data-i18n="contacts.notes">Notes</span>
           </label>
 
           <textarea
@@ -1724,7 +1746,9 @@
               class="label"
               style="margin-bottom:10px"
             >
-              Payment Targets
+              <span data-i18n="contacts.payment_targets">
+                Payment Targets
+              </span>
             </div>
 
            <div
@@ -1742,7 +1766,9 @@
               type="button"
               style="margin-top:12px"
             >
-              +Add Payment Targets
+            <span data-i18n="contacts.add_payment_target">
+              + Add Payment Target
+            </span>
             </button>
           </div>
 
@@ -1760,14 +1786,18 @@
               id="closeEditContactBtn"
               type="button"
             >
-              Close
+              <span data-i18n="btn.close">
+                Close
+              </span>
             </button>
 
             <button
               id="saveEditContactBtn"
               type="button"
             >
-              Save
+              <span data-i18n="contacts.save">
+                Save
+              </span>
             </button>
           </div>
         </div>
@@ -1801,7 +1831,7 @@
                 alt=""
                 aria-hidden="true"
               />
-              <span>Contacts</span>
+              <span data-i18n="contacts.title">Contacts</span>
             </h2>
 
             <button
@@ -1887,7 +1917,7 @@
                 id="contactSearchInput"
                 class="contactSearchInput"
                 type="text"
-                placeholder="Search contacts..."
+                data-i18n-placeholder="contacts.search"
                 style="
                   width:100%;
                   height:38px;
@@ -1928,7 +1958,7 @@
                 flex-shrink:0;
               "
             >
-              + New Contact
+              <span data-i18n="contacts.new">New Contact</span>
             </button>
           </div>
           <div
@@ -1948,7 +1978,7 @@
               id="closeContactsBottomBtn"
               type="button"
             >
-              Close
+              <span data-i18n="btn.close">Close</span>
             </button>
           </div>
         </div>
@@ -3180,6 +3210,13 @@
         );
       }
 
+
+        function getContactTypeLabel(type) {
+          return window.__t(
+            `contact.type.${type}`,
+          );
+        }
+
         function renderContacts(contacts) {
         loadedContacts = Array.isArray(contacts)
           ? [...contacts]
@@ -3211,8 +3248,8 @@
             <div class="hint">
               ${
                 contactSearchQuery
-                  ? "No matching contacts."
-                  : "No contacts yet."
+                  ? window.__t("contacts.no_matches")
+                  : window.__t("contacts.none")
               }
             </div>
           `;
@@ -3221,9 +3258,10 @@
 
         contactsList.innerHTML = contacts
           .map((contact) => {
-            const alias = highlightSearch(
-              contact.alias || "(unnamed contact)",
-            );
+            const aliasRaw =
+              contact.alias || "(unnamed contact)";
+
+            const alias = highlightSearch(aliasRaw);
 
             const notes = contact.notes
               ? `
@@ -3245,20 +3283,10 @@
                   .map((entry) => {
                     const type = String(entry.type || "other");
                     const icon = getContactEntryIcon(type);
-                    const categoryNames = {
-                      lightning_address: "Lightning Address",
-                      bolt12: "BOLT12 Offer",
-                      lnurl: "LNURL",
-                      bip353: "BIP353",
-                      nostr: "Nostr",
-                      node: "Node ID",
-                      other: "Other",
-                    };
-
                     const category =
-                      entry.label ||
-                      categoryNames[type] ||
-                      "Other";
+                        entry.label ||
+                        getContactTypeLabel(type);
+
                     const identifier = highlightSearch(
                         entry.identifier
                     );
@@ -3266,8 +3294,8 @@
                     const defaultStar = entry.isDefault
                       ? `
                         <span
-                          aria-label="Default payment target"
-                          title="Default payment target"
+                          aria-label="${window.__t("contacts.default_target")}"
+                          title="${window.__t("contacts.default_target")}"
                           style="
                             color:#f7b731;
                             margin-left:4px;
@@ -3400,18 +3428,18 @@
                   <span
                     class="contactAction contactActionDelete deleteContactBtn"
                     data-contact-id="${contact.id}"
-                    data-contact-alias="${alias}"
-                    title="Delete contact"
+                    data-contact-alias="${escapeContactHtml(aliasRaw)}"
+                    title="${window.__t("contacts.delete")}"
                   >
-                    Delete
+                    ${window.__t("contacts.delete")}
                   </span>
 
                   <span
                     class="contactAction contactActionEdit editContactBtn"
                     data-contact-id="${contact.id}"
-                    title="Edit contact"
+                    title="${window.__t("contacts.edit")}"
                   >
-                    Edit
+                    ${window.__t("contacts.edit")}
                   </span>
                 </div>
               </div>
@@ -3463,7 +3491,7 @@
           identifier.toLowerCase().startsWith("lnbcrt")
         ) {
           setStatus(
-            "Temporary BOLT11 invoices cannot be saved as contacts.",
+            window.__t("contacts.temp_bolt11"),
             "error",
           );
           return;
@@ -3552,7 +3580,7 @@
         contactPendingDeletion = contact;
 
         deleteContactMessage.textContent =
-          `Delete contact "${contact.alias}"?`;
+          `${window.__t("contacts.delete_confirm")} "${contact.alias}"?`;
 
         closeContactsModal();
 
@@ -3623,51 +3651,51 @@
         if (!entries.length) {
           const emptyMessage = document.createElement("div");
           emptyMessage.className = "hint";
-          emptyMessage.textContent = "No payment targets.";
+          window.__t("contacts.no_payment_targets")
           editContactEntries.appendChild(emptyMessage);
           return;
         }
 
         const paymentTypes = {
           lightning_address: {
-            label: "Lightning Address",
+            label: getContactTypeLabel("lightning_address"),
             icon: "assets/icons/bolt.svg",
             iconType: "image",
           },
           bolt12: {
-            label: "BOLT12 Offer",
+            label: getContactTypeLabel("bolt12"),
             icon: "assets/icon.png",
             iconType: "image",
           },
           lnurl: {
-            label: "LNURL",
+            label: getContactTypeLabel("lnurl"),
             icon: "assets/icons/bolt.svg",
             iconType: "image",
           },
           bip353: {
-            label: "BIP353",
+            label: getContactTypeLabel("bip353"),
             icon: "assets/icon.png",
             iconType: "image",
           },
           nostr: {
-            label: "Nostr",
+            label: getContactTypeLabel("nostr"),
             icon: "assets/icons/nostr.svg",
             iconType: "image",
           },
           node: {
-            label: "Node ID",
+            label: getContactTypeLabel("node"),
             icon: "🔑",
             iconType: "emoji",
           },
           other: {
-            label: "Other",
+            label: getContactTypeLabel("other"),
             icon: "•••",
             iconType: "emoji",
           },
         };
 
         const typeOptions = Object.entries(paymentTypes).map(
-          ([value, config]) => [value, config.label]
+          ([value, config]) => [value, config.label],
         );
 
         entries.forEach((entry) => {
@@ -3695,13 +3723,19 @@
 
           const typeLabel = document.createElement("div");
           typeLabel.className = "label";
-          typeLabel.textContent = "Payment Method";
+          typeLabel.textContent = window.__t(
+            "contacts.payment_method",
+          );
 
           const deleteButton = document.createElement("span");
           deleteButton.className =
             "contactAction contactActionDelete";
-          deleteButton.textContent = "Remove";
-          deleteButton.title = "Remove payment target";
+          deleteButton.textContent = window.__t(
+            "contacts.remove_payment_target",
+          );
+          deleteButton.title = window.__t(
+            "contacts.remove_payment_target",
+          );
 
           const typeSelector = document.createElement("button");
           typeSelector.type = "button";
@@ -4148,7 +4182,9 @@
           const identifierLabel = document.createElement("div");
           identifierLabel.className = "label";
           identifierLabel.style.marginTop = "12px";
-          identifierLabel.textContent = "Payment Target";
+          identifierLabel.textContent = window.__t(
+            "contacts.payment_target",
+          );
 
           const identifierInput = document.createElement("input");
           identifierInput.type = "text";
@@ -4181,8 +4217,9 @@
           const labelLabel = document.createElement("div");
           labelLabel.className = "label";
           labelLabel.style.marginTop = "12px";
-          labelLabel.textContent = "Label (optional)";
-
+          labelLabel.textContent = window.__t(
+            "contacts.label_optional",
+          );
           const labelInput = document.createElement("input");
           labelInput.type = "text";
           labelInput.value = entry.label || "";
@@ -4279,14 +4316,14 @@
 
           setStatus(
             isNewContact
-              ? "Contact created."
-              : "Contact updated.",
+              ? window.__t("contacts.created")
+              : window.__t("contacts.updated"),
           );
         } catch (err) {
           console.error(err);
 
           setStatus(
-            "Failed to save contact.",
+            window.__t("contacts.save_failed"),
             "error",
           );
         } finally {
@@ -4320,7 +4357,7 @@
 
           openContactsModal();
 
-          setStatus("Contact deleted.");
+          setStatus(window.__t("contacts.deleted"));
         } catch (err) {
           console.error(err);
           setStatus(
@@ -4371,7 +4408,7 @@
 
           closeSaveContactModal();
 
-          setStatus("Contact saved.");
+          setStatus(window.__t("contacts.saved"));
 
           await loadContacts();
         } catch (err) {
@@ -4451,7 +4488,7 @@
 
             currentContactStatus.style.display = "";
             currentContactStatus.textContent =
-              `✓ Already saved as "${existing.alias || "(unnamed)"}"`;
+              `${window.__t("contacts.already_saved")} "${existing.alias}"`;
           } else {
             saveCurrentContactBtn.style.display = "";
 
@@ -4465,7 +4502,7 @@
         }
 
         openContactsModal();
-        contactsList.textContent = "Loading...";
+        contactsList.textContent = window.__t("contacts.loading");
 
         try {
           const res = await fetch("/api/contacts");
@@ -6560,6 +6597,65 @@
             "nav.logout": "Logout",
             "label.decode_output": "Decode-Ausgabe",
             "ph.decode_output": "Hier erscheint die Decode-Ausgabe...",
+            "contacts.title": "Kontakte",
+            "contacts.search": "Kontakte durchsuchen...",
+            "contacts.new": "Neuer Kontakt",
+
+            "contacts.none": "Noch keine Kontakte.",
+            "contacts.no_matches": "Keine passenden Kontakte.",
+
+            "contacts.edit": "Bearbeiten",
+            "contacts.delete": "Löschen",
+
+            "contacts.loading": "Kontakte werden geladen...",
+            "btn.close": "Schließen",
+            "contacts.payment_method": "Zahlungsmethode",
+            "contacts.payment_target": "Zahlungsziel",
+            "contacts.remove_payment_target": "Entfernen",
+            "contacts.default_target": "Standard-Zahlungsziel",
+            "contacts.delete_confirm": "Kontakt löschen?",
+            "contacts.temp_bolt11":
+              "Temporäre BOLT11-Rechnungen können nicht als Kontakt gespeichert werden.",
+
+            "contacts.created": "Kontakt erstellt.",
+            "contacts.updated": "Kontakt aktualisiert.",
+            "contacts.deleted": "Kontakt gelöscht.",
+            "contacts.saved": "Kontakt gespeichert.",
+            "contacts.save_failed":
+              "Kontakt konnte nicht gespeichert werden.",
+            "contact.type.lightning_address": "Lightning-Adresse",
+            "contact.type.bolt12": "BOLT12 Offer",
+            "contact.type.lnurl": "LNURL",
+            "contact.type.bip353": "BIP353",
+            "contact.type.nostr": "Nostr",
+            "contact.type.node": "Node-ID",
+            "contact.type.other": "Andere",
+            "contacts.edit_title": "Kontakt bearbeiten",
+            "contacts.save_title": "Kontakt speichern",
+            "contacts.delete_title": "Kontakt löschen",
+
+            "contacts.name": "Name",
+            "contacts.notes": "Notizen",
+            "contacts.identifier": "Kennung",
+            "contacts.type": "Typ",
+
+            "contacts.payment_targets": "Zahlungsziele",
+            "contacts.add_payment_target": "+ Zahlungsziel hinzufügen",
+
+            "contacts.label_optional": "Bezeichnung (optional)",
+
+            "contacts.cancel": "Abbrechen",
+            "contacts.save": "Speichern",
+
+            "contacts.save_as_new": "💾 Als neuen Kontakt speichern",
+
+            "contacts.already_saved": "✓ Bereits gespeichert als",
+            "contacts.delete_text": "Kontakt löschen?",
+            "contacts.delete_warning": "Folgendes wird dauerhaft gelöscht:",
+            "contacts.delete_contact": "Kontakt",
+            "contacts.delete_targets": "Alle Zahlungsziele",
+            "contacts.delete_irreversible": "Diese Aktion kann nicht rückgängig gemacht werden.",
+
             "toast.create_start": "Erzeuge Offer...",
             "toast.create_success": "Offer erfolgreich erzeugt.",
             "toast.qr_refreshed": "QR aktualisiert.",
@@ -6851,6 +6947,64 @@
             "nav.logout": "Logout",
             "label.decode_output": "Decode output",
             "ph.decode_output": "Decoded output will appear here...",
+            "contacts.title": "Contacts",
+            "contacts.search": "Search contacts...",
+            "contacts.new": "New Contact",
+
+            "contacts.none": "No contacts yet.",
+            "contacts.no_matches": "No matching contacts.",
+
+            "contacts.edit": "Edit",
+            "contacts.delete": "Delete",
+
+            "contacts.loading": "Loading contacts...",
+            "btn.close": "Close",
+            "contacts.payment_method": "Payment Method",
+            "contacts.payment_target": "Payment Target",
+            "contacts.remove_payment_target": "Remove",
+            "contacts.default_target": "Default payment target",
+            "contacts.delete_confirm": "Delete contact?",
+            "contacts.temp_bolt11":
+              "Temporary BOLT11 invoices cannot be saved as contacts.",
+
+            "contacts.created": "Contact created.",
+            "contacts.updated": "Contact updated.",
+            "contacts.deleted": "Contact deleted.",
+            "contacts.saved": "Contact saved.",
+            "contacts.save_failed":
+              "Failed to save contact.",
+            "contact.type.lightning_address": "Lightning Address",
+            "contact.type.bolt12": "BOLT12 Offer",
+            "contact.type.lnurl": "LNURL",
+            "contact.type.bip353": "BIP353",
+            "contact.type.nostr": "Nostr",
+            "contact.type.node": "Node ID",
+            "contact.type.other": "Other",
+            "contacts.edit_title": "Edit Contact",
+            "contacts.save_title": "Save Contact",
+            "contacts.delete_title": "Delete Contact",
+
+            "contacts.name": "Name",
+            "contacts.notes": "Notes",
+            "contacts.identifier": "Identifier",
+            "contacts.type": "Type",
+
+            "contacts.payment_targets": "Payment Targets",
+            "contacts.add_payment_target": "+ Add Payment Target",
+
+            "contacts.label_optional": "Label (optional)",
+
+            "contacts.cancel": "Cancel",
+            "contacts.save": "Save",
+
+            "contacts.save_as_new": "💾 Save as new contact",
+
+            "contacts.already_saved": "✓ Already saved as",
+            "contacts.delete_text": "Delete contact?",
+            "contacts.delete_warning": "This will permanently delete:",
+            "contacts.delete_contact": "Contact",
+            "contacts.delete_targets": "All payment targets",
+            "contacts.delete_irreversible": "This action cannot be undone.",
             "toast.create_start": "Creating offer...",
             "toast.create_success": "Offer created successfully.",
             "toast.qr_refreshed": "QR refreshed.",
