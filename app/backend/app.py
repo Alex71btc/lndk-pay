@@ -310,6 +310,15 @@ def get_cloudflare_config():
 
 DNS_RESOLVER_LIFETIME = float(os.environ.get("DNS_RESOLVER_LIFETIME", "10"))
 DNS_RESOLVER_TIMEOUT = float(os.environ.get("DNS_RESOLVER_TIMEOUT", "10"))
+DNS_RESOLVER_NAMESERVERS = [
+    server
+    for server in os.environ.get("DNS_RESOLVER_NAMESERVERS", "").replace(",", " ").split()
+    if server
+]
+
+# BIP353 lookup outcomes that should fall through to the LNURL path in pay_address:
+# no record (404), lookup failed (502), lookup timed out (504).
+BIP353_LNURL_FALLBACK_STATUSES = frozenset({404, 502, 504})
 
 LNURL_MIN_SENDABLE_MSAT = int(os.environ.get("LNURL_MIN_SENDABLE_MSAT", "1000"))
 LNURL_MAX_SENDABLE_MSAT = int(os.environ.get("LNURL_MAX_SENDABLE_MSAT", "1000000000"))
@@ -1621,8 +1630,11 @@ def _extract_offer_from_txt_record(txt_value: str) -> Optional[str]:
 
 
 def _new_resolver() -> dns.resolver.Resolver:
+    # Default to the host's own resolver (/etc/resolv.conf). Some runtimes only
+    # permit DNS via the resolver they configure, so pinning one here fails there.
     resolver = dns.resolver.Resolver()
-    resolver.nameservers = ["1.1.1.1", "8.8.8.8"]
+    if DNS_RESOLVER_NAMESERVERS:
+        resolver.nameservers = DNS_RESOLVER_NAMESERVERS
     resolver.lifetime = DNS_RESOLVER_LIFETIME
     resolver.timeout = DNS_RESOLVER_TIMEOUT
     return resolver
@@ -3081,9 +3093,11 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
         return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 
     except HTTPException as exc:
-        message = str(exc.detail)
-
-        if "No BIP353 TXT record found" not in message:
+        # A Lightning Address is indistinguishable from a BIP353 address here, so
+        # fall through to LNURL whenever the offer lookup found nothing to pay --
+        # whether the record was absent (404) or the lookup never completed
+        # (502/504). Anything else is the caller's error and still propagates.
+        if exc.status_code not in BIP353_LNURL_FALLBACK_STATUSES:
             raise
 
         lnurl_result = await _resolve_lnurl_invoice(

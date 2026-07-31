@@ -38,6 +38,9 @@ services:
       CONFIG_JSON_PATH: /data/config.json
       SECRETS_JSON_PATH: /data/config/secrets.json
       CORS_ORIGINS: "*"
+      # Optional. BIP353 lookups use the container's own resolver (the `dns:`
+      # entries below). Set this to override it with an explicit list instead.
+      # DNS_RESOLVER_NAMESERVERS: "1.1.1.1 8.8.8.8"
     dns:
       - 1.1.1.1
       - 8.8.8.8
