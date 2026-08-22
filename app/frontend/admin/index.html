@@ -556,6 +556,17 @@
         font-size: 13px;
       }
 
+      .txTarget {
+        font-weight: 600;
+        color: var(--text-color);
+        margin-top: 2px;
+      }
+
+      .txComment {
+        font-size: 0.9em;
+        opacity: 0.8;
+      }
+
       .txWallet {
         font-size: 0.95rem;
         font-weight: 600;
@@ -4815,14 +4826,34 @@
           const fee = item.fee_sat
             ? ` • ${window.__t("history.fee")} ${item.fee_sat} sat`
             : "";
-          const memo = item.memo || item.identifier || "";
-          const displayMemo =
-            memo.startsWith("lnbc") ||
-            memo.startsWith("lntb") ||
-            memo.startsWith("lnbcrt")
-              ? ""
-              : memo;
+
           const raw = item.raw_json || {};
+
+          function isTechnicalIdentifier(value) {
+            if (!value) return false;
+
+            return (
+              /^[0-9a-f]{64}$/i.test(value) ||
+              /^[0-9a-f]{66}$/i.test(value) ||
+              /^[0-9a-f]{128}$/i.test(value) ||
+              /^0[23][0-9a-f]{64}$/i.test(value)
+            );
+          }
+
+          const displayTarget =
+            item.method === "bolt12" || item.method === "offer"
+              ? raw.target || item.counterparty || item.identifier || ""
+              : item.counterparty || item.identifier || "";
+
+          const visibleTarget = isTechnicalIdentifier(displayTarget)
+            ? ""
+            : displayTarget;
+
+          const displayComment =
+            item.memo && item.memo !== visibleTarget
+              ? item.memo
+              : "";
+
           const paymentHash = item.payment_hash || raw.payment_hash || raw.r_hash || "";
           const txKey = [
             paymentHash,
@@ -4833,7 +4864,7 @@
             item.created_at || "",
             item.settled_at || "",
             item.identifier || "",
-            memo || "",
+            item.memo || "",
           ].join("|");
           const txKeyAttr = String(txKey).replace(/"/g, "&quot;");
           const txDetailsOpenAttr = openTxDetails.has(txKey) ? " open" : "";
@@ -4940,9 +4971,21 @@
 
                 ${walletLine}
 
-                ${displayMemo ? `
-                <div class="txMemo">${displayMemo}</div>
-               ` : ""}
+                ${
+                  visibleTarget
+                    ? `
+                <div class="txTarget">${escapeContactHtml(visibleTarget)}</div>
+                `
+                    : ""
+                }
+
+                ${
+                  displayComment
+                    ? `
+                <div class="txComment">💬 ${escapeContactHtml(displayComment)}</div>
+                `
+                    : ""
+                }
 
                 ${
                   matchingContact

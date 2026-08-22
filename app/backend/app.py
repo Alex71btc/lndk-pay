@@ -2846,7 +2846,7 @@ async def lnurl_callback(
         amount_sat=amount_sat,
         memo=memo,
         description_hash=description_hash_b64,
-        method="lnurl",
+        method="zap" if zap_request_event else "lightning_address",
         counterparty=alias["identifier"],
     )
 
@@ -3042,6 +3042,7 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
     )
 
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
+
 @app.post("/api/pay-address", response_model=PayOfferResponse)
 async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> PayOfferResponse:
     require_pay_auth(request)
@@ -3069,7 +3070,7 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
             fee_sat=None,
             status="settled",
             memo=payload.payer_note or "",
-            identifier=normalized_offer,
+            identifier=target,
             settled_at=str(int(time.time())),
             raw_json={
                 "mode": "bip353",
