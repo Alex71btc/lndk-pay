@@ -4922,15 +4922,17 @@
           ).trim();
 
           const contactType =
-            item.method === "lightning_address"
-              ? "lightning_address"
-              : item.method === "bolt12" || item.method === "offer"
-                ? "bolt12"
-                : item.method === "lnurl"
-                  ? "lnurl"
-                  : item.method === "keysend"
-                    ? "node_id"
-                    : "lightning_address";
+            raw.mode === "bip353"
+              ? "bip353"
+              : item.method === "lightning_address"
+                ? "lightning_address"
+                : item.method === "bolt12" || item.method === "offer"
+                  ? "bolt12"
+                  : item.method === "lnurl"
+                    ? "lnurl"
+                    : item.method === "keysend"
+                      ? "node"
+                      : "lightning_address";
 
           const identifierLower = contactIdentifier.toLowerCase();
 

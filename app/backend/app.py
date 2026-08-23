@@ -342,10 +342,8 @@ CONTACT_ENTRY_TYPES = {
     "lightning_address",
     "bolt12",
     "lnurl",
-    "bolt11",
-    "nwc",
-    "wallet",
-    "npub",
+    "bip353",
+    "nostr",
     "node",
     "other",
 }
