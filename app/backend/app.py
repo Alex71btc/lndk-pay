@@ -1159,6 +1159,15 @@ class PayBolt11Request(BaseModel):
         description="BOLT11 invoice like lnbc...",
     )
 
+class PayKeysendRequest(BaseModel):
+    node_id: str = Field(
+        min_length=66,
+        max_length=66,
+        description="Compressed Lightning node public key",
+    )
+    amount_sat: int = Field(ge=1, description="Amount to pay in sats")
+    message: Optional[str] = Field(default=None, max_length=300)
+
 class PayOfferRequest(BaseModel):
     offer: str = Field(
         min_length=4,
@@ -2242,6 +2251,179 @@ async def _pay_bolt11_invoice(
     )
     return payment_data
 
+async def _pay_keysend(
+    *,
+    node_id: str,
+    amount_sat: int,
+    message: str = "",
+    fee_limit_sat: int = 5000,
+    origin: str = "web",
+) -> dict[str, Any]:
+    node_id = node_id.strip().lower()
+
+    if not re.fullmatch(r"0[23][0-9a-f]{64}", node_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Lightning node public key.",
+        )
+
+    preimage = secrets.token_bytes(32)
+    payment_hash = hashlib.sha256(preimage).digest()
+
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+
+    headers = {
+        "Grpc-Metadata-macaroon": macaroon_hex,
+        "Content-Type": "application/json",
+    }
+
+    custom_records = {
+        "5482373484": base64.b64encode(preimage).decode("ascii"),
+    }
+
+    if message:
+        custom_records[KEYSEND_MESSAGE_RECORD] = base64.b64encode(
+            message.encode("utf-8"),
+        ).decode("ascii")
+
+    payload = {
+        "dest": base64.b64encode(bytes.fromhex(node_id)).decode("ascii"),
+        "amt": str(amount_sat),
+        "payment_hash": base64.b64encode(payment_hash).decode("ascii"),
+        "fee_limit_sat": str(fee_limit_sat),
+        "timeout_seconds": 60,
+        "dest_custom_records": custom_records,
+    }
+
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=LND_REST_TIMEOUT,
+            verify=verify,
+        ) as client:
+            response = await client.post(
+                f"{LND_REST_URL}/v2/router/send",
+                headers=headers,
+                json=payload,
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LND REST keysend failed: {exc}",
+        ) from exc
+
+    raw_text = (response.text or "").strip()
+
+    payment_data = None
+
+    for line in raw_text.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        try:
+            item = json.loads(line)
+        except Exception:
+            continue
+
+        if isinstance(item, dict) and isinstance(item.get("result"), dict):
+            payment_data = item["result"]
+        elif isinstance(item, dict):
+            payment_data = item
+
+    if not isinstance(payment_data, dict):
+        raise HTTPException(
+            status_code=502,
+            detail=f"LND REST keysend returned unexpected response: {raw_text[:300]}",
+        )
+
+    error_obj = (
+        payment_data.get("error")
+        if isinstance(payment_data.get("error"), dict)
+        else {}
+    )
+
+    message_text = (
+        payment_data.get("message")
+        or error_obj.get("message")
+        or ""
+    )
+
+    failure_reason = (
+        payment_data.get("failure_reason")
+        or payment_data.get("failureReason")
+        or ""
+    )
+
+    combined_error = (
+        f"{message_text} {failure_reason} {raw_text}"
+        .strip()
+        .lower()
+    )
+
+    if "self payment" in combined_error or "self-payments not allowed" in combined_error:
+        raise HTTPException(
+            status_code=400,
+            detail="Selbstzahlungen sind nicht erlaubt.",
+        )
+
+    if "no route" in combined_error:
+        raise HTTPException(
+            status_code=400,
+            detail="Keine Route gefunden.",
+        )
+
+    if "insufficient balance" in combined_error:
+        raise HTTPException(
+            status_code=400,
+            detail="Nicht genügend Guthaben.",
+        )
+
+    if "timeout" in combined_error:
+        raise HTTPException(
+            status_code=400,
+            detail="Zahlung hat zu lange gedauert.",
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=message_text or failure_reason or raw_text,
+        )
+
+    status = str(payment_data.get("status") or "").upper()
+
+    if status in {"FAILED", "FAILURE"}:
+        raise HTTPException(
+            status_code=400,
+            detail=failure_reason or "Keysend-Zahlung fehlgeschlagen.",
+        )
+
+    _log_tx(
+        payment_hash=payment_data.get(
+            "payment_hash",
+            payment_hash.hex(),
+        ),
+        direction="outgoing",
+        tx_type="payment",
+        method="keysend",
+        counterparty=node_id,
+        origin=origin,
+        amount_sat=int(
+            payment_data.get("value_sat")
+            or amount_sat
+        ),
+        fee_sat=int(payment_data.get("fee_sat") or 0),
+        status="settled",
+        memo=message,
+        identifier=node_id,
+        settled_at=str(int(time.time())),
+        raw_json=payment_data,
+    )
+
+    return payment_data
 
 async def _resolve_lnurl_invoice(
     *,
@@ -3150,6 +3332,40 @@ async def pay_bolt11(payload: PayBolt11Request, request: StarletteRequest) -> Pa
 
     return PayOfferResponse(
         resolved_offer=invoice,
+        raw_output=raw_output,
+    )
+
+@app.post("/api/pay-keysend", response_model=PayOfferResponse)
+async def pay_keysend(
+    payload: PayKeysendRequest,
+    request: StarletteRequest,
+) -> PayOfferResponse:
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    node_id = payload.node_id.strip().lower()
+    message = (payload.message or "").strip()
+
+    result = await _pay_keysend(
+        node_id=node_id,
+        amount_sat=payload.amount_sat,
+        message=message,
+    )
+
+    raw_output = json.dumps(
+        {
+            "mode": "keysend",
+            "node_id": node_id,
+            "amount_sat": payload.amount_sat,
+            "message": message,
+            "payment_result": result,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return PayOfferResponse(
+        resolved_offer=node_id,
         raw_output=raw_output,
     )
 

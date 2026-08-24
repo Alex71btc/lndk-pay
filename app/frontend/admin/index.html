@@ -2432,7 +2432,24 @@
       nwcQrBox?.addEventListener("click", () =>
         copyText(nwcUriOutput?.value || "", window.__t("toast.nwc_uri_copied")),
       );
-      contactPickerBtn?.addEventListener("click", loadContacts);
+      contactPickerBtn?.addEventListener("click", () => {
+        const value = payOfferInput.value.trim().toLowerCase();
+
+        const isBolt11 =
+          value.startsWith("lnbc") ||
+          value.startsWith("lntb") ||
+          value.startsWith("lnbcrt");
+
+        if (isBolt11) {
+          setStatus(
+            "BOLT11 invoices are single-use and cannot be saved as contacts.",
+            "warn",
+          );
+          return;
+        }
+
+        loadContacts();
+      });
 
       newContactBtn?.addEventListener(
         "click",
@@ -4549,18 +4566,18 @@
             ),
           );
 
-          if (existing) {
-            saveCurrentContactBtn.style.display = "none";
+        if (existing) {
+          saveCurrentContactBtn.style.display = "none";
 
-            currentContactStatus.style.display = "";
-            currentContactStatus.textContent =
-              `${window.__t("contacts.already_saved")} "${existing.alias}"`;
+          currentContactStatus.style.display = "";
+          currentContactStatus.textContent =
+            `${window.__t("contacts.already_saved")} "${existing.alias}"`
           } else {
-            saveCurrentContactBtn.style.display = "";
+          saveCurrentContactBtn.style.display = isBolt11 ? "none" : "";
 
-            currentContactStatus.style.display = "none";
-            currentContactStatus.textContent = "";
-          }
+           currentContactStatus.style.display = "none";
+           currentContactStatus.textContent = "";
+        }
 
         } else {
           currentContactCandidate.style.display = "none";
@@ -4664,6 +4681,9 @@
           return "ambiguous_address";
 
         if (value.startsWith("lnurl1")) return "lnurl";
+
+        if (/^0[23][0-9a-f]{64}$/i.test(value))
+          return "keysend";
 
         return "unknown";
       }
@@ -4918,7 +4938,11 @@
           const counterparty = item.counterparty || "";
 
           const contactIdentifier = String(
-            counterparty || item.identifier || "",
+            item.method === "keysend"
+              ? item.direction === "outgoing"
+                ? counterparty
+                : ""
+              : counterparty || item.identifier || "",
           ).trim();
 
           const contactType =
@@ -6138,6 +6162,70 @@
         }
       }
 
+      async function payKeysendFlow() {
+        const nodeId = normalizePaymentInput(payOfferInput.value);
+        const amountSat = payAmountInput.value.trim();
+        const payerNote = payerNoteInput.value.trim();
+        const btn = document.getElementById("payOfferBtn");
+
+        if (!/^0[23][0-9a-f]{64}$/i.test(nodeId)) {
+          setStatus("Invalid Lightning node ID.", "error");
+          return;
+        }
+
+        if (!amountSat) {
+          setStatus(window.__t("toast.enter_amount"), "error");
+          return;
+        }
+
+        btn.disabled = true;
+        const oldText = btn.textContent;
+        btn.textContent = "Sending Keysend...";
+        setStatus(
+          `Sending Keysend to ${nodeId.slice(0, 18)}…`,
+          "warn",
+        );
+
+        try {
+          const response = await fetch("/api/pay-keysend", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": getCookie("csrf_token"),
+            },
+            body: JSON.stringify({
+              node_id: nodeId,
+              amount_sat: Number(amountSat),
+              message: payerNote || null,
+            }),
+          });
+
+          const data = await readJsonOrThrow(response);
+          const parsed = safeJsonParse(data?.raw_output);
+
+          renderSuccessOutput(
+            "Keysend sent",
+            [
+              amountSat ? `⚡ ${formatSats(amountSat)}` : "",
+              `🔑 ${nodeId}`,
+              payerNote
+                ? `${window.__t("pay.summary.comment")} ${payerNote}`
+                : "",
+            ],
+            parsed || { raw_output: data?.raw_output || "" },
+          );
+
+          setStatus("Keysend payment sent.");
+        } catch (error) {
+          const message = errorToMessage(error);
+          setStatus(`Fehler: ${message}`, "error", true);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = oldText;
+        }
+      }
+
+
       async function payLnurlFlow() {
         const lnurl = normalizePaymentInput(payOfferInput.value);
         const amountSat = payAmountInput.value.trim();
@@ -6290,6 +6378,11 @@
         if (kind === "lnurl") {
           return payLnurlFlow();
         }
+
+        if (kind === "keysend") {
+          return payKeysendFlow();
+        }
+
         if (kind === "ambiguous_address") {
           return payAddressFlow();
         }
