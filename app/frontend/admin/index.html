@@ -2442,7 +2442,7 @@
 
         if (isBolt11) {
           setStatus(
-            "BOLT11 invoices are single-use and cannot be saved as contacts.",
+            window.__t("toast.bolt11_contact_unavailable"),
             "warn",
           );
           return;
@@ -3015,9 +3015,21 @@
         setNwcUnlockedState(true);
         return connections;
       }
+
       function rerenderDynamicUi() {
         if (Array.isArray(nwcConnectionsCache)) {
           renderNwcConnections(nwcConnectionsCache);
+        }
+
+        if (Array.isArray(loadedContacts)) {
+          renderContacts(loadedContacts);
+        }
+
+        if (
+          editContactModal?.style.display !== "none" &&
+          editingContactDraft
+        ) {
+          renderEditContactEntries();
         }
       }
 
@@ -3720,7 +3732,7 @@
         if (!entries.length) {
           const emptyMessage = document.createElement("div");
           emptyMessage.className = "hint";
-          window.__t("contacts.no_payment_targets")
+          emptyMessage.textContent = window.__t("contacts.no_payment_targets");
           editContactEntries.appendChild(emptyMessage);
           return;
         }
@@ -6169,7 +6181,7 @@
         const btn = document.getElementById("payOfferBtn");
 
         if (!/^0[23][0-9a-f]{64}$/i.test(nodeId)) {
-          setStatus("Invalid Lightning node ID.", "error");
+          setStatus(window.__t("toast.invalid_node_id"), "error");
           return;
         }
 
@@ -6180,12 +6192,11 @@
 
         btn.disabled = true;
         const oldText = btn.textContent;
-        btn.textContent = "Sending Keysend...";
+        btn.textContent = window.__t("history.keysend");
         setStatus(
-          `Sending Keysend to ${nodeId.slice(0, 18)}…`,
+          `${window.__t("toast.sending_keysend")} ${nodeId.slice(0, 18)}…`,
           "warn",
         );
-
         try {
           const response = await fetch("/api/pay-keysend", {
             method: "POST",
@@ -6204,7 +6215,7 @@
           const parsed = safeJsonParse(data?.raw_output);
 
           renderSuccessOutput(
-            "Keysend sent",
+            window.__t("pay.summary.keysend_sent"),
             [
               amountSat ? `⚡ ${formatSats(amountSat)}` : "",
               `🔑 ${nodeId}`,
@@ -6215,7 +6226,7 @@
             parsed || { raw_output: data?.raw_output || "" },
           );
 
-          setStatus("Keysend payment sent.");
+          setStatus(window.__t("toast.keysend_sent"));
         } catch (error) {
           const message = errorToMessage(error);
           setStatus(`Fehler: ${message}`, "error", true);
@@ -6929,6 +6940,7 @@
 
             "contacts.payment_targets": "Zahlungsziele",
             "contacts.add_payment_target": "+ Zahlungsziel hinzufügen",
+            "contacts.no_payment_targets": "Noch keine Zahlungsziele vorhanden.",
 
             "contacts.label_optional": "Bezeichnung (optional)",
 
@@ -6962,10 +6974,20 @@
             "toast.invoice_paid": "BOLT11-Rechnung erfolgreich bezahlt.",
             "toast.invoice_amount_info":
               "Hinweis: Betrag wird aus der Rechnung übernommen.",
+            "toast.bolt11_contact_unavailable":
+              "BOLT11-Rechnungen sind nur einmal verwendbar und können nicht als Kontakte gespeichert werden.",
+            "toast.invalid_node_id":
+              "Ungültige Lightning Node ID.",
+            "toast.sending_keysend":
+              "Sende Keysend an",
+            "toast.keysend_sent":
+              "Keysend-Zahlung erfolgreich gesendet.",
+            "pay.summary.keysend_sent":
+              "Keysend gesendet",
             "toast.enter_target":
-              "Bitte Offer, Invoice oder Lightning Address eingeben.",
+              "Bitte Offer, Invoice, Lightning Address oder Node ID eingeben.",
             "toast.unknown_payment_format":
-              "Unbekanntes Zahlungsformat. Erwartet: BOLT12, BOLT11 oder LNURL.",
+              "Unbekanntes Zahlungsformat. Erwartet: BOLT12, BOLT11, LNURL, Lightning Address oder Node ID.",
             "toast.enter_lightning_or_bip353":
               "Bitte eine Lightning Address oder BIP353-Adresse eingeben.",
             "toast.checking_and_paying": "Prüfe und bezahle:",
@@ -7281,6 +7303,7 @@
 
             "contacts.payment_targets": "Payment Targets",
             "contacts.add_payment_target": "+ Add Payment Target",
+            "contacts.no_payment_targets": "No payment targets yet.",
 
             "contacts.label_optional": "Label (optional)",
 
@@ -7313,10 +7336,20 @@
             "toast.invoice_paid": "BOLT11 invoice paid successfully.",
             "toast.invoice_amount_info":
               "Note: amount is taken from the invoice.",
+            "toast.bolt11_contact_unavailable":
+              "BOLT11 invoices are single-use and cannot be saved as contacts.",
+            "toast.invalid_node_id":
+              "Invalid Lightning node ID.",
+            "toast.sending_keysend":
+              "Sending Keysend to",
+            "toast.keysend_sent":
+              "Keysend payment sent successfully.",
+            "pay.summary.keysend_sent":
+              "Keysend sent",
             "toast.enter_target":
-              "Please enter an offer, invoice or Lightning Address.",
+              "Please enter an offer, invoice, Lightning Address or Node ID.",
             "toast.unknown_payment_format":
-              "Unknown payment format. Expected: BOLT12, BOLT11 or LNURL.",
+              "Unknown payment format. Expected: BOLT12, BOLT11, LNURL, Lightning Address or Node ID.",
             "toast.enter_lightning_or_bip353":
               "Please enter a Lightning Address or BIP353 address.",
             "toast.checking_and_paying": "Checking and paying:",
