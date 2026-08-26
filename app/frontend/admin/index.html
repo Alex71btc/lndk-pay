@@ -500,6 +500,8 @@
         display: grid;
         gap: 12px;
         margin-top: 14px;
+        min-width: 0;
+        max-width: 100%;
       }
 
       .historyItem {
@@ -507,6 +509,9 @@
         background: #0c1322;
         border-radius: 14px;
         padding: 12px;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
       }
 
       .txMeta pre {
@@ -560,6 +565,9 @@
         font-weight: 600;
         color: var(--text-color);
         margin-top: 2px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        min-width: 0;
       }
 
       .txComment {
