@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+
+      <!-- DEFS -->
+
+      <!-- Contacts frame only. Add bolt.svg centered on top. -->
+
+      <rect
+            x="17.5"
+            y="7.5"
+            width="39"
+            height="49"
+            rx="6"
+            fill="none"
+            stroke="#F4F4FA"
+            stroke-width="2.8"
+            stroke-linejoin="round"
+      />
+
+      <!-- notebook spine -->
+      <line
+            x1="23.5"
+            y1="10.0"
+            x2="23.5"
+            y2="54.0"
+            stroke="#F4F4FA"
+            stroke-width="2.4"
+            stroke-linecap="round"
+      />
+
+      <!-- two rings -->
+      <line
+            x1="13.0"
+            y1="22"
+            x2="21.8"
+            y2="22"
+            stroke="#F4F4FA"
+            stroke-width="2.8"
+            stroke-linecap="round"
+      />
+
+      <line
+            x1="13.0"
+            y1="42"
+            x2="21.8"
+            y2="42"
+            stroke="#F4F4FA"
+            stroke-width="2.8"
+            stroke-linecap="round"
+      />
+
+      <!-- BOLT -->
+
+</svg>

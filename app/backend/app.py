@@ -338,7 +338,15 @@ CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(APP_DATA_DIR / "config.json")))
 SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
 DB_PATH = APP_DATA_DIR / "bolt12pay.db"
-
+CONTACT_ENTRY_TYPES = {
+    "lightning_address",
+    "bolt12",
+    "lnurl",
+    "bip353",
+    "nostr",
+    "node",
+    "other",
+}
 
 def init_db():
     APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -394,6 +402,50 @@ def init_db():
             raw_json TEXT
         )
     """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            alias TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contact_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            contact_id INTEGER NOT NULL,
+
+            type TEXT NOT NULL,
+            identifier TEXT NOT NULL,
+
+            label TEXT NOT NULL DEFAULT '',
+
+            is_default INTEGER NOT NULL DEFAULT 0,
+
+            created_at INTEGER NOT NULL,
+
+            FOREIGN KEY(contact_id) REFERENCES contacts(id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_contact_entries_identifier
+        ON contact_entries(identifier)
+    """)
+    try:
+        conn.execute("""
+            ALTER TABLE contact_entries
+            ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0
+        """)
+    except sqlite3.OperationalError:
+        pass
+
     try:
         conn.execute("ALTER TABLE tx_history ADD COLUMN method TEXT")
     except sqlite3.OperationalError:
@@ -492,22 +544,64 @@ def _log_tx(
         "raw_json": raw_json or {},
     })
 
-def list_tx_history(limit: int = 200):
+def list_tx_history(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+):
+    safe_limit = max(1, min(int(limit or 50), 200))
+    safe_offset = max(0, int(offset or 0))
+    search_value = str(search or "").strip().lower()
+
+    where_sql = ""
+    params: list[Any] = []
+
+    if search_value:
+        pattern = f"%{search_value}%"
+
+        where_sql = """
+            WHERE (
+                LOWER(COALESCE(tx_history.counterparty, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.identifier, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.memo, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.payment_hash, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.method, '')) LIKE ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM contact_entries
+                    JOIN contacts
+                      ON contacts.id = contact_entries.contact_id
+                    WHERE
+                        LOWER(COALESCE(contacts.alias, '')) LIKE ?
+                        AND LOWER(TRIM(contact_entries.identifier)) IN (
+                            LOWER(TRIM(COALESCE(tx_history.counterparty, ''))),
+                            LOWER(TRIM(COALESCE(tx_history.identifier, '')))
+                        )
+                )
+            )
+        """
+
+        params.extend([pattern] * 6)
+
+    params.extend([safe_limit, safe_offset])
+
     with _db_conn() as conn:
         rows = conn.execute(
-            """
-            SELECT *
+            f"""
+            SELECT tx_history.*
             FROM tx_history
+            {where_sql}
             ORDER BY created_at DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (limit,),
+            params,
         ).fetchall()
 
     items = []
 
     for row in rows:
         item = dict(row)
+
         if item["raw_json"]:
             item["raw_json"] = json.loads(item["raw_json"])
 
@@ -577,6 +671,197 @@ def list_offer_history(limit: int = 50):
         item["bip353_aliases"] = list_history_bip353(item["id"])
 
     return items
+
+def create_contact(alias: str = "", notes: str = "") -> int:
+    now = int(time.time())
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO contacts (
+            alias,
+            notes,
+            created_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            alias,
+            notes,
+            now,
+            now,
+        ),
+    )
+
+    contact_id = cur.lastrowid
+
+    conn.commit()
+    conn.close()
+
+    return contact_id
+
+def add_contact_entry(
+    contact_id: int,
+    entry_type: str,
+    identifier: str,
+    label: str = "",
+    is_default: bool = False,
+):
+    if entry_type not in CONTACT_ENTRY_TYPES:
+        raise ValueError(f"Unknown contact entry type: {entry_type}")
+
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute(
+        """
+        INSERT INTO contact_entries (
+            contact_id,
+            type,
+            identifier,
+            label,
+            is_default,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            contact_id,
+            entry_type,
+            identifier,
+            label,
+            int(bool(is_default)),
+            int(time.time()),
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+def list_contact_entries(contact_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    rows = conn.execute(
+        """
+        SELECT
+            id,
+            type,
+            identifier,
+            label,
+            is_default,
+            created_at
+        FROM contact_entries
+        WHERE contact_id = ?
+        ORDER BY created_at
+        """,
+        (contact_id,),
+    ).fetchall()
+
+    conn.close()
+
+    return [
+        {
+            "id": row["id"],
+            "type": row["type"],
+            "identifier": row["identifier"],
+            "label": row["label"],
+            "isDefault": bool(row["is_default"]),
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+def list_contacts():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    rows = conn.execute(
+        """
+        SELECT
+            id,
+            alias,
+            notes,
+            created_at,
+            updated_at
+        FROM contacts
+        ORDER BY
+            CASE
+                WHEN alias = '' THEN 1
+                ELSE 0
+            END,
+            LOWER(alias),
+            created_at
+        """
+    ).fetchall()
+
+    conn.close()
+
+    contacts = [dict(row) for row in rows]
+
+    for contact in contacts:
+        contact["entries"] = list_contact_entries(contact["id"])
+
+    return contacts
+
+def update_contact(
+    contact_id: int,
+    alias: str,
+    notes: str,
+):
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute(
+        """
+        UPDATE contacts
+        SET
+            alias = ?,
+            notes = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            alias,
+            notes,
+            int(time.time()),
+            contact_id,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def delete_contact_entries(contact_id: int):
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute(
+        """
+        DELETE FROM contact_entries
+        WHERE contact_id = ?
+        """,
+        (contact_id,),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def delete_contact(contact_id: int):
+    conn = sqlite3.connect(DB_PATH)
+
+    conn.execute(
+        """
+        DELETE FROM contacts
+        WHERE id = ?
+        """,
+        (contact_id,),
+    )
+
+    conn.commit()
+    conn.close()
 
 def get_offer_history_item(item_id: str):
     with _db_conn() as conn:
@@ -915,6 +1200,15 @@ class PayBolt11Request(BaseModel):
         min_length=10,
         description="BOLT11 invoice like lnbc...",
     )
+
+class PayKeysendRequest(BaseModel):
+    node_id: str = Field(
+        min_length=66,
+        max_length=66,
+        description="Compressed Lightning node public key",
+    )
+    amount_sat: int = Field(ge=1, description="Amount to pay in sats")
+    message: Optional[str] = Field(default=None, max_length=300)
 
 class PayOfferRequest(BaseModel):
     offer: str = Field(
@@ -1999,6 +2293,179 @@ async def _pay_bolt11_invoice(
     )
     return payment_data
 
+async def _pay_keysend(
+    *,
+    node_id: str,
+    amount_sat: int,
+    message: str = "",
+    fee_limit_sat: int = 5000,
+    origin: str = "web",
+) -> dict[str, Any]:
+    node_id = node_id.strip().lower()
+
+    if not re.fullmatch(r"0[23][0-9a-f]{64}", node_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Lightning node public key.",
+        )
+
+    preimage = secrets.token_bytes(32)
+    payment_hash = hashlib.sha256(preimage).digest()
+
+    macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
+
+    headers = {
+        "Grpc-Metadata-macaroon": macaroon_hex,
+        "Content-Type": "application/json",
+    }
+
+    custom_records = {
+        "5482373484": base64.b64encode(preimage).decode("ascii"),
+    }
+
+    if message:
+        custom_records[KEYSEND_MESSAGE_RECORD] = base64.b64encode(
+            message.encode("utf-8"),
+        ).decode("ascii")
+
+    payload = {
+        "dest": base64.b64encode(bytes.fromhex(node_id)).decode("ascii"),
+        "amt": str(amount_sat),
+        "payment_hash": base64.b64encode(payment_hash).decode("ascii"),
+        "fee_limit_sat": str(fee_limit_sat),
+        "timeout_seconds": 60,
+        "dest_custom_records": custom_records,
+    }
+
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=LND_REST_TIMEOUT,
+            verify=verify,
+        ) as client:
+            response = await client.post(
+                f"{LND_REST_URL}/v2/router/send",
+                headers=headers,
+                json=payload,
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LND REST keysend failed: {exc}",
+        ) from exc
+
+    raw_text = (response.text or "").strip()
+
+    payment_data = None
+
+    for line in raw_text.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        try:
+            item = json.loads(line)
+        except Exception:
+            continue
+
+        if isinstance(item, dict) and isinstance(item.get("result"), dict):
+            payment_data = item["result"]
+        elif isinstance(item, dict):
+            payment_data = item
+
+    if not isinstance(payment_data, dict):
+        raise HTTPException(
+            status_code=502,
+            detail=f"LND REST keysend returned unexpected response: {raw_text[:300]}",
+        )
+
+    error_obj = (
+        payment_data.get("error")
+        if isinstance(payment_data.get("error"), dict)
+        else {}
+    )
+
+    message_text = (
+        payment_data.get("message")
+        or error_obj.get("message")
+        or ""
+    )
+
+    failure_reason = (
+        payment_data.get("failure_reason")
+        or payment_data.get("failureReason")
+        or ""
+    )
+
+    combined_error = (
+        f"{message_text} {failure_reason} {raw_text}"
+        .strip()
+        .lower()
+    )
+
+    if "self payment" in combined_error or "self-payments not allowed" in combined_error:
+        raise HTTPException(
+            status_code=400,
+            detail="Selbstzahlungen sind nicht erlaubt.",
+        )
+
+    if "no route" in combined_error:
+        raise HTTPException(
+            status_code=400,
+            detail="Keine Route gefunden.",
+        )
+
+    if "insufficient balance" in combined_error:
+        raise HTTPException(
+            status_code=400,
+            detail="Nicht genügend Guthaben.",
+        )
+
+    if "timeout" in combined_error:
+        raise HTTPException(
+            status_code=400,
+            detail="Zahlung hat zu lange gedauert.",
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=message_text or failure_reason or raw_text,
+        )
+
+    status = str(payment_data.get("status") or "").upper()
+
+    if status in {"FAILED", "FAILURE"}:
+        raise HTTPException(
+            status_code=400,
+            detail=failure_reason or "Keysend-Zahlung fehlgeschlagen.",
+        )
+
+    _log_tx(
+        payment_hash=payment_data.get(
+            "payment_hash",
+            payment_hash.hex(),
+        ),
+        direction="outgoing",
+        tx_type="payment",
+        method="keysend",
+        counterparty=node_id,
+        origin=origin,
+        amount_sat=int(
+            payment_data.get("value_sat")
+            or amount_sat
+        ),
+        fee_sat=int(payment_data.get("fee_sat") or 0),
+        status="settled",
+        memo=message,
+        identifier=node_id,
+        settled_at=str(int(time.time())),
+        raw_json=payment_data,
+    )
+
+    return payment_data
 
 async def _resolve_lnurl_invoice(
     *,
@@ -2601,7 +3068,7 @@ async def lnurl_callback(
         amount_sat=amount_sat,
         memo=memo,
         description_hash=description_hash_b64,
-        method="lnurl",
+        method="zap" if zap_request_event else "lightning_address",
         counterparty=alias["identifier"],
     )
 
@@ -2797,6 +3264,7 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
     )
 
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
+
 @app.post("/api/pay-address", response_model=PayOfferResponse)
 async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> PayOfferResponse:
     require_pay_auth(request)
@@ -2824,7 +3292,7 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
             fee_sat=None,
             status="settled",
             memo=payload.payer_note or "",
-            identifier=normalized_offer,
+            identifier=target,
             settled_at=str(int(time.time())),
             raw_json={
                 "mode": "bip353",
@@ -2906,6 +3374,40 @@ async def pay_bolt11(payload: PayBolt11Request, request: StarletteRequest) -> Pa
 
     return PayOfferResponse(
         resolved_offer=invoice,
+        raw_output=raw_output,
+    )
+
+@app.post("/api/pay-keysend", response_model=PayOfferResponse)
+async def pay_keysend(
+    payload: PayKeysendRequest,
+    request: StarletteRequest,
+) -> PayOfferResponse:
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    node_id = payload.node_id.strip().lower()
+    message = (payload.message or "").strip()
+
+    result = await _pay_keysend(
+        node_id=node_id,
+        amount_sat=payload.amount_sat,
+        message=message,
+    )
+
+    raw_output = json.dumps(
+        {
+            "mode": "keysend",
+            "node_id": node_id,
+            "amount_sat": payload.amount_sat,
+            "message": message,
+            "payment_result": result,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return PayOfferResponse(
+        resolved_offer=node_id,
         raw_output=raw_output,
     )
 
@@ -5890,16 +6392,31 @@ async def api_debug_invoices(request: StarletteRequest):
 @app.get("/api/debug/tx-history")
 def debug_tx_history(request: StarletteRequest):
     require_pay_auth(request)
-    return list_tx_history()
+    return list_tx_history(limit=200)
 
 @app.get("/api/debug/payments")
 async def api_debug_payments():
     return await _list_payments()
 
 @app.get("/api/tx-history")
-def api_get_tx_history(request: StarletteRequest):
+def api_get_tx_history(
+    request: StarletteRequest,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    q: str = Query(default="", max_length=300),
+):
     require_pay_auth(request)
-    return {"items": list_tx_history()}
+
+    items = list_tx_history(
+        limit=limit,
+        offset=offset,
+        search=q,
+    )
+
+    return {
+        "items": items,
+        "has_more": len(items) == limit,
+    }
 
 @app.post("/api/admin/sync-tx-history")
 async def api_sync_tx_history(request: StarletteRequest):
@@ -5912,6 +6429,150 @@ async def api_sync_tx_history(request: StarletteRequest):
         "ok": True,
         "imported": count,
         "changed": bool(count),
+    }
+
+
+# ============================================================================
+# Contacts
+# ============================================================================
+
+@app.get("/api/contacts")
+async def api_contacts():
+    return {
+        "contacts": list_contacts()
+    }
+
+@app.post("/api/contacts")
+async def api_create_contact(payload: dict, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    entries = payload.get("entries") or []
+    prepared_entries = []
+    default_assigned = False
+
+    for entry in entries:
+        identifier = str(entry.get("identifier") or "").strip()
+
+        if not identifier:
+            continue
+
+        requested_default = bool(entry.get("isDefault", False))
+        is_default = requested_default and not default_assigned
+
+        if is_default:
+            default_assigned = True
+
+        prepared_entries.append({
+            "type": str(entry.get("type") or "other"),
+            "identifier": identifier,
+            "label": str(entry.get("label") or "").strip(),
+            "is_default": is_default,
+        })
+
+    if not prepared_entries:
+        raise HTTPException(
+            status_code=400,
+            detail="at least one valid entry required",
+        )
+
+    if not default_assigned:
+        prepared_entries[0]["is_default"] = True
+
+    contact_id = create_contact(
+        alias=str(payload.get("alias") or "").strip(),
+        notes=str(payload.get("notes") or "").strip(),
+    )
+
+    for entry in prepared_entries:
+        add_contact_entry(
+            contact_id=contact_id,
+            entry_type=entry["type"],
+            identifier=entry["identifier"],
+            label=entry["label"],
+            is_default=entry["is_default"],
+        )
+
+    return {
+        "ok": True,
+        "contact_id": contact_id,
+    }
+
+@app.put("/api/contacts/{contact_id}")
+async def api_update_contact(
+    contact_id: int,
+    payload: dict,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    entries = payload.get("entries") or []
+    prepared_entries = []
+    default_assigned = False
+
+    for entry in entries:
+        identifier = str(entry.get("identifier") or "").strip()
+
+        if not identifier:
+            continue
+
+        requested_default = bool(entry.get("isDefault", False))
+        is_default = requested_default and not default_assigned
+
+        if is_default:
+            default_assigned = True
+
+        prepared_entries.append({
+            "type": str(entry.get("type") or "other"),
+            "identifier": identifier,
+            "label": str(entry.get("label") or "").strip(),
+            "is_default": is_default,
+        })
+
+    if not prepared_entries:
+        raise HTTPException(
+            status_code=400,
+            detail="at least one valid entry required",
+        )
+
+    if not default_assigned:
+        prepared_entries[0]["is_default"] = True
+
+    update_contact(
+        contact_id=contact_id,
+        alias=str(payload.get("alias") or "").strip(),
+        notes=str(payload.get("notes") or "").strip(),
+    )
+
+    delete_contact_entries(contact_id)
+
+    for entry in prepared_entries:
+        add_contact_entry(
+            contact_id=contact_id,
+            entry_type=entry["type"],
+            identifier=entry["identifier"],
+            label=entry["label"],
+            is_default=entry["is_default"],
+        )
+
+    return {
+        "ok": True,
+    }
+
+@app.delete("/api/contacts/{contact_id}")
+async def api_delete_contact(
+    contact_id: int,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    delete_contact_entries(contact_id)
+    delete_contact(contact_id)
+
+    return {
+        "ok": True,
     }
 
 @app.get("/api/history")

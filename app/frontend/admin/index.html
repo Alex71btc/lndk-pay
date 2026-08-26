@@ -241,6 +241,32 @@
         border-color: var(--border);
       }
 
+      .contactSearchInput {
+        max-width: 380px;
+        height: 38px;
+        padding-left: 42px !important;
+        padding-right: 34px !important;
+        font-size: 14px !important;
+        transition:
+          border-color .15s ease,
+          box-shadow .15s ease;
+      }
+
+      .contactSearchInput:focus {
+          border-color: rgba(255,255,255,.38);
+          box-shadow:
+              0 0 0 1px rgba(255,255,255,.08);
+          outline: none;
+      }
+
+      .contactSearchHighlight {
+        background: rgba(255,255,255,.08);
+        color: #fff;
+        font-weight: 700;
+        border-radius: 4px;
+        padding: 0 2px;
+      }
+
       button.danger {
         background: transparent;
         color: var(--danger);
@@ -256,6 +282,71 @@
         background: var(--panel2);
         color: var(--text);
         font-size: 1rem;
+      }
+
+      .payInputRow {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .payInputRow input {
+        flex: 1;
+      }
+
+      #contactPickerBtn {
+          width: 52px;
+          height: 52px;
+          padding: 0;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+      }
+
+      .contactButtonIcon {
+          width: 48px;
+          height: 48px;
+          display: block;
+      }
+
+      #contactPickerBtn:hover {
+            background: rgba(255, 255, 255, 0.05);
+      }
+
+      .contactAction {
+        cursor: pointer;
+        user-select: none;
+        transition: color .15s ease;
+      }
+
+      .contactActionEdit {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .contactActionEdit:hover {
+        color: var(--accent);
+      }
+
+      .contactActionDelete {
+        color: var(--muted);
+        font-weight: 400;
+      }
+
+      .contactActionDelete:hover {
+        color: #d86c6c;
+      }
+      .contactCard {
+        margin-top: 10px;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: rgba(255,255,255,.02);
       }
 
       textarea {
@@ -330,11 +421,11 @@
         overflow: auto;
         white-space: pre-wrap;
       }
+
       .txMethodIcon {
-          width: 14px;
-          height: 14px;
-          vertical-align: -2px;
-          margin-right: 4px;
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
       }
 
       .txExpandHint {
@@ -465,11 +556,62 @@
         font-size: 13px;
       }
 
+      .txTarget {
+        font-weight: 600;
+        color: var(--text-color);
+        margin-top: 2px;
+      }
+
+      .txComment {
+        font-size: 0.9em;
+        opacity: 0.8;
+      }
+
       .txWallet {
         font-size: 0.95rem;
         font-weight: 600;
         color: var(--text-secondary);
         margin-top: 4px;
+      }
+
+      .txContact {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        margin-left: 8px;
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+
+
+      .txContactIcon {
+          width: 28px;
+          height: 28px;
+          flex-shrink: 0;
+      }
+
+      .txContactExisting span:last-child {
+          color: var(--text);
+          font-weight: 600;
+      }
+
+      .txContact img {
+        flex-shrink: 0;
+      }
+
+      .txContactExisting {
+        cursor: pointer;
+      }
+
+      .txContactAdd {
+        cursor: pointer;
+        color: var(--accent);
+      }
+
+      .txContactExisting:hover,
+      .txContactAdd:hover {
+        text-decoration: underline;
       }
 
       .emptyState {
@@ -571,6 +713,26 @@
           margin-bottom: 10px !important;
         }
       }
+
+      .sectionTitle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+      }
+
+      .sectionIcon[src$="nwc.png"] {
+          width: 25px;
+          height: 25px;
+      }
+
+      .sectionIcon,
+      .txMethodIcon {
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
+            vertical-align: middle;
+      }
+
 
       .langSwitch {
         position: absolute;
@@ -700,11 +862,28 @@
               >Offer, Invoice oder Lightning Address</span
             ></label
           >
-          <input
-            id="payOfferInput"
-            type="text"
-            placeholder="lno... oder lnbc... oder name@domain"
-          />
+      <div class="payInputRow">
+        <input
+          id="payOfferInput"
+          type="text"
+          placeholder="lno... oder lnbc... oder name@domain"
+        />
+
+      <button
+        id="contactPickerBtn"
+        class="secondary"
+        type="button"
+        title="Contacts"
+        data-i18n-title="contacts.title"
+      >
+        <img
+          src="/assets/icons/contacts.svg"
+          class="contactButtonIcon"
+          alt=""
+          aria-hidden="true"
+        />
+      </button>
+      </div>
 
           <div
             id="payLivePreview"
@@ -955,22 +1134,61 @@
         </section>
       </div>
 
-      <details class="section">
-       <summary>
-        <span data-i18n="title.lightning_activity">
-          ⚡ Lightning Activity
-        </span>
-       </summary>
+      <details class="section" id="txHistorySection">
+        <summary>
+          <span class="sectionTitle">
+            <img
+              src="/assets/icons/bolt.svg"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span data-i18n="title.lightning_activity">
+              Lightning Activity
+            </span>
+          </span>
+        </summary>
 
-       <div id="txHistoryList" class="historyList"></div>
+      <div class="row" style="margin-top: 12px;">
+        <input
+          id="txHistorySearchInput"
+          type="search"
+          data-i18n-placeholder="history.search_placeholder"
+          placeholder="Transaktionen durchsuchen..."
+          autocomplete="off"
+        />
+      </div>
+
+      <div id="txHistoryList" class="historyList"></div>
+
+      <div class="row" style="margin-top: 12px;">
+        <button
+          id="loadMoreTxHistoryBtn"
+          class="secondary"
+          type="button"
+          data-i18n="history.load_more"
+        >
+          Ältere laden
+        </button>
+      </div>
      </details>
 
 
       <details class="section">
-        <summary>
-          <img src="/assets/icon.png" class="txMethodIcon">
-          <span data-i18n="title.offer_history">Generated Offers</span>
-       </summary>
+      <summary>
+            <span class="sectionTitle">
+                  <img
+                        src="/assets/icon.png"
+                        class="txMethodIcon"
+                        alt=""
+                        aria-hidden="true"
+                  />
+                  <span data-i18n="title.offer_history">
+                        Generated Offers
+                  </span>
+            </span>
+      </summary>
+
         <div class="row">
           <button class="secondary" id="clearHistoryBtn" type="button">
             <span data-i18n="btn.clear_history">History löschen</span>
@@ -981,7 +1199,17 @@
 
       <details class="section">
      <summary>
-       👤 <span data-i18n="title.nostr_identity">Nostr / Identity</span>
+      <span class="sectionTitle">
+        <img
+          src="/assets/icons/nostr.svg"
+          class="sectionIcon"
+          alt=""
+          aria-hidden="true"
+        />
+        <span data-i18n="title.nostr_identity">
+          Nostr / Identity
+        </span>
+      </span>
      </summary>
 
         <label class="label" for="identityAliasInput"
@@ -1133,9 +1361,19 @@
       </details>
 
       <details class="section">
-     <summary>
-       🔗 <span data-i18n="title.nwc_wallet">NWC / Zap Wallet</span>
-     </summary>
+        <summary>
+          <span class="sectionTitle">
+            <img
+              src="/assets/icons/nwc.png"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span data-i18n="title.nwc_wallet">
+              NWC / Zap Wallet
+            </span>
+          </span>
+        </summary>
 
         <label class="label" for="nwcNameInput"
           ><span data-i18n="label.nwc_name">Connection Name</span></label
@@ -1313,17 +1551,526 @@
                 <span data-i18n="btn.nwc_unlock">Unlock</span>
               </button>
               <button class="secondary" id="cancelNwcUnlockBtn" type="button">
-                Cancel
+                <span data-i18n="contacts.cancel">
+                  Cancel
+                </span>
               </button>
             </div>
           </div>
         </div>
       </details>
 
+      <div
+        id="saveContactModal"
+        class="scannerModal"
+        aria-hidden="true"
+        style="display:none"
+      >
+        <div class="scannerCard" style="width:min(520px,92vw)">
+
+      <h2
+        style="
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 0;
+        "
+      >
+        <img
+          src="/assets/icons/contacts.svg"
+          class="sectionIcon"
+          alt=""
+          aria-hidden="true"
+        />
+       <span data-i18n="contacts.save_title">
+          Save Contact
+       </span>
+       </h2>
+          <label class="label" style="margin-top:16px">
+            Identifier
+          </label>
+
+          <input
+            id="saveContactIdentifier"
+            type="text"
+            readonly
+          />
+
+          <label class="label" style="margin-top:14px">
+            Type
+          </label>
+
+          <select id="saveContactType">
+            <option value="lightning_address">Lightning Address</option>
+            <option value="bip353">BIP353 Address</option>
+            <option value="bolt12">BOLT12 Offer</option>
+            <option value="lnurl">LNURL</option>
+            <option value="node">Node ID (Keysend)</option>
+            <option value="nostr">Nostr npub</option>
+          </select>
+
+          <label class="label" style="margin-top:14px">
+            Name
+          </label>
+
+          <input
+            id="saveContactAlias"
+            type="text"
+            placeholder="Alice"
+          />
+
+          <label class="label" style="margin-top:14px">
+            Notes
+          </label>
+
+          <textarea
+            id="saveContactNotes"
+            rows="3"
+            placeholder="optional"
+          ></textarea>
+
+          <div class="row" style="margin-top:18px">
+            <button
+              class="secondary"
+              id="cancelSaveContactBtn"
+              type="button"
+            >
+              <span data-i18n="contacts.cancel">
+                Cancel
+              </span>
+            </button>
+
+            <button
+              id="confirmSaveContactBtn"
+              type="button"
+            >
+              Save
+            </button>
+          </div>
+
+        </div>
+      </div>
+      <div
+        id="deleteContactModal"
+        class="scannerModal"
+        aria-hidden="true"
+        style="display:none"
+      >
+        <div class="scannerCard" style="width:min(460px,92vw)">
+
+          <h2
+            style="
+              display:flex;
+              align-items:center;
+              gap:10px;
+              margin:0;
+            "
+          >
+            <img
+              src="/assets/icons/contacts.svg"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span data-i18n="contacts.delete_title">
+              Delete Contact
+            </span>            
+          </h2>
+
+          <p
+            id="deleteContactMessage"
+            style="
+              margin-top:20px;
+              line-height:1.5;
+              color:var(--text);
+            "
+          >
+            <span data-i18n="contacts.delete_text">
+              Delete contact?
+            </span>
+          </p>
+          <p
+            style="
+              margin-top:18px;
+              margin-bottom:8px;
+              color:var(--muted);
+            "
+          >
+            <span data-i18n="contacts.delete_warning">
+              This will permanently delete:
+            </span>
+          </p>
+
+          <div
+            style="
+              margin-top:0;
+              padding:14px;
+              border:1px solid var(--border-color);
+              border-radius:10px;
+              background:rgba(255,255,255,.02);
+            "
+          >
+            <div
+              style="
+                color:var(--muted);
+                line-height:1.6;
+              "
+            >
+              • <span data-i18n="contacts.delete_contact">
+                  Contact
+                </span><br />
+              • <span data-i18n="contacts.delete_targets">
+                  All payment targets
+                </span>
+            </div>
+
+            <div
+              style="
+                margin-top:14px;
+                color:#d86c6c;
+                font-size:14px;
+              "
+            >
+            <span data-i18n="contacts.delete_irreversible">
+               This action cannot be undone.
+            </span>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:22px">
+            <button
+              class="secondary"
+              id="cancelDeleteContactBtn"
+              type="button"
+            >
+              <span data-i18n="contacts.cancel">
+                Cancel
+              </span>
+            </button>
+
+            <button
+              id="confirmDeleteContactBtn"
+              type="button"
+              style="
+                background:#b54343;
+                border-color:#b54343;
+              "
+            >
+              Delete
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <div
+        id="editContactModal"
+        class="scannerModal"
+        aria-hidden="true"
+        style="display:none"
+      >
+        <div class="scannerCard" style="width:min(520px,92vw)">
+
+          <h2
+            style="
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin: 0;
+            "
+          >
+            <img
+              src="/assets/icons/contacts.svg"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span data-i18n="contacts.edit_title">
+              Edit Contact
+          </span>
+          </h2>
+
+          <label class="label" style="margin-top:14px">
+            <span data-i18n="contacts.name">Name</span>
+          </label>
+
+          <input
+            id="editContactAlias"
+            type="text"
+          />
+
+          <label class="label" style="margin-top:14px">
+            <span data-i18n="contacts.notes">Notes</span>
+          </label>
+
+          <textarea
+            id="editContactNotes"
+            rows="3"
+          ></textarea>
+
+          <div
+            style="
+              margin-top:18px;
+              border-top:1px solid var(--border-color);
+              padding-top:18px;
+            "
+          >
+            <div
+              class="label"
+              style="margin-bottom:10px"
+            >
+              <span data-i18n="contacts.payment_targets">
+                Payment Targets
+              </span>
+            </div>
+
+           <div
+             id="editContactEntries"
+             style="
+               max-height:320px;
+               overflow-y:auto;
+               padding-right:6px;
+             "
+           ></div>
+
+            <button
+              class="secondary"
+              id="addContactEntryBtn"
+              type="button"
+              style="margin-top:12px"
+            >
+            <span data-i18n="contacts.add_payment_target">
+              + Add Payment Target
+            </span>
+            </button>
+          </div>
+
+          <div
+            class="row"
+            style="
+              margin-top:18px;
+              display:flex;
+              justify-content:space-between;
+              gap:12px;
+            "
+          >
+            <button
+              class="secondary"
+              id="closeEditContactBtn"
+              type="button"
+            >
+              <span data-i18n="btn.close">
+                Close
+              </span>
+            </button>
+
+            <button
+              id="saveEditContactBtn"
+              type="button"
+            >
+              <span data-i18n="contacts.save">
+                Save
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        id="contactsModal"
+        class="scannerModal"
+        aria-hidden="true"
+        style="display: none"
+      >
+        <div class="scannerCard" style="width: min(700px, 92vw)">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 16px;
+            "
+          >
+            <h2
+              style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin: 0;
+              "
+            >
+              <img
+                src="/assets/icons/contacts.svg"
+                class="sectionIcon"
+                alt=""
+                aria-hidden="true"
+              />
+              <span data-i18n="contacts.title">Contacts</span>
+            </h2>
+
+            <button
+              class="secondary"
+              id="closeContactsBtn"
+              type="button"
+              aria-label="Close contacts"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            id="currentContactCandidate"
+            style="display: none; margin-top: 18px"
+          >
+            <div
+              id="currentContactIdentifier"
+              class="hint"
+              style="
+                font-size: 15px;
+                overflow-wrap: anywhere;
+              "
+            ></div>
+
+            <div class="row" style="margin-top: 12px">
+              <button
+                id="saveCurrentContactBtn"
+                class="secondary"
+                type="button"
+              >
+                💾 Save as new contact
+              </button>
+            </div>
+
+            <div
+              id="currentContactStatus"
+              class="hint"
+              style="
+                display: none;
+                margin-top: 12px;
+                font-size: 15px;
+              "
+            ></div>
+
+            <hr style="margin: 18px 0" />
+          </div>
+
+          <div
+            style="
+              display:flex;
+              align-items:center;
+              justify-content:space-between;
+              gap:16px;
+              margin-bottom:14px;
+            "
+          >
+            <div
+              style="
+                position:relative;
+                flex:0 1 420px;
+              "
+            >
+              <img
+                src="/assets/icons/search.svg"
+                alt=""
+                aria-hidden="true"
+                style="
+                  position:absolute;
+                  top:50%;
+                  transform:translateY(-50%);
+                  opacity:1;
+                  left:11px;
+                  width:21px;
+                  height:21px;
+                  opacity:1;
+                  filter:drop-shadow(0 0 2px rgba(255,255,255,.22));
+                  pointer-events:none;
+                "
+              />
+
+              <input
+                id="contactSearchInput"
+                class="contactSearchInput"
+                type="text"
+                data-i18n-placeholder="contacts.search"
+                style="
+                  width:100%;
+                  height:38px;
+                  padding-left:40px;
+                  padding-right:34px;
+                  font-size:14px;
+                "
+              />
+
+              <button
+                id="clearContactSearchBtn"
+                type="button"
+                style="
+                  display:none;
+                  position:absolute;
+                  right:10px;
+                  top:50%;
+                  transform:translateY(-50%);
+                  border:none;
+                  background:none;
+                  color:var(--muted);
+                  cursor:pointer;
+                  font-size:15px;
+                  padding:0;
+                  line-height:1;
+                "
+              >
+                ×
+              </button>
+            </div>
+
+            <button
+              class="secondary"
+              id="newContactBtn"
+              type="button"
+              style="
+                white-space:nowrap;
+                flex-shrink:0;
+              "
+            >
+              <span data-i18n="contacts.new">New Contact</span>
+            </button>
+          </div>
+          <div
+            id="contactsList"
+            class="historyList"
+            style="
+              max-height: 420px;
+              overflow: auto;
+            "
+          >
+            Loading...
+          </div>
+
+          <div class="row" style="margin-top: 16px">
+            <button
+              class="secondary"
+              id="closeContactsBottomBtn"
+              type="button"
+            >
+              <span data-i18n="btn.close">Close</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <details class="section">
-       <summary>
-         🌐 <span data-i18n="title.alias_cloudflare">Alias / Cloudflare BIP353</span>
-       </summary>
+        <summary>
+          <span class="sectionTitle">
+            <img
+              src="/assets/icons/cloudflare.svg"
+              class="sectionIcon"
+              alt=""
+              aria-hidden="true"
+            />
+            <span data-i18n="title.alias_cloudflare">
+              Alias / Cloudflare BIP353
+            </span>
+          </span>
+        </summary>
 
         <label class="label" for="cfRecordNameInput" style="margin-top: 14px"
           ><span data-i18n="label.record_name">Record Name</span></label
@@ -1528,6 +2275,82 @@
       const nostrNotifyPubkey = document.getElementById("nostrNotifyPubkey");
 
       // ------------------------------------------------------------------
+      // Contacts DOM references
+      // ------------------------------------------------------------------
+
+      const saveContactModal = document.getElementById(
+        "saveContactModal",
+      );
+
+      const saveContactIdentifier = document.getElementById(
+        "saveContactIdentifier",
+      );
+
+      const saveContactType = document.getElementById(
+        "saveContactType",
+      );
+
+      const saveContactAlias = document.getElementById(
+        "saveContactAlias",
+      );
+
+      const saveContactNotes = document.getElementById(
+        "saveContactNotes",
+      );
+
+      const confirmSaveContactBtn = document.getElementById(
+        "confirmSaveContactBtn",
+      );
+
+      const cancelSaveContactBtn = document.getElementById(
+        "cancelSaveContactBtn",
+      );
+
+      const deleteContactModal = document.getElementById(
+        "deleteContactModal",
+      );
+
+      const deleteContactMessage = document.getElementById(
+        "deleteContactMessage",
+      );
+
+      const cancelDeleteContactBtn = document.getElementById(
+        "cancelDeleteContactBtn",
+      );
+
+      const confirmDeleteContactBtn = document.getElementById(
+        "confirmDeleteContactBtn",
+      );
+
+      const editContactModal = document.getElementById(
+        "editContactModal",
+      );
+
+      const editContactAlias = document.getElementById(
+        "editContactAlias",
+      );
+
+      const editContactEntries = document.getElementById(
+        "editContactEntries",
+      );
+
+      const addContactEntryBtn = document.getElementById(
+        "addContactEntryBtn",
+      );
+
+      const editContactNotes = document.getElementById(
+        "editContactNotes",
+      );
+
+      const closeEditContactBtn = document.getElementById(
+        "closeEditContactBtn",
+      );
+
+      const saveEditContactBtn = document.getElementById(
+        "saveEditContactBtn",
+      );
+
+      // ------------------------------------------------------------------
       // NWC DOM references
       // ------------------------------------------------------------------
 
@@ -1578,6 +2401,44 @@
       const scannerReader = document.getElementById("scannerReader");
       const scannerTitle = document.getElementById("scannerTitle");
 
+      const contactPickerBtn = document.getElementById("contactPickerBtn");
+      const contactsModal = document.getElementById("contactsModal");
+      const contactsList = document.getElementById("contactsList");
+
+      const contactSearchInput = document.getElementById(
+        "contactSearchInput",
+      );
+
+      const clearContactSearchBtn = document.getElementById(
+        "clearContactSearchBtn",
+      );
+
+      const currentContactCandidate = document.getElementById(
+        "currentContactCandidate",
+      );
+
+      const currentContactIdentifier = document.getElementById(
+        "currentContactIdentifier",
+      );
+
+      const currentContactStatus = document.getElementById(
+        "currentContactStatus",
+      );
+
+      const saveCurrentContactBtn = document.getElementById(
+        "saveCurrentContactBtn",
+      );
+
+      const closeContactsBtn = document.getElementById("closeContactsBtn");
+      const closeContactsBottomBtn = document.getElementById(
+        "closeContactsBottomBtn",
+      );
+
+      const newContactBtn = document.getElementById(
+        "newContactBtn",
+      );
+
+
       document
         .getElementById("createNwcConnectionBtn")
         ?.addEventListener("click", createNwcConnection);
@@ -1592,6 +2453,199 @@
       nwcQrBox?.addEventListener("click", () =>
         copyText(nwcUriOutput?.value || "", window.__t("toast.nwc_uri_copied")),
       );
+      contactPickerBtn?.addEventListener("click", () => {
+        const value = payOfferInput.value.trim().toLowerCase();
+
+        const isBolt11 =
+          value.startsWith("lnbc") ||
+          value.startsWith("lntb") ||
+          value.startsWith("lnbcrt");
+
+        if (isBolt11) {
+          setStatus(
+            window.__t("toast.bolt11_contact_unavailable"),
+            "warn",
+          );
+          return;
+        }
+
+        loadContacts();
+      });
+
+      newContactBtn?.addEventListener(
+        "click",
+        openNewContact,
+      );
+
+      contactSearchInput?.addEventListener(
+        "input",
+        () => {
+          contactSearchQuery =
+            contactSearchInput.value;
+
+          clearContactSearchBtn.style.display =
+            contactSearchQuery.trim()
+              ? ""
+              : "none";
+
+          renderContacts(loadedContacts);
+        },
+      );
+
+      clearContactSearchBtn?.addEventListener(
+        "click",
+        () => {
+          contactSearchQuery = "";
+
+          contactSearchInput.value = "";
+
+          clearContactSearchBtn.style.display =
+            "none";
+
+          contactSearchInput.focus();
+
+          renderContacts(loadedContacts);
+        },
+      );
+
+      contactSearchInput?.addEventListener(
+        "keydown",
+        (event) => {
+          if (
+            event.key === "Escape" &&
+            contactSearchInput.value
+          ) {
+            event.preventDefault();
+            clearContactSearchBtn.click();
+          }
+        },
+      );
+
+      saveCurrentContactBtn?.addEventListener(
+        "click",
+        openSaveContactModal,
+      );
+
+      cancelSaveContactBtn?.addEventListener(
+        "click",
+        closeSaveContactModal,
+      );
+
+      cancelDeleteContactBtn?.addEventListener(
+        "click",
+        () => {
+          closeDeleteContactModal();
+          openContactsModal();
+        },
+      );
+
+      closeEditContactBtn?.addEventListener(
+        "click",
+        closeEditContactModal,
+      );
+
+      saveEditContactBtn?.addEventListener(
+        "click",
+        saveEditedContact,
+      );
+
+      addContactEntryBtn?.addEventListener(
+        "click",
+        addPaymentTarget,
+      );
+
+      editContactModal?.addEventListener("click", (event) => {
+        if (event.target === editContactModal) {
+          closeEditContactModal();
+        }
+      });
+
+      saveContactModal?.addEventListener("click", (event) => {
+        if (event.target === saveContactModal) {
+          closeSaveContactModal();
+        }
+      });
+
+      deleteContactModal?.addEventListener("click", (event) => {
+        if (event.target === deleteContactModal) {
+          closeDeleteContactModal();
+          openContactsModal();
+        }
+      });
+
+      confirmSaveContactBtn?.addEventListener(
+        "click",
+        saveCurrentContact,
+      );
+
+      confirmDeleteContactBtn?.addEventListener(
+        "click",
+        deleteCurrentContact,
+      );
+
+      closeContactsBtn?.addEventListener("click", closeContactsModal);
+      closeContactsBottomBtn?.addEventListener(
+        "click",
+        closeContactsModal,
+      );
+
+      contactsModal?.addEventListener("click", (event) => {
+        if (event.target === contactsModal) {
+          closeContactsModal();
+        }
+      });
+
+      contactsList?.addEventListener("click", (event) => {
+        const editButton = event.target.closest(".editContactBtn");
+
+        if (editButton) {
+          openEditContact(editButton.dataset.contactId);
+          return;
+        }
+
+        const deleteButton = event.target.closest(
+          ".deleteContactBtn",
+        );
+
+        if (deleteButton) {
+          openDeleteContactModal(
+            deleteButton.dataset.contactId,
+          );
+          return;
+        }
+
+        const entryButton = event.target.closest(".contactEntryBtn");
+
+        if (!entryButton) return;
+
+        const value = String(
+          entryButton.dataset.contactValue || "",
+        ).trim();
+
+        if (!value) return;
+
+        payOfferInput.value = value;
+
+        payAmountInput.value = "";
+        payerNoteInput.value = "";
+
+        if (paymentResultOutput) {
+          paymentResultOutput.value = "";
+        }
+
+        if (payLivePreview) {
+          payLivePreview.style.display = "none";
+        }
+
+        updatePayUiForInput();
+        closeContactsModal();
+
+        payOfferInput.dispatchEvent(new Event("input", {
+          bubbles: true,
+        }));
+
+        payOfferInput.focus();
+      });
 
       let statusTimer = null;
       let deferredPrompt = null;
@@ -1982,9 +3036,21 @@
         setNwcUnlockedState(true);
         return connections;
       }
+
       function rerenderDynamicUi() {
         if (Array.isArray(nwcConnectionsCache)) {
           renderNwcConnections(nwcConnectionsCache);
+        }
+
+        if (Array.isArray(loadedContacts)) {
+          renderContacts(loadedContacts);
+        }
+
+        if (
+          editContactModal?.style.display !== "none" &&
+          editingContactDraft
+        ) {
+          renderEditContactEntries();
         }
       }
 
@@ -2144,6 +3210,1432 @@
         }
       }
 
+      function escapeContactHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function getContactEntryIcon(type) {
+        const icon = (src, alt = "") => `
+          <img
+            src="${src}"
+            class="txMethodIcon"
+            alt="${alt}"
+          >
+        `;
+
+        const icons = {
+          lightning_address: icon("/assets/icons/bolt.svg"),
+          lightning: icon("/assets/icons/bolt.svg"),
+          lnurl: icon("/assets/icons/bolt.svg"),
+
+          bolt12: icon("/assets/icon.png"),
+          bip353: icon("/assets/icon.png"),
+
+          nostr: icon("/assets/icons/nostr.svg"),
+          npub: icon("/assets/icons/nostr.svg"),
+
+          node: "🔑",
+
+          other: "•",
+        };
+
+        return icons[type] || "•";
+      }
+
+      function filterContacts(contacts) {
+        const query = contactSearchQuery
+          .trim()
+          .toLowerCase();
+
+        if (!query) {
+          return contacts;
+        }
+
+        return contacts.filter((contact) => {
+          const haystack = [
+            contact.alias,
+            contact.notes,
+
+            ...(contact.entries || []).flatMap((entry) => [
+              entry.identifier,
+              entry.label,
+              entry.type,
+
+              {
+                lightning_address: "Lightning Address",
+                bolt12: "BOLT12 Offer",
+                lnurl: "LNURL",
+                bip353: "BIP353",
+                nostr: "Nostr",
+                node: "Node ID",
+                other: "Other",
+              }[entry.type],
+            ]),
+          ]
+            .filter(Boolean)
+            .join("\n")
+            .toLowerCase();
+
+          return haystack.includes(query);
+        });
+      }
+      
+      function escapeRegExp(text) {
+        return text.replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\$&",
+        );
+      }
+
+      function highlightSearch(text) {
+        const escaped = escapeContactHtml(
+          String(text || ""),
+        );
+
+        if (!contactSearchQuery) {
+          return escaped;
+        }
+
+        const regex = new RegExp(
+          `(${escapeRegExp(contactSearchQuery)})`,
+          "ig",
+        );
+
+        return escaped.replace(
+          regex,
+          '<span class="contactSearchHighlight">$1</span>',
+        );
+      }
+
+
+        function getContactTypeLabel(type) {
+          return window.__t(
+            `contact.type.${type}`,
+          );
+        }
+
+        function renderContacts(contacts) {
+        loadedContacts = Array.isArray(contacts)
+          ? [...contacts]
+          : [];
+
+        loadedContacts.sort((a, b) => {
+          const aliasCompare =
+            String(a.alias || "").localeCompare(
+              String(b.alias || ""),
+              undefined,
+              { sensitivity: "base" },
+            );
+
+          if (aliasCompare !== 0) {
+            return aliasCompare;
+          }
+
+          return String(a.id || "").localeCompare(
+            String(b.id || ""),
+          );
+        });
+
+        contacts = filterContacts(loadedContacts);
+
+        if (!contactsList) return;
+
+        if (!Array.isArray(contacts) || contacts.length === 0) {
+          contactsList.innerHTML = `
+            <div class="hint">
+              ${
+                contactSearchQuery
+                  ? window.__t("contacts.no_matches")
+                  : window.__t("contacts.none")
+              }
+            </div>
+          `;
+          return;
+        }
+
+        contactsList.innerHTML = contacts
+          .map((contact) => {
+            const aliasRaw =
+              contact.alias || "(unnamed contact)";
+
+            const alias = highlightSearch(aliasRaw);
+
+            const notes = contact.notes
+              ? `
+                <div
+                  class="hint"
+                  style="
+                    margin-top:6px;
+                    font-size:0.92rem;
+                    line-height:1.35;
+                  "
+                >
+                  ${highlightSearch(contact.notes)}
+                </div>
+              `
+              : "";
+
+            const entries = Array.isArray(contact.entries)
+              ? contact.entries
+                  .map((entry) => {
+                    const type = String(entry.type || "other");
+                    const icon = getContactEntryIcon(type);
+                    const category =
+                        entry.label ||
+                        getContactTypeLabel(type);
+
+                    const identifier = highlightSearch(
+                        entry.identifier
+                    );
+
+                    const defaultStar = entry.isDefault
+                      ? `
+                        <span
+                          aria-label="${window.__t("contacts.default_target")}"
+                          title="${window.__t("contacts.default_target")}"
+                          style="
+                            color:#f7b731;
+                            margin-left:4px;
+                          "
+                        >
+                          ⭐
+                        </span>
+                      `
+                      : "";
+
+                    const subtitle = `
+                      <div
+                        class="muted"
+                        style="
+                          font-size:0.76rem;
+                          font-weight:400;
+                          opacity:.70;
+                          margin-top:2px;
+                          line-height:1.2;
+                        "
+                      >
+                       ${highlightSearch(category)}
+                      </div>
+                    `;
+                    return `
+                      <button
+                        type="button"
+                        class="secondary contactEntryBtn"
+                        data-contact-value="${escapeContactHtml(entry.identifier)}"
+                        style="
+                          width: 100%;
+                          display: flex;
+                          align-items: center;
+                          gap: 10px;
+                          justify-content: flex-start;
+                          margin-top: 8px;
+                          text-align: left;
+                        "
+                      >
+                        <span aria-hidden="true">${icon}</span>
+                        <div
+                          style="
+                            flex:1;
+                            overflow:hidden;
+                          "
+                        >
+                          <div
+                            style="
+                              display:flex;
+                              justify-content:space-between;
+                              align-items:flex-start;
+                              gap:10px;
+                            "
+                          >
+                            <div
+                              style="
+                                overflow-wrap:anywhere;
+                                font-weight:500;
+                                flex:1;
+                              "
+                            >
+                              ${identifier}
+                            </div>
+
+                            ${
+                              entry.isDefault
+                                ? `
+                                  <span
+                                    title="Default payment target"
+                                    style="
+                                      color:#f7b731;
+                                      font-size:15px;
+                                      flex-shrink:0;
+                                    "
+                                  >
+                                    ⭐
+                                  </span>
+                                `
+                                : ""
+                            }
+                          </div>
+
+                          ${subtitle}
+                        </div>
+                      </button>
+                    `;
+                  })
+                  .join("")
+              : "";
+
+            return `
+              <div
+                class="contactCard"
+                style="
+                  padding: 14px;
+                  margin-top: 10px;
+                "
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 12px;
+                  "
+                >
+                  <strong>${alias}</strong>
+
+                </div>
+
+                ${notes}
+                ${
+                  entries ||
+                  `
+                    <div class="hint" style="margin-top: 8px">
+                      No entries
+                    </div>
+                  `
+                }
+                <div
+                  style="
+                    display:flex;
+                    justify-content:flex-end;
+                    align-items:center;
+                    gap:36px;
+                    margin-top:18px;
+                    font-size:13px;
+                  "
+                >
+                  <span
+                    class="contactAction contactActionDelete deleteContactBtn"
+                    data-contact-id="${contact.id}"
+                    data-contact-alias="${escapeContactHtml(aliasRaw)}"
+                    title="${window.__t("contacts.delete")}"
+                  >
+                    ${window.__t("contacts.delete")}
+                  </span>
+
+                  <span
+                    class="contactAction contactActionEdit editContactBtn"
+                    data-contact-id="${contact.id}"
+                    title="${window.__t("contacts.edit")}"
+                  >
+                    ${window.__t("contacts.edit")}
+                  </span>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      function openContactsModal() {
+        if (!contactsModal) return;
+
+        contactSearchQuery = "";
+
+        if (contactSearchInput) {
+          contactSearchInput.value = "";
+        }
+
+        if (clearContactSearchBtn) {
+          clearContactSearchBtn.style.display = "none";
+        }
+
+        contactsModal.style.display = "flex";
+        contactsModal.setAttribute("aria-hidden", "false");
+
+        renderContacts(loadedContacts);
+
+        requestAnimationFrame(() => {
+          contactSearchInput?.focus();
+        });
+      }
+
+      function closeContactsModal() {
+        if (!contactsModal) return;
+
+        contactsModal.style.display = "none";
+        contactsModal.setAttribute("aria-hidden", "true");
+      }
+
+      function openSaveContactModal() {
+        closeContactsModal();
+
+        if (!saveContactModal) return;
+
+        const identifier = payOfferInput.value.trim();
+
+        if (
+          identifier.toLowerCase().startsWith("lnbc") ||
+          identifier.toLowerCase().startsWith("lntb") ||
+          identifier.toLowerCase().startsWith("lnbcrt")
+        ) {
+          setStatus(
+            window.__t("contacts.temp_bolt11"),
+            "error",
+          );
+          return;
+        }
+        saveContactIdentifier.value = identifier;
+
+        saveContactAlias.value = guessContactAlias(identifier);
+        saveContactNotes.value = "";
+        saveContactType.value = guessContactType(identifier);
+
+        saveContactModal.style.display = "flex";
+        saveContactModal.setAttribute("aria-hidden", "false");
+      }
+
+      function openNewContact() {
+        editingContact = null;
+
+        editingContactDraft = {
+          alias: "",
+          notes: "",
+          entries: [
+            {
+              id: null,
+              type: "lightning_address",
+              identifier: "",
+              label: "",
+              isDefault: true,
+            },
+          ],
+        };
+
+        closeContactsModal();
+
+        editContactAlias.value = "";
+        editContactNotes.value = "";
+
+        renderEditContactEntries();
+
+        editContactModal.style.display = "flex";
+        editContactModal.setAttribute(
+          "aria-hidden",
+          "false",
+        );
+
+        requestAnimationFrame(() => {
+          editContactAlias?.focus();
+        });
+      }
+
+      function openEditContact(contactId) {
+        const contact = loadedContacts.find(
+          (c) => String(c.id) === String(contactId),
+        );
+
+        if (!contact) return;
+
+        editingContact = contact;
+        editingContactDraft = structuredClone(contact);
+        if (
+          editingContactDraft.entries?.length &&
+          !editingContactDraft.entries.some(
+            (entry) => entry.isDefault,
+          )
+        ) {
+          editingContactDraft.entries[0].isDefault = true;
+        }
+
+        closeContactsModal();
+
+        editContactAlias.value = editingContactDraft.alias || "";
+        editContactNotes.value = editingContactDraft.notes || "";
+
+        renderEditContactEntries();
+
+        editContactModal.style.display = "flex";
+        editContactModal.setAttribute("aria-hidden", "false");
+      }
+
+      function openDeleteContactModal(contactId) {
+        const contact = loadedContacts.find(
+          (c) => String(c.id) === String(contactId),
+        );
+
+        if (!contact || !deleteContactModal) return;
+
+        contactPendingDeletion = contact;
+
+        deleteContactMessage.textContent =
+          `${window.__t("contacts.delete_confirm")} "${contact.alias}"?`;
+
+        closeContactsModal();
+
+        deleteContactModal.style.display = "flex";
+        deleteContactModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeDeleteContactModal() {
+        if (!deleteContactModal) return;
+
+        contactPendingDeletion = null;
+
+        deleteContactModal.style.display = "none";
+        deleteContactModal.setAttribute("aria-hidden", "true");
+      }
+
+      function closeSaveContactModal() {
+        if (!saveContactModal) return;
+
+        saveContactModal.style.display = "none";
+        saveContactModal.setAttribute("aria-hidden", "true");
+      }
+
+      let activePaymentTypeDropdown = null;
+
+      function closeActivePaymentTypeDropdown() {
+        if (!activePaymentTypeDropdown) return;
+
+        const {
+          menu,
+          arrow,
+          cleanup,
+        } = activePaymentTypeDropdown;
+
+        cleanup?.();
+
+        menu.remove();
+
+        arrow.style.transform = "";
+        arrow.style.transition = "transform .15s";
+
+        activePaymentTypeDropdown = null;
+      }
+
+
+      function closeEditContactModal() {
+        if (!editContactModal) return;
+
+        closeActivePaymentTypeDropdown();
+
+        editingContact = null;
+        editingContactDraft = null;
+
+        editContactModal.style.display = "none";
+        editContactModal.setAttribute("aria-hidden", "true");
+      }
+
+      function renderEditContactEntries() {
+        if (!editContactEntries) return;
+
+        closeActivePaymentTypeDropdown();
+        editContactEntries.replaceChildren();
+        
+        lastPaymentTargetInput = null;
+
+        const entries = editingContactDraft?.entries || [];
+
+        if (!entries.length) {
+          const emptyMessage = document.createElement("div");
+          emptyMessage.className = "hint";
+          emptyMessage.textContent = window.__t("contacts.no_payment_targets");
+          editContactEntries.appendChild(emptyMessage);
+          return;
+        }
+
+        const paymentTypes = {
+          lightning_address: {
+            label: getContactTypeLabel("lightning_address"),
+            icon: "assets/icons/bolt.svg",
+            iconType: "image",
+          },
+          bolt12: {
+            label: getContactTypeLabel("bolt12"),
+            icon: "assets/icon.png",
+            iconType: "image",
+          },
+          lnurl: {
+            label: getContactTypeLabel("lnurl"),
+            icon: "assets/icons/bolt.svg",
+            iconType: "image",
+          },
+          bip353: {
+            label: getContactTypeLabel("bip353"),
+            icon: "assets/icon.png",
+            iconType: "image",
+          },
+          nostr: {
+            label: getContactTypeLabel("nostr"),
+            icon: "assets/icons/nostr.svg",
+            iconType: "image",
+          },
+          node: {
+            label: getContactTypeLabel("node"),
+            icon: "🔑",
+            iconType: "emoji",
+          },
+          other: {
+            label: getContactTypeLabel("other"),
+            icon: "•••",
+            iconType: "emoji",
+          },
+        };
+
+        const typeOptions = Object.entries(paymentTypes).map(
+          ([value, config]) => [value, config.label],
+        );
+
+        entries.forEach((entry) => {
+          const card = document.createElement("div");
+
+          card.style.cssText = `
+            margin-top:12px;
+            padding:14px;
+            border:1px solid rgba(255,255,255,.12);
+            border-radius:10px;
+          `;
+
+          //
+          // Type
+          //
+
+          const header = document.createElement("div");
+          header.style.cssText = `
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:12px;
+            margin-bottom:8px;
+          `;
+
+          const typeLabel = document.createElement("div");
+          typeLabel.className = "label";
+          typeLabel.textContent = window.__t(
+            "contacts.payment_method",
+          );
+
+          const deleteButton = document.createElement("span");
+          deleteButton.className =
+            "contactAction contactActionDelete";
+          deleteButton.textContent = window.__t(
+            "contacts.remove_payment_target",
+          );
+          deleteButton.title = window.__t(
+            "contacts.remove_payment_target",
+          );
+
+          const typeSelector = document.createElement("button");
+          typeSelector.type = "button";
+
+          typeSelector.style.cssText = `
+            width:100%;
+            height:42px;
+            margin-top:6px;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+            padding:0 12px;
+            border:1px solid var(--border);
+            border-radius:10px;
+            background:var(--surface);
+            color:var(--text);
+            cursor:pointer;
+            font:inherit;
+          `;
+
+          const selectorLeft = document.createElement("div");
+          selectorLeft.style.cssText = `
+            display:flex;
+            align-items:center;
+            gap:10px;
+          `;
+
+          const selectorIcon = document.createElement("img");
+          selectorIcon.style.cssText = `
+            width:18px;
+            height:18px;
+            flex:none;
+          `;
+
+          const selectorLabel = document.createElement("span");
+
+          const selectorArrow = document.createElement("span");
+          selectorArrow.textContent = "▾";
+          selectorArrow.style.fontSize = "13px";
+
+          selectorLeft.appendChild(selectorIcon);
+          selectorLeft.appendChild(selectorLabel);
+
+          typeSelector.appendChild(selectorLeft);
+          typeSelector.appendChild(selectorArrow);
+
+          const typeSelect = document.createElement("select");
+
+          function updateTypeSelector() {
+            const config = paymentTypes[entry.type];
+
+            selectorLabel.textContent = config.label;
+
+            if (config.iconType === "image") {
+              selectorIcon.src = config.icon;
+              selectorIcon.style.display = "";
+
+              if (
+                entry.type === "bolt12" ||
+                entry.type === "bip353"
+              ) {
+                selectorIcon.style.width = "20px";
+                selectorIcon.style.height = "20px";
+              } else {
+                selectorIcon.style.width = "18px";
+                selectorIcon.style.height = "18px";
+              }
+            } else {
+              selectorIcon.removeAttribute("src");
+              selectorIcon.style.display = "none";
+
+              selectorLeft.querySelector(".emojiIcon")?.remove();
+
+              const emoji = document.createElement("span");
+              emoji.className = "emojiIcon";
+              emoji.textContent = config.icon;
+              emoji.style.cssText = `
+                width:20px;
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                flex:none;
+                font-size:18px;
+                line-height:1;
+              `;
+
+              selectorLeft.prepend(emoji);
+            }
+
+            if (config.iconType === "image") {
+              selectorLeft.querySelector(".emojiIcon")?.remove();
+            }
+          }
+
+          updateTypeSelector();
+
+          const typeMenu = document.createElement("div");
+
+          typeMenu.style.cssText = `
+            display:none;
+            position:fixed;
+            background:#1b2233;
+            border:1px solid var(--border);
+            border-radius:10px;
+            overflow-x:hidden;
+            overflow-y:auto;
+            max-height:300px;
+            box-shadow:0 10px 30px rgba(0,0,0,.55);
+            z-index:100000;
+          `;
+
+          const selectorWrapper = document.createElement("div");
+
+          selectorWrapper.style.cssText = `
+            position:relative;
+            margin-top:6px;
+          `;
+
+          selectorWrapper.appendChild(typeSelector);
+
+          function positionTypeMenu() {
+            if (!document.body.contains(typeMenu)) return;
+
+            const selectorRect =
+              typeSelector.getBoundingClientRect();
+
+            const viewportPadding = 8;
+            const menuGap = 4;
+
+            const menuWidth = selectorRect.width;
+
+            typeMenu.style.width = `${menuWidth}px`;
+            typeMenu.style.maxHeight = "300px";
+
+            const availableBelow =
+              window.innerHeight -
+              selectorRect.bottom -
+              viewportPadding;
+
+            const availableAbove =
+              selectorRect.top -
+              viewportPadding;
+
+            const naturalHeight =
+              typeMenu.scrollHeight;
+
+            const preferredHeight =
+              Math.min(naturalHeight, 300);
+
+            const openAbove =
+              availableBelow < preferredHeight &&
+              availableAbove > availableBelow;
+
+            const availableSpace =
+              openAbove
+                ? availableAbove - menuGap
+                : availableBelow - menuGap;
+
+            const finalHeight =
+              Math.max(
+                80,
+                Math.min(preferredHeight, availableSpace),
+              );
+
+            typeMenu.style.maxHeight = `${finalHeight}px`;
+
+            let left = selectorRect.left;
+
+            if (
+              left + menuWidth >
+              window.innerWidth - viewportPadding
+            ) {
+              left =
+                window.innerWidth -
+                menuWidth -
+                viewportPadding;
+            }
+
+            left = Math.max(viewportPadding, left);
+
+            typeMenu.style.left = `${left}px`;
+
+            if (openAbove) {
+              typeMenu.style.top = "auto";
+              typeMenu.style.bottom =
+                `${
+                  window.innerHeight -
+                  selectorRect.top +
+                  menuGap
+                }px`;
+            } else {
+              typeMenu.style.bottom = "auto";
+              typeMenu.style.top =
+                `${selectorRect.bottom + menuGap}px`;
+            }
+          }
+
+          function openTypeMenu() {
+            if (
+              activePaymentTypeDropdown?.menu ===
+              typeMenu
+            ) {
+              closeActivePaymentTypeDropdown();
+              return;
+            }
+
+            closeActivePaymentTypeDropdown();
+
+            document.body.appendChild(typeMenu);
+            typeMenu.style.display = "block";
+
+            selectorArrow.style.transition =
+              "transform .15s";
+            selectorArrow.style.transform =
+              "rotate(180deg)";
+
+            const handleOutsideClick = (event) => {
+              if (
+                typeMenu.contains(event.target) ||
+                typeSelector.contains(event.target)
+              ) {
+                return;
+              }
+
+              closeActivePaymentTypeDropdown();
+            };
+
+            const handleEscape = (event) => {
+              if (event.key !== "Escape") return;
+
+              event.preventDefault();
+              event.stopPropagation();
+
+              closeActivePaymentTypeDropdown();
+              typeSelector.focus();
+            };
+
+            const handleViewportChange = () => {
+              positionTypeMenu();
+            };
+
+            document.addEventListener(
+              "mousedown",
+              handleOutsideClick,
+              true,
+            );
+
+            document.addEventListener(
+              "keydown",
+              handleEscape,
+              true,
+            );
+
+            window.addEventListener(
+              "resize",
+              handleViewportChange,
+            );
+
+            editContactEntries?.addEventListener(
+              "scroll",
+              handleViewportChange,
+            );
+
+            activePaymentTypeDropdown = {
+              menu: typeMenu,
+              arrow: selectorArrow,
+              cleanup: () => {
+                document.removeEventListener(
+                  "mousedown",
+                  handleOutsideClick,
+                  true,
+                );
+
+                document.removeEventListener(
+                  "keydown",
+                  handleEscape,
+                  true,
+                );
+
+                window.removeEventListener(
+                  "resize",
+                  handleViewportChange,
+                );
+
+                editContactEntries?.removeEventListener(
+                  "scroll",
+                  handleViewportChange,
+                );
+              },
+            };
+
+            positionTypeMenu();
+          }
+
+          typeSelector.addEventListener(
+            "click",
+            openTypeMenu,
+          );
+
+          Object.entries(paymentTypes).forEach(([value, config]) => {
+            const row = document.createElement("div");
+
+            const isCurrent = value === entry.type;
+
+            row.style.cssText = `
+              display:flex;
+              align-items:center;
+              gap:10px;
+              padding:10px 12px;
+              cursor:pointer;
+              background:${isCurrent ? "rgba(255,255,255,.08)" : "transparent"};
+            `;
+
+            row.addEventListener("mouseenter", () => {
+              row.style.background = "rgba(255,255,255,.12)";
+            });
+
+            row.addEventListener("mouseleave", () => {
+              row.style.background =
+                isCurrent
+                  ? "rgba(255,255,255,.08)"
+                  : "transparent";
+            });
+
+            //
+            // icon
+            //
+
+            if (config.iconType === "image") {
+              const img = document.createElement("img");
+              img.src = config.icon;
+
+              img.style.cssText = `
+                width:${value === "bolt12" || value === "bip353" ? "20px" : "18px"};
+                height:${value === "bolt12" || value === "bip353" ? "20px" : "18px"};
+                object-fit:contain;
+                flex:none;
+              `;
+
+              row.appendChild(img);
+            } else {
+              const icon = document.createElement("span");
+
+              icon.textContent = config.icon;
+
+              icon.style.cssText = `
+                width:20px;
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                flex:none;
+                font-size:18px;
+                line-height:1;
+              `;
+
+              row.appendChild(icon);
+            }
+
+            const text = document.createElement("span");
+            text.textContent = config.label;
+
+            if (isCurrent) {
+              text.style.fontWeight = "600";
+            }
+
+            row.appendChild(text);
+
+            row.addEventListener("click", () => {
+              entry.type = value;
+              typeSelect.value = value;
+
+              closeActivePaymentTypeDropdown();
+              renderEditContactEntries();
+            });
+
+            typeMenu.appendChild(row);
+          });
+
+          typeSelect.addEventListener("change", () => {
+            entry.type = typeSelect.value;
+          });
+
+          deleteButton.addEventListener("click", () => {
+            if (editingContactDraft.entries.length <= 1) {
+              setStatus(
+                "A contact must have at least one payment target.",
+                "error",
+              );
+              return;
+            }
+
+          const wasDefault = entry.isDefault;
+
+          editingContactDraft.entries =
+            editingContactDraft.entries.filter(
+              (e) => e !== entry,
+            );
+
+          if (
+            wasDefault &&
+            editingContactDraft.entries.length
+          ) {
+            editingContactDraft.entries[0].isDefault = true;
+          }
+
+          renderEditContactEntries();
+          });
+
+          //
+          // Default payment target
+          //
+
+          const defaultStar = document.createElement("span");
+
+          defaultStar.style.cssText = `
+            cursor:pointer;
+            user-select:none;
+            font-size:18px;
+            line-height:1;
+            color:${entry.isDefault ? "#f7b731" : "var(--muted)"};
+            transition:color .15s;
+          `;
+
+          defaultStar.textContent =
+            entry.isDefault ? "⭐" : "☆";
+
+          defaultStar.title = "Set as default payment target";
+
+          defaultStar.addEventListener("click", () => {
+            editingContactDraft.entries.forEach((e) => {
+              e.isDefault = false;
+            });
+
+            entry.isDefault = true;
+
+            renderEditContactEntries();
+          });
+
+          //
+          // Identifier
+          //
+
+          const identifierLabel = document.createElement("div");
+          identifierLabel.className = "label";
+          identifierLabel.style.marginTop = "12px";
+          identifierLabel.textContent = window.__t(
+            "contacts.payment_target",
+          );
+
+          const identifierInput = document.createElement("input");
+          identifierInput.type = "text";
+          identifierInput.value = entry.identifier || "";
+          lastPaymentTargetInput = identifierInput;
+          if (
+            focusNewPaymentTarget &&
+            entry === editingContactDraft.entries.at(-1)
+          ) {
+            requestAnimationFrame(() => {
+              identifierInput.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+              });
+
+              identifierInput.focus();
+
+              focusNewPaymentTarget = false;
+            });
+          }
+
+          identifierInput.addEventListener("input", () => {
+            entry.identifier = identifierInput.value;
+          });
+
+          //
+          // Label
+          //
+
+          const labelLabel = document.createElement("div");
+          labelLabel.className = "label";
+          labelLabel.style.marginTop = "12px";
+          labelLabel.textContent = window.__t(
+            "contacts.label_optional",
+          );
+          const labelInput = document.createElement("input");
+          labelInput.type = "text";
+          labelInput.value = entry.label || "";
+
+          labelInput.addEventListener("input", () => {
+            entry.label = labelInput.value;
+          });
+
+          const headerActions = document.createElement("div");
+          headerActions.style.cssText = `
+            display:flex;
+            align-items:center;
+            gap:12px;
+          `;
+
+          headerActions.appendChild(defaultStar);
+          headerActions.appendChild(deleteButton);
+
+          header.appendChild(typeLabel);
+          header.appendChild(headerActions);
+
+          card.appendChild(header);
+          card.appendChild(selectorWrapper);
+          // card.appendChild(typeSelect);
+
+          card.appendChild(identifierLabel);
+          card.appendChild(identifierInput);
+
+          card.appendChild(labelLabel);
+          card.appendChild(labelInput);
+
+          editContactEntries.appendChild(card);
+        });
+      }
+
+      function addPaymentTarget() {
+        if (!editingContactDraft) return;
+
+        editingContactDraft.entries.push({
+          id: null,
+          type: "lightning_address",
+          identifier: "",
+          label: "",
+          isDefault: editingContactDraft.entries.length === 0,
+        });
+
+        renderEditContactEntries();
+
+        requestAnimationFrame(() => {
+          if (!lastPaymentTargetInput) return;
+
+          lastPaymentTargetInput.focus();
+
+          lastPaymentTargetInput.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+          });
+        });
+      }
+
+      async function saveEditedContact() {
+        if (!editingContactDraft) return;
+
+        saveEditContactBtn.disabled = true;
+
+        try {
+          const isNewContact = !editingContact;
+
+          const response = await fetch(
+            isNewContact
+              ? "/api/contacts"
+              : `/api/contacts/${editingContact.id}`,
+            {
+              method: isNewContact ? "POST" : "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": getCookie("csrf_token"),
+              },
+              body: JSON.stringify({
+                alias: editContactAlias.value.trim(),
+                notes: editContactNotes.value.trim(),
+                entries: editingContactDraft.entries || [],
+              }),
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          closeEditContactModal();
+
+          await loadContacts();
+
+          setStatus(
+            isNewContact
+              ? window.__t("contacts.created")
+              : window.__t("contacts.updated"),
+          );
+        } catch (err) {
+          console.error(err);
+
+          setStatus(
+            window.__t("contacts.save_failed"),
+            "error",
+          );
+        } finally {
+          saveEditContactBtn.disabled = false;
+        }
+      }
+
+      async function deleteCurrentContact() {
+        if (!contactPendingDeletion) return;
+
+        confirmDeleteContactBtn.disabled = true;
+
+        try {
+          const response = await fetch(
+            `/api/contacts/${contactPendingDeletion.id}`,
+            {
+              method: "DELETE",
+              headers: {
+                "X-CSRF-Token": getCookie("csrf_token"),
+              },
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          closeDeleteContactModal();
+
+          await loadContacts();
+
+          openContactsModal();
+
+          setStatus(window.__t("contacts.deleted"));
+        } catch (err) {
+          console.error(err);
+          setStatus(
+            "Unable to delete contact.",
+            "error",
+            true,
+          );
+        } finally {
+          confirmDeleteContactBtn.disabled = false;
+        }
+      }
+
+      async function saveCurrentContact() {
+        const alias = saveContactAlias.value.trim();
+        const identifier = saveContactIdentifier.value.trim();
+        const notes = saveContactNotes.value.trim();
+        const type = saveContactType.value;
+
+        if (!identifier) {
+          setStatus("Identifier required.", "error");
+          return;
+        }
+
+        confirmSaveContactBtn.disabled = true;
+
+        try {
+          const response = await fetch("/api/contacts", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": getCookie("csrf_token"),
+            },
+            body: JSON.stringify({
+              alias,
+              notes,
+              entries: [
+                {
+                  type,
+                  identifier,
+                },
+              ],
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          closeSaveContactModal();
+
+          setStatus(window.__t("contacts.saved"));
+
+          await loadContacts();
+        } catch (err) {
+          console.error(err);
+          setStatus("Unable to save contact.", "error", true);
+        } finally {
+          confirmSaveContactBtn.disabled = false;
+        }
+      }
+
+      function guessContactAlias(identifier) {
+        const value = String(identifier || "").trim();
+
+        if (value.includes("@")) {
+          return value.split("@")[0];
+        }
+
+        return "";
+      }
+
+      function guessContactType(identifier) {
+        const value = String(identifier || "").trim().toLowerCase();
+
+        if (value.startsWith("lno")) {
+          return "bolt12";
+        }
+
+        if (value.startsWith("lnurl1")) {
+          return "lnurl";
+        }
+
+        if (
+          value.startsWith("lnbc") ||
+          value.startsWith("lntb") ||
+          value.startsWith("lnbcrt")
+        ) {
+          return "";
+        }
+
+        if (/^0[2-3][0-9a-f]{64}$/i.test(value)) {
+          return "node";
+        }
+
+        if (value.includes("@")) {
+          return "lightning_address";
+        }
+
+        return "lightning_address";
+      }
+
+
+      async function fetchContacts() {
+        const res = await fetch("/api/contacts");
+
+        if (!res.ok) {
+          throw new Error(`Contacts request failed: HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        loadedContacts = data.contacts || [];
+
+        return loadedContacts;
+      }
+
+      async function loadContacts() {
+        if (!contactsList) return;
+
+        const current = payOfferInput.value.trim();
+
+        if (current) {
+          currentContactCandidate.style.display = "";
+
+          const lower = current.toLowerCase();
+
+          const isBolt11 =
+            lower.startsWith("lnbc") ||
+            lower.startsWith("lntb") ||
+            lower.startsWith("lnbcrt");
+
+          saveCurrentContactBtn.style.display = isBolt11 ? "none" : "";
+
+          currentContactIdentifier.textContent = `⚡ ${current}`;
+          const existing = loadedContacts.find((contact) =>
+            (contact.entries || []).some(
+              (entry) => entry.identifier.trim().toLowerCase() === current.trim().toLowerCase(),
+            ),
+          );
+
+        if (existing) {
+          saveCurrentContactBtn.style.display = "none";
+
+          currentContactStatus.style.display = "";
+          currentContactStatus.textContent =
+            `${window.__t("contacts.already_saved")} "${existing.alias}"`
+          } else {
+          saveCurrentContactBtn.style.display = isBolt11 ? "none" : "";
+
+           currentContactStatus.style.display = "none";
+           currentContactStatus.textContent = "";
+        }
+
+        } else {
+          currentContactCandidate.style.display = "none";
+          saveCurrentContactBtn.style.display = "none";
+        }
+
+        openContactsModal();
+        contactsList.textContent = window.__t("contacts.loading");
+
+
+        try {
+          const contacts = await fetchContacts();
+          renderContacts(contacts);
+        } catch (error) {
+          console.error("Unable to load contacts:", error);
+
+          contactsList.innerHTML = `
+            <div class="hint" style="color: #ff8d8d">
+              Unable to load contacts.
+            </div>
+          `;
+        }
+      }
+
+
       function normalizeScannedText(raw) {
         let value = String(raw || "").trim();
 
@@ -2222,6 +4714,9 @@
           return "ambiguous_address";
 
         if (value.startsWith("lnurl1")) return "lnurl";
+
+        if (/^0[23][0-9a-f]{64}$/i.test(value))
+          return "keysend";
 
         return "unknown";
       }
@@ -2303,10 +4798,26 @@
         }
       }
 
-      async function loadTxHistory() {
+      const TX_HISTORY_PAGE_SIZE = 50;
+      let txHistoryItems = [];
+      let txHistoryHasMore = true;
+      let txHistorySearchQuery = "";
+
+      async function fetchTxHistoryPage(offset = 0) {
         console.time("GET /api/tx-history");
 
-        const response = await fetch("/api/tx-history");
+        const params = new URLSearchParams({
+          limit: String(TX_HISTORY_PAGE_SIZE),
+          offset: String(offset),
+        });
+
+        if (txHistorySearchQuery) {
+          params.set("q", txHistorySearchQuery);
+        }
+
+        const response = await fetch(
+          `/api/tx-history?${params.toString()}`,
+        );
 
         console.timeEnd("GET /api/tx-history");
 
@@ -2314,7 +4825,63 @@
           throw new Error("Failed to load tx history");
         }
 
-        return (await response.json()).items || [];
+        return await response.json();
+      }
+
+      async function loadTxHistory() {
+        const data = await fetchTxHistoryPage(0);
+        const newestItems = data.items || [];
+
+        if (!txHistoryItems.length) {
+          txHistoryItems = newestItems;
+        } else {
+          const newestHashes = new Set(
+            newestItems.map((item) => item.payment_hash).filter(Boolean),
+          );
+
+          const olderItems = txHistoryItems.filter(
+            (item) =>
+              !item.payment_hash ||
+              !newestHashes.has(item.payment_hash),
+          );
+
+          txHistoryItems = [
+            ...newestItems,
+            ...olderItems,
+          ];
+        }
+
+      if (txHistoryItems.length <= TX_HISTORY_PAGE_SIZE) {
+        txHistoryHasMore = Boolean(data.has_more);
+      }
+
+        return txHistoryItems;
+      }
+
+      async function loadMoreTxHistory() {
+        const data = await fetchTxHistoryPage(txHistoryItems.length);
+        const newItems = data.items || [];
+
+        const existingHashes = new Set(
+          txHistoryItems.map((item) => item.payment_hash).filter(Boolean),
+        );
+
+        for (const item of newItems) {
+          if (
+            !item.payment_hash ||
+            !existingHashes.has(item.payment_hash)
+          ) {
+            txHistoryItems.push(item);
+
+            if (item.payment_hash) {
+              existingHashes.add(item.payment_hash);
+            }
+          }
+        }
+
+        txHistoryHasMore = Boolean(data.has_more);
+
+        return txHistoryItems;
       }
 
       async function syncTxHistory() {
@@ -2351,6 +4918,8 @@
 
         const list = document.getElementById("txHistoryList");
 
+        const loadMoreBtn = document.getElementById("loadMoreTxHistoryBtn");
+
         const openTxDetails = new Set(
           Array.from(list.querySelectorAll("details.txDetailsRoot[open]"))
             .map((el) => el.dataset.txKey)
@@ -2384,14 +4953,34 @@
           const fee = item.fee_sat
             ? ` • ${window.__t("history.fee")} ${item.fee_sat} sat`
             : "";
-          const memo = item.memo || item.identifier || "";
-          const displayMemo =
-            memo.startsWith("lnbc") ||
-            memo.startsWith("lntb") ||
-            memo.startsWith("lnbcrt")
-              ? ""
-              : memo;
+
           const raw = item.raw_json || {};
+
+          function isTechnicalIdentifier(value) {
+            if (!value) return false;
+
+            return (
+              /^[0-9a-f]{64}$/i.test(value) ||
+              /^[0-9a-f]{66}$/i.test(value) ||
+              /^[0-9a-f]{128}$/i.test(value) ||
+              /^0[23][0-9a-f]{64}$/i.test(value)
+            );
+          }
+
+          const displayTarget =
+            item.method === "bolt12" || item.method === "offer"
+              ? raw.target || item.counterparty || item.identifier || ""
+              : item.counterparty || item.identifier || "";
+
+          const visibleTarget = isTechnicalIdentifier(displayTarget)
+            ? ""
+            : displayTarget;
+
+          const displayComment =
+            item.memo && item.memo !== visibleTarget
+              ? item.memo
+              : "";
+
           const paymentHash = item.payment_hash || raw.payment_hash || raw.r_hash || "";
           const txKey = [
             paymentHash,
@@ -2402,7 +4991,7 @@
             item.created_at || "",
             item.settled_at || "",
             item.identifier || "",
-            memo || "",
+            item.memo || "",
           ].join("|");
           const txKeyAttr = String(txKey).replace(/"/g, "&quot;");
           const txDetailsOpenAttr = openTxDetails.has(txKey) ? " open" : "";
@@ -2455,6 +5044,50 @@
 
           const counterparty = item.counterparty || "";
 
+          const contactIdentifier = String(
+            item.method === "keysend"
+              ? item.direction === "outgoing"
+                ? counterparty
+                : ""
+              : counterparty || item.identifier || "",
+          ).trim();
+
+          const contactType =
+            raw.mode === "bip353"
+              ? "bip353"
+              : item.method === "lightning_address"
+                ? "lightning_address"
+                : item.method === "bolt12" || item.method === "offer"
+                  ? "bolt12"
+                  : item.method === "lnurl"
+                    ? "lnurl"
+                    : item.method === "keysend"
+                      ? "node"
+                      : "lightning_address";
+
+          const identifierLower = contactIdentifier.toLowerCase();
+
+          const canCreateContact =
+            Boolean(contactIdentifier) &&
+            [
+              "lightning_address",
+              "lnurl",
+              "bolt12",
+              "offer",
+              "keysend",
+            ].includes(method);
+
+          const matchingContact =
+            loadedContacts.find((contact) =>
+              (contact.entries || []).some(
+                (entry) =>
+                  String(entry.identifier || "")
+                    .trim()
+                    .toLowerCase() ===
+                  contactIdentifier.toLowerCase()
+              ),
+            );
+
           const detailsJson = JSON.stringify(raw, null, 2);
 
           div.innerHTML = `
@@ -2471,9 +5104,50 @@
 
                 ${walletLine}
 
-                ${displayMemo ? `
-                <div class="txMemo">${displayMemo}</div>
-               ` : ""}
+                ${
+                  visibleTarget
+                    ? `
+                <div class="txTarget">${escapeContactHtml(visibleTarget)}</div>
+                `
+                    : ""
+                }
+
+                ${
+                  displayComment
+                    ? `
+                <div class="txComment">💬 ${escapeContactHtml(displayComment)}</div>
+                `
+                    : ""
+                }
+
+                ${
+                  matchingContact
+                    ? `
+                <div
+                  class="txContact txContactExisting"
+                  data-contact-id="${matchingContact.id}"
+                >
+                  <img
+                    src="/assets/icons/contacts.svg"
+                    class="txContactIcon"
+                  />
+                  <span>${escapeContactHtml(
+                    matchingContact.alias,
+                  )}</span>
+                </div>
+                    `
+                    : canCreateContact
+                      ? `
+                <div class="txContact txContactAdd">
+                  <img
+                    src="/assets/icons/contacts.svg"
+                    class="txContactIcon"
+                  />
+                </div>
+                    `
+                      : ""
+                }
+
                <div class="txExpandHint">
                  <span class="txExpandArrow">${openTxDetails.has(txKey) ? "▼" : "▶"}</span>
                  <span class="txExpandText">
@@ -2527,6 +5201,33 @@
             </details>
           `;
 
+          const contactElement = div.querySelector(".txContactExisting");
+
+          if (contactElement) {
+            contactElement.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+
+              openEditContact(contactElement.dataset.contactId);
+            });
+          }
+
+          const addContactElement = div.querySelector(".txContactAdd");
+
+          if (addContactElement) {
+            addContactElement.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+
+              openNewContact();
+
+              editingContactDraft.entries[0].type = contactType;
+              editingContactDraft.entries[0].identifier = contactIdentifier;
+
+              renderEditContactEntries();
+            });
+          }
+
           const rootDetails = div.querySelector(".txDetailsRoot");
           const expandArrow = div.querySelector(".txExpandArrow");
           const expandText = div.querySelector(".txExpandText");
@@ -2554,6 +5255,72 @@
       let txHistoryRefreshTimer = null;
       let lastTxSync = 0;
       let syncingTxHistory = false;
+
+      document
+        .getElementById("loadMoreTxHistoryBtn")
+        ?.addEventListener("click", async () => {
+          const btn = document.getElementById("loadMoreTxHistoryBtn");
+
+          if (!btn || !txHistoryHasMore) return;
+
+          btn.disabled = true;
+
+          try {
+            await loadMoreTxHistory();
+            await window.renderTxHistory();
+          } catch (error) {
+            console.error("Failed to load older tx history:", error);
+          } finally {
+            btn.disabled = false;
+          }
+        });
+
+      const txHistorySearchInput =
+        document.getElementById("txHistorySearchInput");
+
+      let txHistorySearchTimer = null;
+
+      txHistorySearchInput?.addEventListener("input", () => {
+        if (txHistorySearchTimer) {
+          clearTimeout(txHistorySearchTimer);
+        }
+
+        txHistorySearchTimer = setTimeout(async () => {
+          txHistorySearchQuery =
+            txHistorySearchInput.value.trim();
+
+          txHistoryItems = [];
+          txHistoryHasMore = true;
+
+          try {
+            await window.renderTxHistory();
+          } catch (error) {
+            console.error("Failed to search tx history:", error);
+          }
+        }, 250);
+      });
+
+      const txHistorySection =
+        document.getElementById("txHistorySection");
+
+      txHistorySection?.addEventListener("toggle", async () => {
+        if (!txHistorySection.open) {
+          txHistoryItems = [];
+          txHistoryHasMore = true;
+          txHistorySearchQuery = "";
+
+        if (txHistorySearchInput) {
+          txHistorySearchInput.value = "";
+        }
+
+        return;
+      }
+        try {
+          await window.renderTxHistory();
+        } catch (error) {
+          console.error("Failed to reload tx history:", error);
+        }
+      });
 
       function startTxHistoryAutoRefresh() {
         stopTxHistoryAutoRefresh();
@@ -2847,6 +5614,15 @@
       }
 
       let payPreviewTimer = null;
+
+      let loadedContacts = [];
+      let contactSearchQuery = "";
+      let editingContact = null;
+      let editingContactDraft = null;
+      let contactPendingDeletion = null;
+
+      let lastPaymentTargetInput = null;
+      let focusNewPaymentTarget = false;
 
       function resetPayUiState() {
         payAmountInput.disabled = false;
@@ -3559,6 +6335,69 @@
         }
       }
 
+      async function payKeysendFlow() {
+        const nodeId = normalizePaymentInput(payOfferInput.value);
+        const amountSat = payAmountInput.value.trim();
+        const payerNote = payerNoteInput.value.trim();
+        const btn = document.getElementById("payOfferBtn");
+
+        if (!/^0[23][0-9a-f]{64}$/i.test(nodeId)) {
+          setStatus(window.__t("toast.invalid_node_id"), "error");
+          return;
+        }
+
+        if (!amountSat) {
+          setStatus(window.__t("toast.enter_amount"), "error");
+          return;
+        }
+
+        btn.disabled = true;
+        const oldText = btn.textContent;
+        btn.textContent = window.__t("history.keysend");
+        setStatus(
+          `${window.__t("toast.sending_keysend")} ${nodeId.slice(0, 18)}…`,
+          "warn",
+        );
+        try {
+          const response = await fetch("/api/pay-keysend", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": getCookie("csrf_token"),
+            },
+            body: JSON.stringify({
+              node_id: nodeId,
+              amount_sat: Number(amountSat),
+              message: payerNote || null,
+            }),
+          });
+
+          const data = await readJsonOrThrow(response);
+          const parsed = safeJsonParse(data?.raw_output);
+
+          renderSuccessOutput(
+            window.__t("pay.summary.keysend_sent"),
+            [
+              amountSat ? `⚡ ${formatSats(amountSat)}` : "",
+              `🔑 ${nodeId}`,
+              payerNote
+                ? `${window.__t("pay.summary.comment")} ${payerNote}`
+                : "",
+            ],
+            parsed || { raw_output: data?.raw_output || "" },
+          );
+
+          setStatus(window.__t("toast.keysend_sent"));
+        } catch (error) {
+          const message = errorToMessage(error);
+          setStatus(`Fehler: ${message}`, "error", true);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = oldText;
+        }
+      }
+
+
       async function payLnurlFlow() {
         const lnurl = normalizePaymentInput(payOfferInput.value);
         const amountSat = payAmountInput.value.trim();
@@ -3711,6 +6550,11 @@
         if (kind === "lnurl") {
           return payLnurlFlow();
         }
+
+        if (kind === "keysend") {
+          return payKeysendFlow();
+        }
+
         if (kind === "ambiguous_address") {
           return payAddressFlow();
         }
@@ -4003,6 +6847,12 @@
 
               console.log("calling sync", Date.now());
 
+          try {
+              await fetchContacts();
+          } catch (err) {
+              console.warn("Failed to load contacts", err);
+          }
+
               await syncTxHistory();
 
               console.log("after sync", Date.now());
@@ -4012,6 +6862,7 @@
               startTxHistoryAutoRefresh();
 
           })();
+
 
           requestAnimationFrame(() => {
               renderOfferQr(getActiveValue());
@@ -4206,6 +7057,66 @@
             "nav.logout": "Logout",
             "label.decode_output": "Decode-Ausgabe",
             "ph.decode_output": "Hier erscheint die Decode-Ausgabe...",
+            "contacts.title": "Kontakte",
+            "contacts.search": "Kontakte durchsuchen...",
+            "contacts.new": "Neuer Kontakt",
+
+            "contacts.none": "Noch keine Kontakte.",
+            "contacts.no_matches": "Keine passenden Kontakte.",
+
+            "contacts.edit": "Bearbeiten",
+            "contacts.delete": "Löschen",
+
+            "contacts.loading": "Kontakte werden geladen...",
+            "btn.close": "Schließen",
+            "contacts.payment_method": "Zahlungsmethode",
+            "contacts.payment_target": "Zahlungsziel",
+            "contacts.remove_payment_target": "Entfernen",
+            "contacts.default_target": "Standard-Zahlungsziel",
+            "contacts.delete_confirm": "Kontakt löschen?",
+            "contacts.temp_bolt11":
+              "Temporäre BOLT11-Rechnungen können nicht als Kontakt gespeichert werden.",
+
+            "contacts.created": "Kontakt erstellt.",
+            "contacts.updated": "Kontakt aktualisiert.",
+            "contacts.deleted": "Kontakt gelöscht.",
+            "contacts.saved": "Kontakt gespeichert.",
+            "contacts.save_failed":
+              "Kontakt konnte nicht gespeichert werden.",
+            "contact.type.lightning_address": "Lightning-Adresse",
+            "contact.type.bolt12": "BOLT12 Offer",
+            "contact.type.lnurl": "LNURL",
+            "contact.type.bip353": "BIP353",
+            "contact.type.nostr": "Nostr",
+            "contact.type.node": "Node-ID",
+            "contact.type.other": "Andere",
+            "contacts.edit_title": "Kontakt bearbeiten",
+            "contacts.save_title": "Kontakt speichern",
+            "contacts.delete_title": "Kontakt löschen",
+
+            "contacts.name": "Name",
+            "contacts.notes": "Notizen",
+            "contacts.identifier": "Kennung",
+            "contacts.type": "Typ",
+
+            "contacts.payment_targets": "Zahlungsziele",
+            "contacts.add_payment_target": "+ Zahlungsziel hinzufügen",
+            "contacts.no_payment_targets": "Noch keine Zahlungsziele vorhanden.",
+
+            "contacts.label_optional": "Bezeichnung (optional)",
+
+            "contacts.cancel": "Abbrechen",
+            "contacts.save": "Speichern",
+
+            "contacts.save_as_new": "💾 Als neuen Kontakt speichern",
+
+            "contacts.already_saved": "✓ Bereits gespeichert als",
+            "contacts.delete_text": "Kontakt löschen?",
+            "contacts.delete_warning": "Folgendes wird dauerhaft gelöscht:",
+            "contacts.delete_contact": "Kontakt",
+            "contacts.delete_targets": "Alle Zahlungsziele",
+            "contacts.delete_irreversible": "Diese Aktion kann nicht rückgängig gemacht werden.",
+
             "toast.create_start": "Erzeuge Offer...",
             "toast.create_success": "Offer erfolgreich erzeugt.",
             "toast.qr_refreshed": "QR aktualisiert.",
@@ -4224,10 +7135,20 @@
             "toast.invoice_paid": "BOLT11-Rechnung erfolgreich bezahlt.",
             "toast.invoice_amount_info":
               "Hinweis: Betrag wird aus der Rechnung übernommen.",
+            "toast.bolt11_contact_unavailable":
+              "BOLT11-Rechnungen sind nur einmal verwendbar und können nicht als Kontakte gespeichert werden.",
+            "toast.invalid_node_id":
+              "Ungültige Lightning Node ID.",
+            "toast.sending_keysend":
+              "Sende Keysend an",
+            "toast.keysend_sent":
+              "Keysend-Zahlung erfolgreich gesendet.",
+            "pay.summary.keysend_sent":
+              "Keysend gesendet",
             "toast.enter_target":
-              "Bitte Offer, Invoice oder Lightning Address eingeben.",
+              "Bitte Offer, Invoice, Lightning Address oder Node ID eingeben.",
             "toast.unknown_payment_format":
-              "Unbekanntes Zahlungsformat. Erwartet: BOLT12, BOLT11 oder LNURL.",
+              "Unbekanntes Zahlungsformat. Erwartet: BOLT12, BOLT11, LNURL, Lightning Address oder Node ID.",
             "toast.enter_lightning_or_bip353":
               "Bitte eine Lightning Address oder BIP353-Adresse eingeben.",
             "toast.checking_and_paying": "Prüfe und bezahle:",
@@ -4297,7 +7218,7 @@
             "label.payment_output": "Payment-Ausgabe",
             "ph.payment_output":
               "Hier erscheint das letzte Zahlungsergebnis...",
-            "title.lightning_activity": "⚡ Lightning-Aktivität",
+            "title.lightning_activity": " Lightning-Aktivität",
             "history.payment": "Zahlung",
             "history.show_details": "Details anzeigen",
             "history.hide_details": "Details ausblenden",
@@ -4321,6 +7242,9 @@
             "history.settled": "Abgeschlossen",
             "history.pending": "Ausstehend",
             "history.failed": "Fehlgeschlagen",
+            "history.load_more": "Ältere laden",
+            "history.search_placeholder":
+              "Transaktionen, Kontakte, Adressen oder Payment Hash durchsuchen...",
             "title.offer_history": "Generierte Offers",
             "title.notification_keys": "Nostr Notification Keys",
             "title.nwc_wallet": "NWC / Zap Wallet",
@@ -4331,6 +7255,8 @@
             "history.as_qr": "Als QR",
             "history.copy": "Kopieren",
             "history.delete": "Löschen",
+            "history.contact": "Kontakt",
+            "history.add_to_contact": "Zu Kontakten hinzufügen...",
             "title.nostr_identity": "Nostr / Identity",
             "label.identity_alias": "Lightning Address Alias",
             "label.nostr_pubkey": "Nostr Pubkey (hex oder npub)",
@@ -4497,6 +7423,65 @@
             "nav.logout": "Logout",
             "label.decode_output": "Decode output",
             "ph.decode_output": "Decoded output will appear here...",
+            "contacts.title": "Contacts",
+            "contacts.search": "Search contacts...",
+            "contacts.new": "New Contact",
+
+            "contacts.none": "No contacts yet.",
+            "contacts.no_matches": "No matching contacts.",
+
+            "contacts.edit": "Edit",
+            "contacts.delete": "Delete",
+
+            "contacts.loading": "Loading contacts...",
+            "btn.close": "Close",
+            "contacts.payment_method": "Payment Method",
+            "contacts.payment_target": "Payment Target",
+            "contacts.remove_payment_target": "Remove",
+            "contacts.default_target": "Default payment target",
+            "contacts.delete_confirm": "Delete contact?",
+            "contacts.temp_bolt11":
+              "Temporary BOLT11 invoices cannot be saved as contacts.",
+
+            "contacts.created": "Contact created.",
+            "contacts.updated": "Contact updated.",
+            "contacts.deleted": "Contact deleted.",
+            "contacts.saved": "Contact saved.",
+            "contacts.save_failed":
+              "Failed to save contact.",
+            "contact.type.lightning_address": "Lightning Address",
+            "contact.type.bolt12": "BOLT12 Offer",
+            "contact.type.lnurl": "LNURL",
+            "contact.type.bip353": "BIP353",
+            "contact.type.nostr": "Nostr",
+            "contact.type.node": "Node ID",
+            "contact.type.other": "Other",
+            "contacts.edit_title": "Edit Contact",
+            "contacts.save_title": "Save Contact",
+            "contacts.delete_title": "Delete Contact",
+
+            "contacts.name": "Name",
+            "contacts.notes": "Notes",
+            "contacts.identifier": "Identifier",
+            "contacts.type": "Type",
+
+            "contacts.payment_targets": "Payment Targets",
+            "contacts.add_payment_target": "+ Add Payment Target",
+            "contacts.no_payment_targets": "No payment targets yet.",
+
+            "contacts.label_optional": "Label (optional)",
+
+            "contacts.cancel": "Cancel",
+            "contacts.save": "Save",
+
+            "contacts.save_as_new": "💾 Save as new contact",
+
+            "contacts.already_saved": "✓ Already saved as",
+            "contacts.delete_text": "Delete contact?",
+            "contacts.delete_warning": "This will permanently delete:",
+            "contacts.delete_contact": "Contact",
+            "contacts.delete_targets": "All payment targets",
+            "contacts.delete_irreversible": "This action cannot be undone.",
             "toast.create_start": "Creating offer...",
             "toast.create_success": "Offer created successfully.",
             "toast.qr_refreshed": "QR refreshed.",
@@ -4515,10 +7500,20 @@
             "toast.invoice_paid": "BOLT11 invoice paid successfully.",
             "toast.invoice_amount_info":
               "Note: amount is taken from the invoice.",
+            "toast.bolt11_contact_unavailable":
+              "BOLT11 invoices are single-use and cannot be saved as contacts.",
+            "toast.invalid_node_id":
+              "Invalid Lightning node ID.",
+            "toast.sending_keysend":
+              "Sending Keysend to",
+            "toast.keysend_sent":
+              "Keysend payment sent successfully.",
+            "pay.summary.keysend_sent":
+              "Keysend sent",
             "toast.enter_target":
-              "Please enter an offer, invoice or Lightning Address.",
+              "Please enter an offer, invoice, Lightning Address or Node ID.",
             "toast.unknown_payment_format":
-              "Unknown payment format. Expected: BOLT12, BOLT11 or LNURL.",
+              "Unknown payment format. Expected: BOLT12, BOLT11, LNURL, Lightning Address or Node ID.",
             "toast.enter_lightning_or_bip353":
               "Please enter a Lightning Address or BIP353 address.",
             "toast.checking_and_paying": "Checking and paying:",
@@ -4585,7 +7580,7 @@
             "label.payment_output": "Payment output",
             "ph.payment_output":
               "The latest payment result will appear here...",
-            "title.lightning_activity": "⚡ Lightning Activity",
+            "title.lightning_activity": "Lightning Activity",
             "history.show_details": "Show Details",
             "history.hide_details": "Hide Details",
             "history.payment": "Payment",
@@ -4619,6 +7614,11 @@
             "history.as_qr": "As QR",
             "history.copy": "Copy",
             "history.delete": "Delete",
+            "history.contact": "Contact",
+            "history.add_to_contact": "Add to Contact...",
+            "history.load_more": "Load more",
+            "history.search_placeholder":
+              "Search transactions, contacts, addresses or payment hash...",
             "title.nostr_identity": "Nostr / Identity",
             "label.identity_alias": "Lightning Address Alias",
             "label.nostr_pubkey": "Nostr pubkey (hex or npub)",
@@ -4764,6 +7764,10 @@
           });
 
           if (window.renderHistory) window.renderHistory();
+          if (window.renderTxHistory) window.renderTxHistory();
+          if (loadMoreBtn) {
+            loadMoreBtn.style.display = txHistoryHasMore ? "" : "none";
+          }
         };
 
         document.addEventListener("DOMContentLoaded", applyTranslations);
