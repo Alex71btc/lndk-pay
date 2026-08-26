@@ -1134,7 +1134,7 @@
         </section>
       </div>
 
-      <details class="section">
+      <details class="section" id="txHistorySection">
         <summary>
           <span class="sectionTitle">
             <img
@@ -1149,7 +1149,28 @@
           </span>
         </summary>
 
-       <div id="txHistoryList" class="historyList"></div>
+      <div class="row" style="margin-top: 12px;">
+        <input
+          id="txHistorySearchInput"
+          type="search"
+          data-i18n-placeholder="history.search_placeholder"
+          placeholder="Transaktionen durchsuchen..."
+          autocomplete="off"
+        />
+      </div>
+
+      <div id="txHistoryList" class="historyList"></div>
+
+      <div class="row" style="margin-top: 12px;">
+        <button
+          id="loadMoreTxHistoryBtn"
+          class="secondary"
+          type="button"
+          data-i18n="history.load_more"
+        >
+          Ältere laden
+        </button>
+      </div>
      </details>
 
 
@@ -4777,10 +4798,26 @@
         }
       }
 
-      async function loadTxHistory() {
+      const TX_HISTORY_PAGE_SIZE = 50;
+      let txHistoryItems = [];
+      let txHistoryHasMore = true;
+      let txHistorySearchQuery = "";
+
+      async function fetchTxHistoryPage(offset = 0) {
         console.time("GET /api/tx-history");
 
-        const response = await fetch("/api/tx-history");
+        const params = new URLSearchParams({
+          limit: String(TX_HISTORY_PAGE_SIZE),
+          offset: String(offset),
+        });
+
+        if (txHistorySearchQuery) {
+          params.set("q", txHistorySearchQuery);
+        }
+
+        const response = await fetch(
+          `/api/tx-history?${params.toString()}`,
+        );
 
         console.timeEnd("GET /api/tx-history");
 
@@ -4788,7 +4825,63 @@
           throw new Error("Failed to load tx history");
         }
 
-        return (await response.json()).items || [];
+        return await response.json();
+      }
+
+      async function loadTxHistory() {
+        const data = await fetchTxHistoryPage(0);
+        const newestItems = data.items || [];
+
+        if (!txHistoryItems.length) {
+          txHistoryItems = newestItems;
+        } else {
+          const newestHashes = new Set(
+            newestItems.map((item) => item.payment_hash).filter(Boolean),
+          );
+
+          const olderItems = txHistoryItems.filter(
+            (item) =>
+              !item.payment_hash ||
+              !newestHashes.has(item.payment_hash),
+          );
+
+          txHistoryItems = [
+            ...newestItems,
+            ...olderItems,
+          ];
+        }
+
+      if (txHistoryItems.length <= TX_HISTORY_PAGE_SIZE) {
+        txHistoryHasMore = Boolean(data.has_more);
+      }
+
+        return txHistoryItems;
+      }
+
+      async function loadMoreTxHistory() {
+        const data = await fetchTxHistoryPage(txHistoryItems.length);
+        const newItems = data.items || [];
+
+        const existingHashes = new Set(
+          txHistoryItems.map((item) => item.payment_hash).filter(Boolean),
+        );
+
+        for (const item of newItems) {
+          if (
+            !item.payment_hash ||
+            !existingHashes.has(item.payment_hash)
+          ) {
+            txHistoryItems.push(item);
+
+            if (item.payment_hash) {
+              existingHashes.add(item.payment_hash);
+            }
+          }
+        }
+
+        txHistoryHasMore = Boolean(data.has_more);
+
+        return txHistoryItems;
       }
 
       async function syncTxHistory() {
@@ -4824,6 +4917,8 @@
         const items = await loadTxHistory();
 
         const list = document.getElementById("txHistoryList");
+
+        const loadMoreBtn = document.getElementById("loadMoreTxHistoryBtn");
 
         const openTxDetails = new Set(
           Array.from(list.querySelectorAll("details.txDetailsRoot[open]"))
@@ -5160,6 +5255,72 @@
       let txHistoryRefreshTimer = null;
       let lastTxSync = 0;
       let syncingTxHistory = false;
+
+      document
+        .getElementById("loadMoreTxHistoryBtn")
+        ?.addEventListener("click", async () => {
+          const btn = document.getElementById("loadMoreTxHistoryBtn");
+
+          if (!btn || !txHistoryHasMore) return;
+
+          btn.disabled = true;
+
+          try {
+            await loadMoreTxHistory();
+            await window.renderTxHistory();
+          } catch (error) {
+            console.error("Failed to load older tx history:", error);
+          } finally {
+            btn.disabled = false;
+          }
+        });
+
+      const txHistorySearchInput =
+        document.getElementById("txHistorySearchInput");
+
+      let txHistorySearchTimer = null;
+
+      txHistorySearchInput?.addEventListener("input", () => {
+        if (txHistorySearchTimer) {
+          clearTimeout(txHistorySearchTimer);
+        }
+
+        txHistorySearchTimer = setTimeout(async () => {
+          txHistorySearchQuery =
+            txHistorySearchInput.value.trim();
+
+          txHistoryItems = [];
+          txHistoryHasMore = true;
+
+          try {
+            await window.renderTxHistory();
+          } catch (error) {
+            console.error("Failed to search tx history:", error);
+          }
+        }, 250);
+      });
+
+      const txHistorySection =
+        document.getElementById("txHistorySection");
+
+      txHistorySection?.addEventListener("toggle", async () => {
+        if (!txHistorySection.open) {
+          txHistoryItems = [];
+          txHistoryHasMore = true;
+          txHistorySearchQuery = "";
+
+        if (txHistorySearchInput) {
+          txHistorySearchInput.value = "";
+        }
+
+        return;
+      }
+        try {
+          await window.renderTxHistory();
+        } catch (error) {
+          console.error("Failed to reload tx history:", error);
+        }
+      });
 
       function startTxHistoryAutoRefresh() {
         stopTxHistoryAutoRefresh();
@@ -7081,6 +7242,9 @@
             "history.settled": "Abgeschlossen",
             "history.pending": "Ausstehend",
             "history.failed": "Fehlgeschlagen",
+            "history.load_more": "Ältere laden",
+            "history.search_placeholder":
+              "Transaktionen, Kontakte, Adressen oder Payment Hash durchsuchen...",
             "title.offer_history": "Generierte Offers",
             "title.notification_keys": "Nostr Notification Keys",
             "title.nwc_wallet": "NWC / Zap Wallet",
@@ -7452,6 +7616,9 @@
             "history.delete": "Delete",
             "history.contact": "Contact",
             "history.add_to_contact": "Add to Contact...",
+            "history.load_more": "Load more",
+            "history.search_placeholder":
+              "Search transactions, contacts, addresses or payment hash...",
             "title.nostr_identity": "Nostr / Identity",
             "label.identity_alias": "Lightning Address Alias",
             "label.nostr_pubkey": "Nostr pubkey (hex or npub)",
@@ -7598,6 +7765,9 @@
 
           if (window.renderHistory) window.renderHistory();
           if (window.renderTxHistory) window.renderTxHistory();
+          if (loadMoreBtn) {
+            loadMoreBtn.style.display = txHistoryHasMore ? "" : "none";
+          }
         };
 
         document.addEventListener("DOMContentLoaded", applyTranslations);

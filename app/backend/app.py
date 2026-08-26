@@ -544,22 +544,64 @@ def _log_tx(
         "raw_json": raw_json or {},
     })
 
-def list_tx_history(limit: int = 200):
+def list_tx_history(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+):
+    safe_limit = max(1, min(int(limit or 50), 200))
+    safe_offset = max(0, int(offset or 0))
+    search_value = str(search or "").strip().lower()
+
+    where_sql = ""
+    params: list[Any] = []
+
+    if search_value:
+        pattern = f"%{search_value}%"
+
+        where_sql = """
+            WHERE (
+                LOWER(COALESCE(tx_history.counterparty, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.identifier, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.memo, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.payment_hash, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.method, '')) LIKE ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM contact_entries
+                    JOIN contacts
+                      ON contacts.id = contact_entries.contact_id
+                    WHERE
+                        LOWER(COALESCE(contacts.alias, '')) LIKE ?
+                        AND LOWER(TRIM(contact_entries.identifier)) IN (
+                            LOWER(TRIM(COALESCE(tx_history.counterparty, ''))),
+                            LOWER(TRIM(COALESCE(tx_history.identifier, '')))
+                        )
+                )
+            )
+        """
+
+        params.extend([pattern] * 6)
+
+    params.extend([safe_limit, safe_offset])
+
     with _db_conn() as conn:
         rows = conn.execute(
-            """
-            SELECT *
+            f"""
+            SELECT tx_history.*
             FROM tx_history
+            {where_sql}
             ORDER BY created_at DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (limit,),
+            params,
         ).fetchall()
 
     items = []
 
     for row in rows:
         item = dict(row)
+
         if item["raw_json"]:
             item["raw_json"] = json.loads(item["raw_json"])
 
@@ -6350,16 +6392,31 @@ async def api_debug_invoices(request: StarletteRequest):
 @app.get("/api/debug/tx-history")
 def debug_tx_history(request: StarletteRequest):
     require_pay_auth(request)
-    return list_tx_history()
+    return list_tx_history(limit=200)
 
 @app.get("/api/debug/payments")
 async def api_debug_payments():
     return await _list_payments()
 
 @app.get("/api/tx-history")
-def api_get_tx_history(request: StarletteRequest):
+def api_get_tx_history(
+    request: StarletteRequest,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    q: str = Query(default="", max_length=300),
+):
     require_pay_auth(request)
-    return {"items": list_tx_history()}
+
+    items = list_tx_history(
+        limit=limit,
+        offset=offset,
+        search=q,
+    )
+
+    return {
+        "items": items,
+        "has_more": len(items) == limit,
+    }
 
 @app.post("/api/admin/sync-tx-history")
 async def api_sync_tx_history(request: StarletteRequest):
