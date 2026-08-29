@@ -636,6 +636,8 @@
         justify-content: center;
         padding: 18px;
         z-index: 1000;
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
 
       .scannerModal.show {
@@ -645,11 +647,17 @@
       .scannerCard {
         width: 100%;
         max-width: 720px;
+        max-height: calc(100vh - 36px);
+        max-height: calc(100dvh - 36px);
         background: #121a2b;
         border: 1px solid var(--border);
         border-radius: 20px;
         padding: 16px;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
       }
 
       .scannerViewport {
@@ -706,6 +714,16 @@
 
         .row button {
           width: 100%;
+        }
+
+        #contactsModal .scannerCard {
+          max-height: calc(100vh - 20px);
+          max-height: calc(100dvh - 20px);
+        }
+
+        #contactsModal #contactsList {
+          max-height: none !important;
+          overflow: visible !important;
         }
 
         main.card .titleBlock {
