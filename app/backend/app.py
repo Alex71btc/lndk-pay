@@ -2769,6 +2769,30 @@ def _alias_dns_name(name: str) -> str:
     zone_name = cf["zone_name"] or get_lnurl_base_domain()
     return f"{name}.user._bitcoin-payment.{zone_name}"
 
+
+def _public_bip353_dns_name(address: str, zone_name: str) -> str:
+    normalized_address = address.strip().lower()
+    if not HRN_RE.fullmatch(normalized_address):
+        raise HTTPException(status_code=400, detail="Invalid public BOLT12 address")
+
+    username, domain = normalized_address.split("@", 1)
+    try:
+        username = _normalize_alias_name(username)
+    except HTTPException as exc:
+        raise HTTPException(status_code=400, detail="Invalid BIP353 username") from exc
+
+    normalized_zone = zone_name.strip().lower().rstrip(".")
+    if not normalized_zone:
+        raise HTTPException(status_code=400, detail="Cloudflare zone name is required")
+
+    if domain != normalized_zone and not domain.endswith(f".{normalized_zone}"):
+        raise HTTPException(
+            status_code=400,
+            detail="Public BOLT12 address must use the configured Cloudflare zone",
+        )
+
+    return f"{username}.user._bitcoin-payment.{domain}"
+
 def _build_alias_response(name: str, alias_data: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": name,
@@ -2804,13 +2828,15 @@ def qr_data(data: str) -> str:
     encoded = base64.b64encode(buffer.getvalue()).decode()
     return f"data:image/png;base64,{encoded}"
 
-async def _cloudflare_upsert_txt_record(*, name: str, content: str) -> dict[str, Any]:
-    cf = get_cloudflare_config()
+def _require_cloudflare_config(
+    cloudflare_config: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    cf = cloudflare_config if cloudflare_config is not None else get_cloudflare_config()
 
-    token = cf["api_token"]
-    zone_id = cf["zone_id"]
-    zone_name = cf["zone_name"]
-    enabled = cf["enabled"]
+    token = str(cf.get("api_token", "")).strip()
+    zone_id = str(cf.get("zone_id", "")).strip()
+    zone_name = str(cf.get("zone_name", "")).strip().lower().rstrip(".")
+    enabled = bool(cf.get("enabled"))
 
     if not enabled:
         raise HTTPException(
@@ -2824,14 +2850,28 @@ async def _cloudflare_upsert_txt_record(*, name: str, content: str) -> dict[str,
             detail="Cloudflare config missing: api_token, zone_id or zone_name",
         )
 
+    return {
+        "enabled": True,
+        "api_token": token,
+        "zone_id": zone_id,
+        "zone_name": zone_name,
+    }
+
+
+async def _cloudflare_lookup_txt_records(
+    *,
+    name: str,
+    cloudflare_config: Optional[dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
+    cf = _require_cloudflare_config(cloudflare_config)
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {cf['api_token']}",
         "Content-Type": "application/json",
     }
 
     async with httpx.AsyncClient(timeout=20) as client:
         lookup_response = await client.get(
-            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
+            f"https://api.cloudflare.com/client/v4/zones/{cf['zone_id']}/dns_records",
             headers=headers,
             params={"type": "TXT", "name": name},
         )
@@ -2844,25 +2884,45 @@ async def _cloudflare_upsert_txt_record(*, name: str, content: str) -> dict[str,
         if lookup_response.status_code >= 400 or not lookup_data.get("success", False):
             raise HTTPException(status_code=502, detail=f"Cloudflare lookup error: {lookup_data}")
 
-        existing = lookup_data.get("result", []) or []
+    return lookup_data.get("result", []) or []
 
-        payload = {
-            "type": "TXT",
-            "name": name,
-            "content": content,
-            "ttl": 1,
-        }
 
+async def _cloudflare_upsert_txt_record(
+    *,
+    name: str,
+    content: str,
+    cloudflare_config: Optional[dict[str, Any]] = None,
+    existing_records: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    cf = _require_cloudflare_config(cloudflare_config)
+    headers = {
+        "Authorization": f"Bearer {cf['api_token']}",
+        "Content-Type": "application/json",
+    }
+    existing = (
+        existing_records
+        if existing_records is not None
+        else await _cloudflare_lookup_txt_records(name=name, cloudflare_config=cf)
+    )
+
+    payload = {
+        "type": "TXT",
+        "name": name,
+        "content": content,
+        "ttl": 1,
+    }
+
+    async with httpx.AsyncClient(timeout=20) as client:
         if existing:
             record_id = existing[0]["id"]
             response = await client.put(
-                f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}",
+                f"https://api.cloudflare.com/client/v4/zones/{cf['zone_id']}/dns_records/{record_id}",
                 headers=headers,
                 json=payload,
             )
         else:
             response = await client.post(
-                f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
+                f"https://api.cloudflare.com/client/v4/zones/{cf['zone_id']}/dns_records",
                 headers=headers,
                 json=payload,
             )
@@ -2876,56 +2936,30 @@ async def _cloudflare_upsert_txt_record(*, name: str, content: str) -> dict[str,
         raise HTTPException(status_code=502, detail=f"Cloudflare error: {data}")
 
     return data.get("result", {})
-async def _cloudflare_delete_txt_record(*, name: str) -> dict[str, Any]:
-    cf = get_cloudflare_config()
-
-    token = cf["api_token"]
-    zone_id = cf["zone_id"]
-    zone_name = cf["zone_name"]
-    enabled = cf["enabled"]
-
-    if not enabled:
-        raise HTTPException(
-            status_code=400,
-            detail="Cloudflare integration is not enabled in app config",
-        )
-
-    if not token or not zone_id or not zone_name:
-        raise HTTPException(
-            status_code=500,
-            detail="Cloudflare config missing: api_token, zone_id or zone_name",
-        )
-
+async def _cloudflare_delete_txt_record(
+    *,
+    name: str,
+    cloudflare_config: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    cf = _require_cloudflare_config(cloudflare_config)
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {cf['api_token']}",
         "Content-Type": "application/json",
     }
+    existing = await _cloudflare_lookup_txt_records(
+        name=name,
+        cloudflare_config=cf,
+    )
+    deleted_ids = []
 
     async with httpx.AsyncClient(timeout=20) as client:
-        lookup_response = await client.get(
-            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
-            headers=headers,
-            params={"type": "TXT", "name": name},
-        )
-
-        try:
-            lookup_data = lookup_response.json()
-        except Exception:
-            raise HTTPException(status_code=502, detail="Cloudflare returned invalid lookup response")
-
-        if lookup_response.status_code >= 400 or not lookup_data.get("success", False):
-            raise HTTPException(status_code=502, detail=f"Cloudflare lookup error: {lookup_data}")
-
-        existing = lookup_data.get("result", []) or []
-        deleted_ids = []
-
         for record in existing:
             record_id = record.get("id")
             if not record_id:
                 continue
 
             response = await client.delete(
-                f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}",
+                f"https://api.cloudflare.com/client/v4/zones/{cf['zone_id']}/dns_records/{record_id}",
                 headers=headers,
             )
 
@@ -3176,7 +3210,7 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/assets", StaticFiles(directory="/app/assets"), name="assets")
 
 @app.post("/api/setup/config")
-def set_setup_config(payload: dict, request: StarletteRequest):
+async def set_setup_config(payload: dict, request: StarletteRequest):
     if _is_pay_ui_enabled():
         require_pay_auth(request)
 
@@ -3184,8 +3218,24 @@ def set_setup_config(payload: dict, request: StarletteRequest):
 
     safe_payload = dict(payload or {})
     password = str(safe_payload.pop("password", "")).strip()
+    delete_previous_bip353_record = (
+        safe_payload.pop("delete_previous_bip353_record", False) is True
+    )
 
-    cfg["public_bolt12_address"] = str(safe_payload.get("public_bolt12_address", "")).strip()
+    previous_public_bolt12_address = str(
+        cfg.get("public_bolt12_address", "")
+    ).strip().lower()
+    previous_dns_mode = str(cfg.get("dns_mode", "none")).strip().lower()
+    previous_cf_raw = cfg.get("cloudflare", {}) or {}
+    previous_cloudflare_config = {
+        "enabled": bool(previous_cf_raw.get("enabled")) or previous_dns_mode == "cloudflare",
+        "zone_name": str(previous_cf_raw.get("zone_name", "")).strip().lower().rstrip("."),
+        "zone_id": str(previous_cf_raw.get("zone_id", "")).strip(),
+        "api_token": str(previous_cf_raw.get("api_token", "")).strip(),
+    }
+
+    public_bolt12_address = str(safe_payload.get("public_bolt12_address", "")).strip().lower()
+    cfg["public_bolt12_address"] = public_bolt12_address
     cfg["public_lnurl_address"] = str(safe_payload.get("public_lnurl_address", "")).strip()
     cfg["lnurl_base_domain"] = str(safe_payload.get("lnurl_base_domain", "")).strip().lower()
     cfg["lnurl_base_url"] = str(safe_payload.get("lnurl_base_url", "")).strip().rstrip("/")
@@ -3203,19 +3253,92 @@ def set_setup_config(payload: dict, request: StarletteRequest):
     cfg["dns_mode"] = dns_mode
 
     cf = safe_payload.get("cloudflare", {}) or {}
-    cfg["cloudflare"] = {
+    cloudflare_config = {
         "enabled": bool(cf.get("enabled")) or dns_mode == "cloudflare",
-        "zone_name": str(cf.get("zone_name", "")).strip(),
+        "zone_name": str(cf.get("zone_name", "")).strip().lower().rstrip("."),
         "zone_id": str(cf.get("zone_id", "")).strip(),
         "api_token": str(cf.get("api_token", "")).strip(),
     }
+    cfg["cloudflare"] = cloudflare_config
 
     if password:
         cfg["ui_password_hash"] = _hash_password(password)
 
+    public_bip353 = None
+    if dns_mode == "cloudflare":
+        dns_name = _public_bip353_dns_name(
+            public_bolt12_address,
+            cloudflare_config["zone_name"],
+        )
+        existing_records = await _cloudflare_lookup_txt_records(
+            name=dns_name,
+            cloudflare_config=cloudflare_config,
+        )
+        existing_offer = next(
+            (
+                offer
+                for record in existing_records
+                if (offer := _extract_offer_from_txt_record(str(record.get("content", ""))))
+            ),
+            None,
+        )
+
+        published = False
+        if not existing_offer:
+            offer_response = _create_offer_internal(
+                OfferRequest(
+                    amount=None,
+                    description=public_bolt12_address,
+                )
+            )
+            await _cloudflare_upsert_txt_record(
+                name=dns_name,
+                content=build_bip353_txt_value(offer_response.offer),
+                cloudflare_config=cloudflare_config,
+                existing_records=existing_records,
+            )
+            published = True
+
+        public_bip353 = {
+            "address": public_bolt12_address,
+            "dns_name": dns_name,
+            "published": published,
+            "reused_existing": bool(existing_offer),
+            "previous_record_deleted": False,
+        }
+
+        if (
+            delete_previous_bip353_record
+            and previous_dns_mode == "cloudflare"
+            and previous_public_bolt12_address
+            and previous_public_bolt12_address != public_bolt12_address
+        ):
+            previous_dns_name = _public_bip353_dns_name(
+                previous_public_bolt12_address,
+                previous_cloudflare_config["zone_name"],
+            )
+            if previous_dns_name != dns_name:
+                delete_cloudflare_config = previous_cloudflare_config
+                if (
+                    previous_cloudflare_config["zone_id"] == cloudflare_config["zone_id"]
+                    and previous_cloudflare_config["zone_name"] == cloudflare_config["zone_name"]
+                ):
+                    delete_cloudflare_config = cloudflare_config
+
+                delete_result = await _cloudflare_delete_txt_record(
+                    name=previous_dns_name,
+                    cloudflare_config=delete_cloudflare_config,
+                )
+                public_bip353["previous_record_deleted"] = True
+                public_bip353["previous_dns_name"] = previous_dns_name
+                public_bip353["deleted_record_ids"] = delete_result.get(
+                    "deleted_record_ids",
+                    [],
+                )
+
     save_config(cfg)
 
-    return {"ok": True}
+    return {"ok": True, "public_bip353": public_bip353}
 @app.post("/api/create-offer", response_model=OfferResponse)
 def create_offer(payload: OfferRequest, request: StarletteRequest) -> OfferResponse:
     _require_csrf(request)

@@ -480,6 +480,78 @@
       color: var(--text);
     }
 
+    body.modalOpen {
+      overflow: hidden;
+    }
+
+    .setupConfirmModal {
+      position: fixed;
+      inset: 0;
+      z-index: 4000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(3, 8, 20, 0.86);
+      backdrop-filter: blur(5px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .setupConfirmModal.show {
+      display: flex;
+    }
+
+    .setupConfirmCard {
+      width: min(480px, 100%);
+      max-height: calc(100vh - 36px);
+      max-height: calc(100dvh - 36px);
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--card);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+    }
+
+    .setupConfirmTitle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 12px;
+      font-size: 1.25rem;
+      line-height: 1.25;
+    }
+
+    .setupConfirmText {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .setupConfirmAddress {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #0c1322;
+      color: var(--text);
+    }
+
+    .setupConfirmActions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .setupConfirmActions button {
+      width: auto;
+    }
+
     @media (max-width: 700px) {
       body {
         padding: 10px;
@@ -517,6 +589,26 @@
         min-width: 250px;
         min-height: 250px;
         padding: 18px;
+      }
+
+      .setupConfirmModal {
+        align-items: flex-end;
+        padding: 10px;
+      }
+
+      .setupConfirmCard {
+        max-height: calc(100vh - 20px);
+        max-height: calc(100dvh - 20px);
+        padding: 18px;
+        border-radius: 18px;
+      }
+
+      .setupConfirmActions {
+        flex-direction: column-reverse;
+      }
+
+      .setupConfirmActions button {
+        width: 100%;
       }
 
 .titleBlock {
@@ -832,6 +924,54 @@ protocol.custom-init=39</pre>
     </section>
   </main>
 
+  <div
+    id="setupDeleteRecordModal"
+    class="setupConfirmModal"
+    aria-hidden="true"
+  >
+    <div
+      class="setupConfirmCard"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="setupDeleteRecordTitle"
+      aria-describedby="setupDeleteRecordText"
+    >
+      <h2 id="setupDeleteRecordTitle" class="setupConfirmTitle">
+        <span aria-hidden="true">⚠️</span>
+        <span data-i18n="setup.delete_old_record.title">Alten DNS-Eintrag löschen?</span>
+      </h2>
+      <p
+        id="setupDeleteRecordText"
+        class="setupConfirmText"
+        data-i18n="setup.delete_old_record.text"
+      >
+        Die bisherige BOLT12-Adresse wird ersetzt. Soll ihr Cloudflare-TXT-Record ebenfalls gelöscht werden?
+      </p>
+      <div id="setupDeleteRecordAddress" class="setupConfirmAddress mono"></div>
+      <p class="setupConfirmText" data-i18n="setup.delete_old_record.hint">
+        Die neue Adresse wird bei beiden Optionen gespeichert.
+      </p>
+      <div class="setupConfirmActions">
+        <button
+          id="setupKeepOldRecordBtn"
+          class="secondary"
+          type="button"
+          data-i18n="setup.delete_old_record.keep"
+        >
+          Alten Eintrag behalten
+        </button>
+        <button
+          id="setupDeleteOldRecordBtn"
+          class="danger"
+          type="button"
+          data-i18n="setup.delete_old_record.delete"
+        >
+          Alten Eintrag löschen
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="toastWrap">
     <div class="statusBar" id="statusBar"></div>
   </div>
@@ -1035,6 +1175,10 @@ function getCookie(name) {
     const setupLnurlBaseUrl = document.getElementById('setupLnurlBaseUrl');
     const setupDnsMode = document.getElementById('setupDnsMode');
     const saveSetupBtn = document.getElementById('saveSetupBtn');
+    const setupDeleteRecordModal = document.getElementById('setupDeleteRecordModal');
+    const setupDeleteRecordAddress = document.getElementById('setupDeleteRecordAddress');
+    const setupKeepOldRecordBtn = document.getElementById('setupKeepOldRecordBtn');
+    const setupDeleteOldRecordBtn = document.getElementById('setupDeleteOldRecordBtn');
     const manualDnsHint = document.getElementById('manualDnsHint');
     const manualDnsExampleName = document.getElementById('manualDnsExampleName');
     const lnurlSettingsBlock = document.getElementById('lnurlSettingsBlock');
@@ -1062,6 +1206,10 @@ function getCookie(name) {
     let currentLnurl = '';
     let activeQrMode = 'address';
     let currentInvoice = '';
+    let loadedSetupBolt12Address = '';
+    let loadedSetupDnsMode = 'none';
+    let setupDeleteRecordResolver = null;
+    let setupDeleteRecordPreviousFocus = null;
     
     addressBox.textContent = currentAddress;
     fallbackAddressBox.textContent = fallbackAddress;
@@ -1270,6 +1418,61 @@ function getCookie(name) {
       lnurlSettingsBlock.hidden = privacy;
     }
 
+    function closeSetupDeleteRecordModal(deleteOldRecord) {
+      if (!setupDeleteRecordResolver) return;
+
+      const resolve = setupDeleteRecordResolver;
+      setupDeleteRecordResolver = null;
+      setupDeleteRecordModal.classList.remove('show');
+      setupDeleteRecordModal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('modalOpen');
+
+      if (setupDeleteRecordPreviousFocus) {
+        setupDeleteRecordPreviousFocus.focus();
+        setupDeleteRecordPreviousFocus = null;
+      }
+
+      resolve(deleteOldRecord);
+    }
+
+    function askDeletePreviousBip353Record(address) {
+      if (setupDeleteRecordResolver) {
+        return Promise.resolve(false);
+      }
+
+      setupDeleteRecordAddress.textContent = address;
+      setupDeleteRecordPreviousFocus = document.activeElement;
+      setupDeleteRecordModal.classList.add('show');
+      setupDeleteRecordModal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modalOpen');
+      setupKeepOldRecordBtn.focus();
+
+      return new Promise(resolve => {
+        setupDeleteRecordResolver = resolve;
+      });
+    }
+
+    setupKeepOldRecordBtn.addEventListener('click', () => {
+      closeSetupDeleteRecordModal(false);
+    });
+
+    setupDeleteOldRecordBtn.addEventListener('click', () => {
+      closeSetupDeleteRecordModal(true);
+    });
+
+    setupDeleteRecordModal.addEventListener('click', event => {
+      if (event.target === setupDeleteRecordModal) {
+        closeSetupDeleteRecordModal(false);
+      }
+    });
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && setupDeleteRecordResolver) {
+        event.preventDefault();
+        closeSetupDeleteRecordModal(false);
+      }
+    });
+
     // ------------------------------------------------------------------
     // Data loading helpers
     // ------------------------------------------------------------------
@@ -1333,6 +1536,7 @@ function getCookie(name) {
         console.log('Setup config unavailable', e);
       }
       setupBolt12Address.value = configData.public_bolt12_address || '';
+      loadedSetupBolt12Address = setupBolt12Address.value.trim().toLowerCase();
       
       const paymentMode =
         configData.payment_mode || 'compatibility';
@@ -1345,6 +1549,7 @@ function getCookie(name) {
       setupLnurlBaseDomain.value = configData.lnurl_base_domain || '';
       setupLnurlBaseUrl.value = configData.lnurl_base_url || '';
       setupDnsMode.value = configData.dns_mode || 'none';
+      loadedSetupDnsMode = setupDnsMode.value.trim().toLowerCase();
       cfZoneName.value = configData.cloudflare?.zone_name || '';
       cfZoneId.value = configData.cloudflare?.zone_id || '';
       cfApiToken.value = configData.cloudflare?.api_token || '';
@@ -1374,8 +1579,23 @@ async function saveSetup() {
       throw new Error(window.__t('error.password_mismatch'));
     }
 
+    const nextBolt12Address = (setupBolt12Address.value || '').trim().toLowerCase();
+    const nextDnsMode = (setupDnsMode.value || 'none').trim().toLowerCase();
+    let deletePreviousBip353Record = false;
+
+    if (
+      loadedSetupDnsMode === 'cloudflare' &&
+      nextDnsMode === 'cloudflare' &&
+      loadedSetupBolt12Address &&
+      loadedSetupBolt12Address !== nextBolt12Address
+    ) {
+      deletePreviousBip353Record = await askDeletePreviousBip353Record(
+        loadedSetupBolt12Address
+      );
+    }
+
     const payload = {
-      public_bolt12_address: (setupBolt12Address.value || '').trim(),
+      public_bolt12_address: nextBolt12Address,
       payment_mode:
         document.querySelector(
           'input[name="paymentMode"]:checked'
@@ -1383,7 +1603,8 @@ async function saveSetup() {
       public_lnurl_address: (setupLnurlAddress.value || '').trim(),
       lnurl_base_domain: (setupLnurlBaseDomain.value || '').trim().toLowerCase(),
       lnurl_base_url: (setupLnurlBaseUrl.value || '').trim(),
-      dns_mode: (setupDnsMode.value || 'none').trim(),
+      dns_mode: nextDnsMode,
+      delete_previous_bip353_record: deletePreviousBip353Record,
       cloudflare: {
         zone_name: (cfZoneName.value || '').trim(),
         zone_id: (cfZoneId.value || '').trim(),
@@ -2370,6 +2591,11 @@ installBtn.addEventListener('click', async () => {
       "setup.ph.cf_api_token": "API Token",
       "setup.cloudflare_optional_hint": "Cloudflare bleibt optional. Ohne Cloudflare funktioniert die App weiter, nur BIP353-DNS wird dann nicht automatisch gesetzt.",
       "setup.btn.save": "Setup speichern",
+      "setup.delete_old_record.title": "Alten DNS-Eintrag löschen?",
+      "setup.delete_old_record.text": "Die bisherige BOLT12-Adresse wird ersetzt. Soll ihr Cloudflare-TXT-Record ebenfalls gelöscht werden?",
+      "setup.delete_old_record.hint": "Die neue Adresse wird bei beiden Optionen gespeichert.",
+      "setup.delete_old_record.keep": "Alten Eintrag behalten",
+      "setup.delete_old_record.delete": "Alten Eintrag löschen",
       "setup.security.title": "🔐 Remote-Zugriff absichern",
       "setup.security.text": "Wenn du diese App aus dem Internet erreichbar machst, schütze Admin-Routen mit Cloudflare Tunnel + Access oder einer vergleichbaren Zugriffskontrolle.",
       "setup.security.routes": "Empfohlen: <span class=\"mono\">/pay</span> und <span class=\"mono\">/pay-login</span> schützen, während notwendige öffentliche Payment-Endpunkte erreichbar bleiben.",
@@ -2485,6 +2711,11 @@ installBtn.addEventListener('click', async () => {
       "setup.ph.cf_api_token": "API token",
       "setup.cloudflare_optional_hint": "Cloudflare remains optional. The app still works without it; only automatic BIP353 DNS creation is disabled.",
       "setup.btn.save": "Save setup",
+      "setup.delete_old_record.title": "Delete old DNS record?",
+      "setup.delete_old_record.text": "The previous BOLT12 address will be replaced. Should its Cloudflare TXT record be deleted as well?",
+      "setup.delete_old_record.hint": "The new address will be saved with either option.",
+      "setup.delete_old_record.keep": "Keep old record",
+      "setup.delete_old_record.delete": "Delete old record",
       "setup.security.title": "🔐 Remote access security",
       "setup.security.text": "If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.",
       "setup.security.routes": "Recommended: protect <span class=\"mono\">/pay</span> and <span class=\"mono\">/pay-login</span>, while keeping required public payment endpoints reachable.",
