@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from typing import Any
 
@@ -15,6 +16,31 @@ _nwc_runtime_lock = asyncio.Lock()
 
 def _log(message: str) -> None:
     print(f"[NWC] {message}", flush=True)
+
+
+_SENSITIVE_LOG_TOKEN_RE = re.compile(
+    r"(?i)(?:[0-9a-f]{24,}|(?:lnbc|lntb|lnbcrt|lno|lnurl|npub|nsec)1[0-9a-z]{16,})"
+)
+
+
+def _short_identifier(value: Any, head: int = 8, tail: int = 6) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "-"
+    if len(text) <= head + tail + 1:
+        return text
+    return f"{text[:head]}…{text[-tail:]}"
+
+
+def _safe_log_text(value: Any, limit: int = 240) -> str:
+    text = str(value or "").replace("\n", " ").replace("\r", " ")
+    text = _SENSITIVE_LOG_TOKEN_RE.sub(
+        lambda match: _short_identifier(match.group(0)),
+        text,
+    )
+    if len(text) > limit:
+        text = f"{text[:limit]}…"
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +144,7 @@ def _check_and_update_budget(conn: dict[str, Any], amount_sat: int) -> tuple[boo
         new_total,
     )
 
-    _log(f"budget updated: conn={conn.get('name')} spent={new_total}")
+    _log(f"budget updated: conn={conn.get('name')} spent_sat={new_total}")
 
     return True, None
 
@@ -182,8 +208,8 @@ async def _send_nwc_response_event(
     await ws.send(json.dumps(["EVENT", signed]))
 
     _log(
-        f"response sent: request_event_id={request_event_id} "
-        f"response_event_id={signed.get('id')}"
+        f"response sent: request_event_id={_short_identifier(request_event_id)} "
+        f"response_event_id={_short_identifier(signed.get('id'))}"
     )
 
 
@@ -218,7 +244,10 @@ async def _publish_nwc_info_event(ws, conn: dict[str, Any]) -> None:
     signed = _sign_nostr_event(event)
 
     await ws.send(json.dumps(["EVENT", signed]))
-    _log(f"published info event: {conn.get('name')} event_id={signed.get('id')}")
+    _log(
+        f"info event published: conn={conn.get('name')} "
+        f"event_id={_short_identifier(signed.get('id'))}"
+    )
 
 
 async def _send_nwc_subscription(ws, conn: dict[str, Any]) -> None:
@@ -236,8 +265,8 @@ async def _send_nwc_subscription(ws, conn: dict[str, Any]) -> None:
 
     await ws.send(json.dumps(req))
     _log(
-        f"subscribed: {conn.get('name')} "
-        f"sub_id={sub_id} wallet_service_pubkey={wallet_service_pubkey}"
+        f"subscription active: conn={conn.get('name')} sub_id={sub_id} "
+        f"wallet_pubkey={_short_identifier(wallet_service_pubkey)}"
     )
 
 
@@ -253,21 +282,22 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
 
     wallet_service_pubkey = _extract_first_p_tag(tags)
     if not wallet_service_pubkey:
-        _log(f"request {event_id}: missing p-tag")
+        _log(f"request {_short_identifier(event_id)} rejected: missing p-tag")
         await _send_nwc_error(ws, event, "INVALID_REQUEST", "Missing p-tag")
         return
 
     matched = _find_matching_connection(event_pubkey, wallet_service_pubkey)
     if not matched:
         _log(
-            f"request {event_id}: no matching enabled connection for client={event_pubkey}"
+            f"request {_short_identifier(event_id)} rejected: "
+            f"no matching connection for client={_short_identifier(event_pubkey)}"
         )
         await _send_nwc_error(ws, event, "UNAUTHORIZED", "No matching enabled connection")
         return
 
     server_privkey = _get_server_privkey()
     if not server_privkey:
-        _log(f"request {event_id}: missing server private key")
+        _log(f"request {_short_identifier(event_id)} rejected: missing server key")
         await _send_nwc_error(ws, event, "INTERNAL", "Missing server private key")
         return
 
@@ -285,9 +315,10 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
     method = str(payload.get("method") or "").strip()
     params = payload.get("params") or {}
 
+    param_keys = sorted(str(key) for key in params.keys()) if isinstance(params, dict) else []
     _log(
-        f"request {event_id}: matched_connection={matched.get('name')} "
-        f"method={method} params={params}"
+        f"request {_short_identifier(event_id)} accepted: "
+        f"conn={matched.get('name')} method={method} param_keys={param_keys}"
     )
 
     if method == "pay_invoice":
@@ -332,15 +363,19 @@ def _parse_request_payload(
     try:
         plaintext = _nip04_decrypt(server_privkey, event_pubkey, content)
     except Exception as exc:
-        _log(f"request {event_id}: decrypt failed: {exc}")
+        _log(
+            f"request {_short_identifier(event_id)} decrypt failed: "
+            f"{type(exc).__name__}: {_safe_log_text(exc)}"
+        )
         return None, f"DECRYPT_FAILED::{exc}"
-
-    _log(f"request {event_id}: decrypted={plaintext[:500]}")
 
     try:
         payload = json.loads(plaintext)
     except Exception as exc:
-        _log(f"request {event_id}: invalid json after decrypt: {exc}")
+        _log(
+            f"request {_short_identifier(event_id)} JSON invalid: "
+            f"{type(exc).__name__}: {_safe_log_text(exc)}"
+        )
         return None, f"INVALID_REQUEST::Invalid JSON: {exc}"
 
     if not isinstance(payload, dict):
@@ -418,7 +453,10 @@ async def _handle_pay_invoice_request(
     try:
         decoded = bolt11.decode(invoice)
     except Exception as exc:
-        _log(f"request {event_id}: invoice decode failed: {exc}")
+        _log(
+            f"request {_short_identifier(event_id)} invoice decode failed: "
+            f"{type(exc).__name__}: {_safe_log_text(exc)}"
+        )
         await _send_nwc_error(ws, event, "INVALID_REQUEST", f"Invalid invoice: {exc}")
         return
 
@@ -430,13 +468,16 @@ async def _handle_pay_invoice_request(
 
     if max_payment_sat > 0 and invoice_sat > max_payment_sat:
         msg = f"Invoice amount {invoice_sat} sats exceeds connection limit of {max_payment_sat} sats"
-        _log(f"request {event_id}: limit exceeded: {msg}")
+        _log(f"request {_short_identifier(event_id)} payment rejected: {msg}")
         await _send_nwc_error(ws, event, "RESTRICTED", msg)
         return
 
     ok, err = _check_and_update_budget(matched, invoice_sat)
     if not ok:
-        _log(f"request {event_id}: budget exceeded: {err}")
+        _log(
+            f"request {_short_identifier(event_id)} payment rejected: "
+            f"{_safe_log_text(err)}"
+        )
         await _send_nwc_error(ws, event, "QUOTA_EXCEEDED", err)
         return
 
@@ -451,13 +492,20 @@ async def _handle_pay_invoice_request(
         )
 
     except Exception as exc:
-        _log(f"request {event_id}: payment failed: {exc}")
+        _log(
+            f"request {_short_identifier(event_id)} payment failed: "
+            f"{type(exc).__name__}: {_safe_log_text(exc)}"
+        )
         await _send_nwc_error(ws, event, "PAYMENT_FAILED", str(exc))
         return
 
     result = _build_pay_invoice_result(pay_result)
 
-    _log(f"request {event_id}: payment success result={result}")
+    _log(
+        f"request {_short_identifier(event_id)} payment succeeded: "
+        f"payment_hash={_short_identifier(result.get('payment_hash'))} "
+        f"fees_paid_msat={result.get('fees_paid', 0)}"
+    )
     await _send_nwc_success(ws, event, "pay_invoice", result)
 
 
@@ -502,7 +550,10 @@ async def _handle_make_invoice_request(
             counterparty=str(matched.get("name") or "NWC"),
         )
     except Exception as exc:
-        _log(f"request {event_id}: make_invoice failed: {exc}")
+        _log(
+            f"request {_short_identifier(event_id)} invoice creation failed: "
+            f"{type(exc).__name__}: {_safe_log_text(exc)}"
+        )
         await _send_nwc_error(ws, event, "INTERNAL", f"Failed to create invoice: {exc}")
         return
 
@@ -523,7 +574,11 @@ async def _handle_make_invoice_request(
         "fees_paid": 0,
      }
 
-    _log(f"request {event_id}: make_invoice success result={result}")
+    _log(
+        f"request {_short_identifier(event_id)} invoice created: "
+        f"payment_hash={_short_identifier(invoice.get('payment_hash'))} "
+        f"amount_msat={amount_sat * 1000} expiry={expiry}"
+    )
     await _send_nwc_success(ws, event, "make_invoice", result)
 
 async def _handle_lookup_invoice_request(
@@ -534,11 +589,15 @@ async def _handle_lookup_invoice_request(
 ) -> None:
     from .app import list_tx_history, sync_tx_history
 
+    event_id = str(event.get("id") or "")
     await sync_tx_history()
 
     payment_hash = str(params.get("payment_hash") or "").strip()
 
-    _log(f"lookup_invoice requested hash = {payment_hash}")
+    _log(
+        f"request {_short_identifier(event_id)} invoice lookup: "
+        f"payment_hash={_short_identifier(payment_hash)}"
+    )
     if not payment_hash:
         await _send_nwc_error(ws, event, "INVALID_REQUEST", "Missing payment_hash")
         return
@@ -546,18 +605,12 @@ async def _handle_lookup_invoice_request(
     tx = None
 
     for item in list_tx_history(500):
-        _log(
-            "lookup_invoice db candidate "
-            f"hash={item.get('payment_hash')} "
-            f"status={item.get('status')} "
-            f"method={item.get('method')}"
-        )
-
         if str(item.get("payment_hash") or "") == payment_hash:
             tx = item
             break
 
     if tx is None:
+        _log(f"request {_short_identifier(event_id)} invoice lookup: not found")
         await _send_nwc_error(ws, event, "NOT_FOUND", "Invoice not found")
         return
 
@@ -578,7 +631,10 @@ async def _handle_lookup_invoice_request(
         "description_hash": raw.get("description_hash", ""),
         "preimage": raw.get("r_preimage", ""),
     }
-    _log(f"lookup_invoice result settled={result.get('settled')} settled_at={result.get('settled_at')}")
+    _log(
+        f"request {_short_identifier(event_id)} invoice lookup completed: "
+        f"status={tx.get('status')} method={tx.get('method')} direction={tx.get('direction')}"
+    )
     await _send_nwc_success(ws, event, "lookup_invoice", result)
 
 async def _handle_get_info_request(
@@ -693,64 +749,71 @@ async def _handle_list_transactions_request(
 
 async def _handle_event_message(ws, conn: dict[str, Any], data: list[Any]) -> None:
     if len(data) < 3 or not isinstance(data[2], dict):
-        _log(f"malformed EVENT on {conn.get('name')}: {data!r}")
+        _log(f"malformed EVENT on {conn.get('name')} ignored: items={len(data)}")
         return
 
-    sub_id = data[1]
+    sub_id = str(data[1] or "")
     event = data[2]
 
     event_id = str(event.get("id") or "")
     pubkey = str(event.get("pubkey") or "").strip().lower()
     kind = event.get("kind")
-    tags = event.get("tags") or []
-    content = str(event.get("content") or "")
-
     _log(
-        f"EVENT on {conn.get('name')}: "
-        f"sub_id={sub_id} kind={kind} event_id={event_id} pubkey={pubkey}"
+        f"EVENT on {conn.get('name')}: sub_id={sub_id} kind={kind} "
+        f"event_id={_short_identifier(event_id)} pubkey={_short_identifier(pubkey)}"
     )
 
     expected_client_pubkey = str(conn.get("client_pubkey") or "").strip().lower()
     if pubkey != expected_client_pubkey:
         _log(
-            f"ignoring EVENT on {conn.get('name')}: "
-            f"unexpected client pubkey {pubkey} != {expected_client_pubkey}"
+            f"EVENT on {conn.get('name')} ignored: "
+            f"client={_short_identifier(pubkey)} "
+            f"expected={_short_identifier(expected_client_pubkey)}"
         )
         return
 
-    _log(
-        f"accepted request event on {conn.get('name')}: "
-        f"tags={tags} content_preview={content[:300]}"
-    )
+    _log(f"EVENT on {conn.get('name')} accepted: event_id={_short_identifier(event_id)}")
 
     await _handle_request_event(ws, conn, event)
 
 
 def _handle_eose_message(conn: dict[str, Any], data: list[Any]) -> None:
-    _log(f"EOSE on {conn.get('name')}: {data!r}")
+    sub_id = str(data[1] or "-") if len(data) > 1 else "-"
+    _log(f"EOSE on {conn.get('name')}: sub_id={sub_id}")
 
 
 def _handle_notice_message(conn: dict[str, Any], data: list[Any]) -> None:
-    _log(f"NOTICE on {conn.get('name')}: {data!r}")
+    notice = data[1] if len(data) > 1 else ""
+    _log(f"NOTICE on {conn.get('name')}: {_safe_log_text(notice)}")
 
 
 def _handle_ok_message(conn: dict[str, Any], data: list[Any]) -> None:
-    _log(f"OK on {conn.get('name')}: {data!r}")
+    event_id = data[1] if len(data) > 1 else ""
+    accepted = data[2] if len(data) > 2 else None
+    message = data[3] if len(data) > 3 else ""
+    _log(
+        f"OK on {conn.get('name')}: event_id={_short_identifier(event_id)} "
+        f"accepted={accepted} message={_safe_log_text(message)}"
+    )
 
 
 def _handle_unhandled_message(conn: dict[str, Any], data: list[Any]) -> None:
-    _log(f"unhandled relay message on {conn.get('name')}: {data!r}")
+    msg_type = str(data[0]) if data else "unknown"
+    _log(f"unhandled relay message on {conn.get('name')}: type={_safe_log_text(msg_type)}")
 
 
 async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
     try:
         data = json.loads(msg)
     except Exception:
-        _log(f"non-json message on {conn.get('name')}: {msg[:300]}")
+        _log(f"non-JSON message on {conn.get('name')}: {_safe_log_text(msg, limit=120)}")
         return
 
     if not isinstance(data, list) or not data:
-        _log(f"unexpected message format on {conn.get('name')}: {data!r}")
+        _log(
+            f"unexpected message format on {conn.get('name')}: "
+            f"type={type(data).__name__}"
+        )
         return
 
     msg_type = str(data[0])
@@ -771,7 +834,7 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
         _handle_ok_message(conn, data)
         return
 
-    _log(f"unhandled relay message on {conn.get('name')}: {data!r}")
+    _handle_unhandled_message(conn, data)
 
 
 
@@ -785,7 +848,7 @@ async def nwc_connection_loop(conn: dict[str, Any]) -> None:
     name = str(conn.get("name") or "NWC Connection").strip()
 
     if not relay:
-        _log(f"skipping {name}: no relay_url configured")
+        _log(f"skipping {name}: no relay URL configured")
         return
 
     while True:
@@ -801,8 +864,11 @@ async def nwc_connection_loop(conn: dict[str, Any]) -> None:
                     msg = await ws.recv()
                     await handle_nwc_message(ws, conn, msg)
 
-        except Exception as e:
-            _log(f"reconnecting {name} ({relay}) after error: {e}")
+        except Exception as exc:
+            _log(
+                f"reconnecting {name} ({relay}) after error: "
+                f"{type(exc).__name__}: {_safe_log_text(exc)}"
+            )
             await asyncio.sleep(5)
 
 
@@ -813,8 +879,11 @@ async def nwc_connection_loop(conn: dict[str, Any]) -> None:
 def _get_enabled_connections() -> list[dict[str, Any]]:
     try:
         connections = load_connections()
-    except Exception as e:
-        _log(f"failed to load connections: {e}")
+    except Exception as exc:
+        _log(
+            f"failed to load connections: "
+            f"{type(exc).__name__}: {_safe_log_text(exc)}"
+        )
         return []
 
     _log(f"loaded connections: {len(connections)}")
@@ -826,9 +895,9 @@ def _get_enabled_connections() -> list[dict[str, Any]]:
 
 def _log_scheduled_connection(conn: dict[str, Any]) -> None:
     _log(
-        f"scheduling connection: "
-        f"name={conn.get('name')} relay={conn.get('relay_url')} "
-        f"client_pubkey={conn.get('client_pubkey')}"
+        f"scheduling connection: name={conn.get('name')} "
+        f"relay={conn.get('relay_url')} "
+        f"client_pubkey={_short_identifier(conn.get('client_pubkey'))}"
     )
 
 
@@ -884,4 +953,3 @@ async def start_nwc_runtime() -> None:
     _log("runtime starting (clean)...")
     async with _nwc_runtime_lock:
         await _restart_nwc_tasks()
-

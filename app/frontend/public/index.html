@@ -480,6 +480,29 @@
       color: var(--text);
     }
 
+    .dnsVerificationResult {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #0c1322;
+    }
+
+    .dnsVerificationItem {
+      padding: 9px 0;
+      border-top: 1px solid var(--border);
+      line-height: 1.45;
+    }
+
+    .dnsVerificationItem:first-child {
+      border-top: 0;
+    }
+
+    .dnsVerificationItem .mono {
+      color: var(--muted);
+      font-size: .82rem;
+    }
+
     body.modalOpen {
       overflow: hidden;
     }
@@ -972,6 +995,53 @@ protocol.custom-init=39</pre>
     </div>
   </div>
 
+  <div
+    id="setupRepairRecordModal"
+    class="setupConfirmModal"
+    aria-hidden="true"
+  >
+    <div
+      class="setupConfirmCard"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="setupRepairRecordTitle"
+      aria-describedby="setupRepairRecordText"
+    >
+      <h2 id="setupRepairRecordTitle" class="setupConfirmTitle">
+        <span aria-hidden="true">⚠️</span>
+        <span data-i18n="setup.repair_record.title">BIP353-DNS-Eintrag fehlt</span>
+      </h2>
+      <p
+        id="setupRepairRecordText"
+        class="setupConfirmText"
+        data-i18n="setup.repair_record.text"
+      >
+        Der Cloudflare-TXT-Eintrag für die öffentliche BOLT12-Adresse wurde nicht gefunden. Soll er jetzt neu erstellt werden?
+      </p>
+      <div id="setupRepairRecordAddress" class="setupConfirmAddress mono"></div>
+      <p class="setupConfirmText" data-i18n="setup.repair_record.hint">
+        Erst nach deiner Bestätigung erzeugt die App ein neues wiederverwendbares Offer und veröffentlicht den TXT-Eintrag.
+      </p>
+      <div class="setupConfirmActions">
+        <button
+          id="setupRepairRecordLaterBtn"
+          class="secondary"
+          type="button"
+          data-i18n="setup.repair_record.later"
+        >
+          Später
+        </button>
+        <button
+          id="setupRepairRecordNowBtn"
+          type="button"
+          data-i18n="setup.repair_record.repair"
+        >
+          TXT-Eintrag neu erstellen
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="toastWrap">
     <div class="statusBar" id="statusBar"></div>
   </div>
@@ -1124,11 +1194,26 @@ protocol.custom-init=39</pre>
       <div class="row">
         <button id="createAliasBtn" type="button">Alias anlegen</button>
         <button class="secondary" id="refreshAliasBtn" type="button">Liste aktualisieren</button>
+        <button
+          class="secondary"
+          id="verifyAliasDnsBtn"
+          type="button"
+          data-i18n="alias.verify.button"
+        >
+          Veröffentlichte TXT-Einträge prüfen
+        </button>
       </div>
 
       <div class="hint">
         Veröffentlichen erzeugt ein neues BOLT12-Offer und setzt bei Cloudflare automatisch den passenden BIP353 TXT-Record.
       </div>
+
+      <div
+        id="aliasDnsVerificationResult"
+        class="dnsVerificationResult"
+        aria-live="polite"
+        hidden
+      ></div>
 
       <div id="aliasList" class="aliasList"></div>
     </section>
@@ -1179,6 +1264,10 @@ function getCookie(name) {
     const setupDeleteRecordAddress = document.getElementById('setupDeleteRecordAddress');
     const setupKeepOldRecordBtn = document.getElementById('setupKeepOldRecordBtn');
     const setupDeleteOldRecordBtn = document.getElementById('setupDeleteOldRecordBtn');
+    const setupRepairRecordModal = document.getElementById('setupRepairRecordModal');
+    const setupRepairRecordAddress = document.getElementById('setupRepairRecordAddress');
+    const setupRepairRecordLaterBtn = document.getElementById('setupRepairRecordLaterBtn');
+    const setupRepairRecordNowBtn = document.getElementById('setupRepairRecordNowBtn');
     const manualDnsHint = document.getElementById('manualDnsHint');
     const manualDnsExampleName = document.getElementById('manualDnsExampleName');
     const lnurlSettingsBlock = document.getElementById('lnurlSettingsBlock');
@@ -1196,6 +1285,8 @@ function getCookie(name) {
     const aliasAmountInput = document.getElementById('aliasAmountInput');
     const createAliasBtn = document.getElementById('createAliasBtn');
     const refreshAliasBtn = document.getElementById('refreshAliasBtn');
+    const verifyAliasDnsBtn = document.getElementById('verifyAliasDnsBtn');
+    const aliasDnsVerificationResult = document.getElementById('aliasDnsVerificationResult');
     const aliasList = document.getElementById('aliasList');
 
     let deferredPrompt = null;
@@ -1210,6 +1301,8 @@ function getCookie(name) {
     let loadedSetupDnsMode = 'none';
     let setupDeleteRecordResolver = null;
     let setupDeleteRecordPreviousFocus = null;
+    let setupRepairRecordPreviousFocus = null;
+    let setupRepairInProgress = false;
     
     addressBox.textContent = currentAddress;
     fallbackAddressBox.textContent = fallbackAddress;
@@ -1473,9 +1566,121 @@ function getCookie(name) {
       }
     });
 
+    function closeSetupRepairRecordModal() {
+      setupRepairRecordModal.classList.remove('show');
+      setupRepairRecordModal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('modalOpen');
+
+      if (setupRepairRecordPreviousFocus) {
+        setupRepairRecordPreviousFocus.focus();
+        setupRepairRecordPreviousFocus = null;
+      }
+    }
+
+    function showSetupRepairRecordModal(address) {
+      if (setupRepairRecordModal.classList.contains('show')) return;
+
+      setupRepairRecordAddress.textContent = address;
+      setupRepairRecordPreviousFocus = document.activeElement;
+      setupRepairRecordModal.classList.add('show');
+      setupRepairRecordModal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modalOpen');
+      setupRepairRecordLaterBtn.focus();
+    }
+
+    setupRepairRecordLaterBtn.addEventListener('click', () => {
+      if (!setupRepairInProgress) closeSetupRepairRecordModal();
+    });
+
+    setupRepairRecordNowBtn.addEventListener('click', async () => {
+      if (setupRepairInProgress) return;
+
+      setupRepairInProgress = true;
+      setupRepairRecordLaterBtn.disabled = true;
+      setupRepairRecordNowBtn.disabled = true;
+      setupRepairRecordNowBtn.textContent = window.__t('setup.repair_record.repairing');
+
+      try {
+        const response = await fetch('/api/setup/public-bip353-repair', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'X-CSRF-Token': getCookie('csrf_token') || ''
+          }
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.detail || window.__t('setup.repair_record.error'));
+        }
+
+        sessionStorage.setItem(
+          'public_bip353_repair_notice',
+          data.created ? 'created' : 'exists'
+        );
+        window.location.reload();
+      } catch (error) {
+        setStatus(
+          `${window.__t('setup.repair_record.error')}: ${error?.message || error}`,
+          'error',
+          true
+        );
+      } finally {
+        setupRepairInProgress = false;
+        setupRepairRecordLaterBtn.disabled = false;
+        setupRepairRecordNowBtn.disabled = false;
+        setupRepairRecordNowBtn.textContent = window.__t('setup.repair_record.repair');
+      }
+    });
+
+    setupRepairRecordModal.addEventListener('click', event => {
+      if (event.target === setupRepairRecordModal && !setupRepairInProgress) {
+        closeSetupRepairRecordModal();
+      }
+    });
+
+    document.addEventListener('keydown', event => {
+      if (
+        event.key === 'Escape' &&
+        setupRepairRecordModal.classList.contains('show') &&
+        !setupRepairInProgress
+      ) {
+        event.preventDefault();
+        closeSetupRepairRecordModal();
+      }
+    });
+
     // ------------------------------------------------------------------
     // Data loading helpers
     // ------------------------------------------------------------------
+    async function loadPublicBip353Status() {
+      const response = await fetch('/api/setup/public-bip353-status', {
+        cache: 'no-store',
+        credentials: 'same-origin'
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.detail || window.__t('setup.repair_record.check_error'));
+      }
+
+      if (data.address) {
+        currentAddress = data.address;
+        addressBox.textContent = currentAddress;
+        renderQrForValue(currentAddress, 'address');
+      }
+
+      if (data.status === 'missing') {
+        showSetupRepairRecordModal(data.address || loadedSetupBolt12Address);
+      } else if (data.status === 'invalid') {
+        setStatus(window.__t('setup.repair_record.invalid'), 'warn', true);
+      } else if (data.status === 'error' || data.status === 'configuration_error') {
+        setStatus(window.__t('setup.repair_record.check_error'), 'warn', true);
+      }
+
+      return data;
+    }
+
     async function loadLnurlFallback() {
       if (!fallbackAddress) {
         currentLnurl = '';
@@ -1836,6 +2041,105 @@ function renderAliasList(items) {
         renderAliasList(data.items || []);
       } catch (error) {
         aliasList.innerHTML = `<div class="hint">Alias-Liste konnte nicht geladen werden: ${error?.message || error}</div>`;
+      }
+    }
+
+    function verificationStatusPresentation(status) {
+      const presentations = {
+        present: { icon: '✅', key: 'bip353.verify.status.present' },
+        missing: { icon: '❌', key: 'bip353.verify.status.missing' },
+        mismatch: { icon: '⚠️', key: 'bip353.verify.status.mismatch' },
+        invalid: { icon: '⚠️', key: 'bip353.verify.status.invalid' },
+        error: { icon: '⚠️', key: 'bip353.verify.status.error' }
+      };
+      return presentations[status] || presentations.error;
+    }
+
+    function formatVerificationSummary(summary) {
+      return window.__t('bip353.verify.summary')
+        .replace('{checked}', String(summary?.checked || 0))
+        .replace('{present}', String(summary?.present || 0))
+        .replace('{missing}', String(summary?.missing || 0))
+        .replace('{problems}', String(
+          (summary?.mismatch || 0) +
+          (summary?.invalid || 0) +
+          (summary?.error || 0)
+        ));
+    }
+
+    function renderAliasDnsVerification(data) {
+      aliasDnsVerificationResult.hidden = false;
+      aliasDnsVerificationResult.innerHTML = '';
+
+      if (data.status === 'disabled') {
+        aliasDnsVerificationResult.textContent = window.__t('bip353.verify.cloudflare_only');
+        return;
+      }
+
+      if (!data.items?.length) {
+        aliasDnsVerificationResult.textContent = window.__t('alias.verify.none_published');
+        return;
+      }
+
+      const summary = document.createElement('div');
+      summary.style.fontWeight = '700';
+      summary.style.marginBottom = '6px';
+      summary.textContent = formatVerificationSummary(data.summary);
+      aliasDnsVerificationResult.appendChild(summary);
+
+      for (const item of data.items) {
+        const presentation = verificationStatusPresentation(item.status);
+        const row = document.createElement('div');
+        row.className = 'dnsVerificationItem';
+
+        const statusLine = document.createElement('div');
+        statusLine.textContent = `${presentation.icon} ${item.address || item.name} — ${window.__t(presentation.key)}`;
+        row.appendChild(statusLine);
+
+        const dnsName = document.createElement('div');
+        dnsName.className = 'mono';
+        dnsName.textContent = item.dns_name || '';
+        row.appendChild(dnsName);
+        aliasDnsVerificationResult.appendChild(row);
+      }
+    }
+
+    async function verifyAliasDnsRecords() {
+      verifyAliasDnsBtn.disabled = true;
+      verifyAliasDnsBtn.textContent = window.__t('bip353.verify.checking');
+
+      try {
+        const response = await fetch('/api/bip353/verify-published?scope=aliases', {
+          cache: 'no-store',
+          credentials: 'same-origin'
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.detail || window.__t('bip353.verify.failed'));
+        }
+
+        renderAliasDnsVerification(data);
+        if (data.status === 'completed') {
+          const hasProblems =
+            (data.summary?.missing || 0) +
+            (data.summary?.mismatch || 0) +
+            (data.summary?.invalid || 0) +
+            (data.summary?.error || 0) > 0;
+          setStatus(
+            formatVerificationSummary(data.summary),
+            hasProblems ? 'warn' : 'ok'
+          );
+        }
+      } catch (error) {
+        setStatus(
+          `${window.__t('bip353.verify.failed')}: ${error?.message || error}`,
+          'error',
+          true
+        );
+      } finally {
+        verifyAliasDnsBtn.disabled = false;
+        verifyAliasDnsBtn.textContent = window.__t('alias.verify.button');
       }
     }
 
@@ -2391,6 +2695,7 @@ logoutBtn?.addEventListener('click', async () => {
     payInvoiceWeblnBtn.addEventListener('click', payInvoiceWithWebln);
     createAliasBtn.addEventListener('click', createAlias);
     refreshAliasBtn.addEventListener('click', loadAliases);
+    verifyAliasDnsBtn.addEventListener('click', verifyAliasDnsRecords);
     openSetupBtn.addEventListener('click', () => {
       window.location.href = `${window.location.pathname}?setup=1`;
     });
@@ -2432,15 +2737,40 @@ installBtn.addEventListener('click', async () => {
       try {
         const forceSetup = new URLSearchParams(window.location.search).get('setup') === '1';
         const configured = await loadSetupState();
+        let bip353Status = null;
+
+        if (configured) {
+          bip353Status = await loadPublicBip353Status();
+        }
+
+        const repairNotice = sessionStorage.getItem('public_bip353_repair_notice');
+        if (repairNotice) {
+          sessionStorage.removeItem('public_bip353_repair_notice');
+        }
 
         if (forceSetup) {
           showSetupCard();
+          if (repairNotice) {
+            setStatus(
+              window.__t(`setup.repair_record.${repairNotice}`),
+              'success'
+            );
+          }
           return;
         }
 
         if (configured) {
-          await loadPublicInfo();
+          if (!['missing', 'invalid'].includes(bip353Status.status)) {
+            await loadPublicInfo();
+          }
           await loadAliases();
+        }
+
+        if (repairNotice) {
+          setStatus(
+            window.__t(`setup.repair_record.${repairNotice}`),
+            'success'
+          );
         }
       } catch (error) {
         console.error('Initial load error:', error);
@@ -2596,6 +2926,28 @@ installBtn.addEventListener('click', async () => {
       "setup.delete_old_record.hint": "Die neue Adresse wird bei beiden Optionen gespeichert.",
       "setup.delete_old_record.keep": "Alten Eintrag behalten",
       "setup.delete_old_record.delete": "Alten Eintrag löschen",
+      "setup.repair_record.title": "BIP353-DNS-Eintrag fehlt",
+      "setup.repair_record.text": "Der Cloudflare-TXT-Eintrag für die öffentliche BOLT12-Adresse wurde nicht gefunden. Soll er jetzt neu erstellt werden?",
+      "setup.repair_record.hint": "Erst nach deiner Bestätigung erzeugt die App ein neues wiederverwendbares Offer und veröffentlicht den TXT-Eintrag.",
+      "setup.repair_record.later": "Später",
+      "setup.repair_record.repair": "TXT-Eintrag neu erstellen",
+      "setup.repair_record.repairing": "TXT-Eintrag wird erstellt...",
+      "setup.repair_record.created": "BIP353-TXT-Eintrag wurde neu erstellt.",
+      "setup.repair_record.exists": "Der BIP353-TXT-Eintrag existiert bereits.",
+      "setup.repair_record.invalid": "Für die öffentliche BOLT12-Adresse existiert ein TXT-Eintrag, aber ohne gültiges BOLT12-Offer.",
+      "setup.repair_record.error": "BIP353-TXT-Eintrag konnte nicht erstellt werden",
+      "setup.repair_record.check_error": "BIP353-TXT-Eintrag konnte nicht überprüft werden.",
+      "alias.verify.button": "Veröffentlichte TXT-Einträge prüfen",
+      "alias.verify.none_published": "Keine veröffentlichten Alias-Einträge zum Prüfen vorhanden. Entwürfe wurden übersprungen.",
+      "bip353.verify.checking": "TXT-Einträge werden geprüft...",
+      "bip353.verify.summary": "{checked} geprüft · {present} OK · {missing} fehlen · {problems} weitere Probleme",
+      "bip353.verify.status.present": "TXT-Eintrag vorhanden und korrekt",
+      "bip353.verify.status.missing": "TXT-Eintrag fehlt",
+      "bip353.verify.status.mismatch": "TXT-Eintrag enthält ein anderes Offer",
+      "bip353.verify.status.invalid": "TXT-Eintrag enthält kein gültiges BOLT12-Offer",
+      "bip353.verify.status.error": "Prüfung fehlgeschlagen",
+      "bip353.verify.cloudflare_only": "Die Prüfung ist nur im DNS-Modus Cloudflare-Automatisierung verfügbar.",
+      "bip353.verify.failed": "BIP353-TXT-Einträge konnten nicht geprüft werden",
       "setup.security.title": "🔐 Remote-Zugriff absichern",
       "setup.security.text": "Wenn du diese App aus dem Internet erreichbar machst, schütze Admin-Routen mit Cloudflare Tunnel + Access oder einer vergleichbaren Zugriffskontrolle.",
       "setup.security.routes": "Empfohlen: <span class=\"mono\">/pay</span> und <span class=\"mono\">/pay-login</span> schützen, während notwendige öffentliche Payment-Endpunkte erreichbar bleiben.",
@@ -2716,6 +3068,28 @@ installBtn.addEventListener('click', async () => {
       "setup.delete_old_record.hint": "The new address will be saved with either option.",
       "setup.delete_old_record.keep": "Keep old record",
       "setup.delete_old_record.delete": "Delete old record",
+      "setup.repair_record.title": "BIP353 DNS record is missing",
+      "setup.repair_record.text": "The Cloudflare TXT record for the public BOLT12 address was not found. Would you like to recreate it now?",
+      "setup.repair_record.hint": "Only after you confirm will the app create a new reusable offer and publish the TXT record.",
+      "setup.repair_record.later": "Later",
+      "setup.repair_record.repair": "Recreate TXT record",
+      "setup.repair_record.repairing": "Creating TXT record...",
+      "setup.repair_record.created": "The BIP353 TXT record was recreated.",
+      "setup.repair_record.exists": "The BIP353 TXT record already exists.",
+      "setup.repair_record.invalid": "A TXT record exists for the public BOLT12 address, but it does not contain a valid BOLT12 offer.",
+      "setup.repair_record.error": "Could not recreate the BIP353 TXT record",
+      "setup.repair_record.check_error": "Could not verify the BIP353 TXT record.",
+      "alias.verify.button": "Verify published TXT records",
+      "alias.verify.none_published": "There are no published alias records to verify. Drafts were skipped.",
+      "bip353.verify.checking": "Checking TXT records...",
+      "bip353.verify.summary": "{checked} checked · {present} OK · {missing} missing · {problems} other problems",
+      "bip353.verify.status.present": "TXT record is present and correct",
+      "bip353.verify.status.missing": "TXT record is missing",
+      "bip353.verify.status.mismatch": "TXT record contains a different offer",
+      "bip353.verify.status.invalid": "TXT record does not contain a valid BOLT12 offer",
+      "bip353.verify.status.error": "Verification failed",
+      "bip353.verify.cloudflare_only": "Verification is only available in Cloudflare automation DNS mode.",
+      "bip353.verify.failed": "Could not verify BIP353 TXT records",
       "setup.security.title": "🔐 Remote access security",
       "setup.security.text": "If you expose this app to the internet, protect admin routes with Cloudflare Tunnel + Access or an equivalent access-control layer.",
       "setup.security.routes": "Recommended: protect <span class=\"mono\">/pay</span> and <span class=\"mono\">/pay-login</span>, while keeping required public payment endpoints reachable.",
