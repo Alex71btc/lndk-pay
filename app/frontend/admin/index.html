@@ -514,6 +514,29 @@
         overflow: hidden;
       }
 
+      .dnsVerificationResult {
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--panel2);
+      }
+
+      .dnsVerificationItem {
+        padding: 9px 0;
+        border-top: 1px solid var(--border);
+        line-height: 1.45;
+      }
+
+      .dnsVerificationItem:first-child {
+        border-top: 0;
+      }
+
+      .dnsVerificationItem .mono {
+        color: var(--muted);
+        font-size: .82rem;
+      }
+
       .txMeta pre {
           font-size: 12px;
           max-height: 250px;
@@ -1219,7 +1242,22 @@
           <button class="secondary" id="clearHistoryBtn" type="button">
             <span data-i18n="btn.clear_history">History löschen</span>
           </button>
+          <button
+            class="secondary"
+            id="verifyHistoryDnsBtn"
+            type="button"
+          >
+            <span data-i18n="history.verify.button">
+              Veröffentlichte TXT-Einträge prüfen
+            </span>
+          </button>
         </div>
+        <div
+          id="historyDnsVerificationResult"
+          class="dnsVerificationResult"
+          aria-live="polite"
+          hidden
+        ></div>
         <div id="historyList" class="historyList"></div>
       </details>
 
@@ -2327,6 +2365,15 @@
       );
 
       const historyList = document.getElementById("historyList");
+      const verifyHistoryDnsBtn = document.getElementById(
+        "verifyHistoryDnsBtn",
+      );
+      const verifyHistoryDnsLabel = verifyHistoryDnsBtn?.querySelector(
+        "[data-i18n]",
+      );
+      const historyDnsVerificationResult = document.getElementById(
+        "historyDnsVerificationResult",
+      );
 
       const identityAliasInput = document.getElementById("identityAliasInput");
       const identityPubkeyInput = document.getElementById(
@@ -5554,6 +5601,122 @@
           txHistoryRefreshTimer = null;
         }
       }
+
+      function bip353VerificationPresentation(status) {
+        const presentations = {
+          present: { icon: "✅", key: "bip353.verify.status.present" },
+          missing: { icon: "❌", key: "bip353.verify.status.missing" },
+          mismatch: { icon: "⚠️", key: "bip353.verify.status.mismatch" },
+          invalid: { icon: "⚠️", key: "bip353.verify.status.invalid" },
+          error: { icon: "⚠️", key: "bip353.verify.status.error" },
+        };
+        return presentations[status] || presentations.error;
+      }
+
+      function formatBip353VerificationSummary(summary) {
+        return window
+          .__t("bip353.verify.summary")
+          .replace("{checked}", String(summary?.checked || 0))
+          .replace("{present}", String(summary?.present || 0))
+          .replace("{missing}", String(summary?.missing || 0))
+          .replace(
+            "{problems}",
+            String(
+              (summary?.mismatch || 0) +
+                (summary?.invalid || 0) +
+                (summary?.error || 0),
+            ),
+          );
+      }
+
+      function renderHistoryDnsVerification(data) {
+        historyDnsVerificationResult.hidden = false;
+        historyDnsVerificationResult.innerHTML = "";
+
+        if (data.status === "disabled") {
+          historyDnsVerificationResult.textContent = window.__t(
+            "bip353.verify.cloudflare_only",
+          );
+          return;
+        }
+
+        if (!data.items?.length) {
+          historyDnsVerificationResult.textContent = window.__t(
+            "history.verify.none_published",
+          );
+          return;
+        }
+
+        const summary = document.createElement("div");
+        summary.style.fontWeight = "700";
+        summary.style.marginBottom = "6px";
+        summary.textContent = formatBip353VerificationSummary(data.summary);
+        historyDnsVerificationResult.appendChild(summary);
+
+        for (const item of data.items) {
+          const presentation = bip353VerificationPresentation(item.status);
+          const row = document.createElement("div");
+          row.className = "dnsVerificationItem";
+
+          const statusLine = document.createElement("div");
+          statusLine.textContent = `${presentation.icon} ${item.address || item.name} — ${window.__t(presentation.key)}`;
+          row.appendChild(statusLine);
+
+          const dnsName = document.createElement("div");
+          dnsName.className = "mono";
+          dnsName.textContent = item.dns_name || "";
+          row.appendChild(dnsName);
+          historyDnsVerificationResult.appendChild(row);
+        }
+      }
+
+      async function verifyHistoryDnsRecords() {
+        verifyHistoryDnsBtn.disabled = true;
+        if (verifyHistoryDnsLabel) {
+          verifyHistoryDnsLabel.textContent = window.__t(
+            "bip353.verify.checking",
+          );
+        }
+
+        try {
+          const response = await fetch(
+            "/api/bip353/verify-published?scope=history",
+            {
+              cache: "no-store",
+              credentials: "same-origin",
+            },
+          );
+          const data = await readJsonOrThrow(response);
+          renderHistoryDnsVerification(data);
+
+          if (data.status === "completed") {
+            const hasProblems =
+              (data.summary?.missing || 0) +
+                (data.summary?.mismatch || 0) +
+                (data.summary?.invalid || 0) +
+                (data.summary?.error || 0) >
+              0;
+            setStatus(
+              formatBip353VerificationSummary(data.summary),
+              hasProblems ? "warn" : "ok",
+            );
+          }
+        } catch (error) {
+          setStatus(
+            `${window.__t("bip353.verify.failed")}: ${errorToMessage(error)}`,
+            "error",
+            true,
+          );
+        } finally {
+          verifyHistoryDnsBtn.disabled = false;
+          if (verifyHistoryDnsLabel) {
+            verifyHistoryDnsLabel.textContent = window.__t(
+              "history.verify.button",
+            );
+          }
+        }
+      }
+
       window.renderHistory = async function renderHistory() {
         const items = await loadHistory();
         historyList.innerHTML = "";
@@ -6923,6 +7086,11 @@
           setStatus(window.__t("toast.history_cleared"));
         });
 
+      verifyHistoryDnsBtn?.addEventListener(
+        "click",
+        verifyHistoryDnsRecords,
+      );
+
       document
         .getElementById("cfUseCurrentOfferBtn")
         .addEventListener("click", () => {
@@ -7622,6 +7790,25 @@
               "BIP353-TXT-Eintrag konnte nicht erstellt werden",
             "setup.repair_record.check_error":
               "BIP353-TXT-Eintrag konnte nicht überprüft werden.",
+            "history.verify.button":
+              "Veröffentlichte TXT-Einträge prüfen",
+            "history.verify.none_published":
+              "Keine über die Offer-History veröffentlichten BIP353-Adressen zum Prüfen vorhanden.",
+            "bip353.verify.checking": "TXT-Einträge werden geprüft...",
+            "bip353.verify.summary":
+              "{checked} geprüft · {present} OK · {missing} fehlen · {problems} weitere Probleme",
+            "bip353.verify.status.present":
+              "TXT-Eintrag vorhanden und korrekt",
+            "bip353.verify.status.missing": "TXT-Eintrag fehlt",
+            "bip353.verify.status.mismatch":
+              "TXT-Eintrag enthält ein anderes Offer",
+            "bip353.verify.status.invalid":
+              "TXT-Eintrag enthält kein gültiges BOLT12-Offer",
+            "bip353.verify.status.error": "Prüfung fehlgeschlagen",
+            "bip353.verify.cloudflare_only":
+              "Die Prüfung ist nur im DNS-Modus Cloudflare-Automatisierung verfügbar.",
+            "bip353.verify.failed":
+              "BIP353-TXT-Einträge konnten nicht geprüft werden",
             "pay.summary.success": "✅ BOLT12-Offer erfolgreich bezahlt",
             "pay.summary.direct_offer": "🧾 Direktes Offer bezahlt",
             "pay.summary.lnurl_paid": "✅ LNURL-Zahlung erfolgreich bezahlt",
@@ -8000,6 +8187,24 @@
               "Could not recreate the BIP353 TXT record",
             "setup.repair_record.check_error":
               "Could not verify the BIP353 TXT record.",
+            "history.verify.button": "Verify published TXT records",
+            "history.verify.none_published":
+              "There are no BIP353 addresses published from offer history to verify.",
+            "bip353.verify.checking": "Checking TXT records...",
+            "bip353.verify.summary":
+              "{checked} checked · {present} OK · {missing} missing · {problems} other problems",
+            "bip353.verify.status.present":
+              "TXT record is present and correct",
+            "bip353.verify.status.missing": "TXT record is missing",
+            "bip353.verify.status.mismatch":
+              "TXT record contains a different offer",
+            "bip353.verify.status.invalid":
+              "TXT record does not contain a valid BOLT12 offer",
+            "bip353.verify.status.error": "Verification failed",
+            "bip353.verify.cloudflare_only":
+              "Verification is only available in Cloudflare automation DNS mode.",
+            "bip353.verify.failed":
+              "Could not verify BIP353 TXT records",
             "pay.summary.success": "✅ BOLT12 offer paid successfully",
             "pay.summary.direct_offer": "🧾 Direct offer paid",
             "pay.details": "--- Details ---",

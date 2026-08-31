@@ -894,6 +894,27 @@ def list_history_bip353(history_id: str):
     return [dict(row) for row in rows]
 
 
+def list_all_history_bip353():
+    with _db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                history_bip353.history_id,
+                history_bip353.alias,
+                history_bip353.address,
+                history_bip353.dns_name,
+                history_bip353.created_at,
+                offer_history.offer
+            FROM history_bip353
+            INNER JOIN offer_history
+                ON offer_history.id = history_bip353.history_id
+            ORDER BY history_bip353.created_at DESC
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
 def get_history_bip353_by_alias(alias: str):
     with _db_conn() as conn:
         row = conn.execute(
@@ -1660,7 +1681,7 @@ def _extract_offer(raw_output: str) -> str:
 
 
 def _extract_offer_from_txt_record(txt_value: str) -> Optional[str]:
-    value = txt_value.strip().strip('"').strip()
+    value = re.sub(r'"\s*"', "", txt_value.strip().strip('"')).strip()
     if not value:
         return None
 
@@ -3197,6 +3218,154 @@ async def _repair_public_bip353_record() -> dict[str, Any]:
         )
         return {"ok": True, "created": True, "status": current}
 
+
+def _published_bip353_verification_entries(
+    cfg: dict[str, Any],
+    scope: str,
+) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+
+    if scope in {"aliases", "all"}:
+        aliases = cfg.get("aliases", {}) or {}
+        for name, alias_data in sorted(aliases.items()):
+            if not alias_data.get("published"):
+                continue
+
+            alias_name = _normalize_alias_name(str(name))
+            entries.append(
+                {
+                    "source": "alias",
+                    "name": alias_name,
+                    "address": _alias_address(alias_name),
+                    "dns_name": str(alias_data.get("dns_name") or _alias_dns_name(alias_name)),
+                    "expected_offer": str(alias_data.get("last_offer") or "").strip(),
+                }
+            )
+
+    if scope in {"history", "all"}:
+        for item in list_all_history_bip353():
+            entries.append(
+                {
+                    "source": "history",
+                    "name": str(item.get("alias") or "").strip(),
+                    "address": str(item.get("address") or "").strip(),
+                    "dns_name": str(item.get("dns_name") or "").strip(),
+                    "expected_offer": str(item.get("offer") or "").strip(),
+                }
+            )
+
+    return [entry for entry in entries if entry["dns_name"]]
+
+
+async def _verify_published_bip353_records(scope: str) -> dict[str, Any]:
+    normalized_scope = str(scope or "all").strip().lower()
+    if normalized_scope not in {"aliases", "history", "all"}:
+        raise HTTPException(status_code=400, detail="Invalid BIP353 verification scope")
+
+    cfg = load_config()
+    dns_mode = str(cfg.get("dns_mode", "none")).strip().lower()
+    if dns_mode != "cloudflare":
+        return {
+            "ok": True,
+            "scope": normalized_scope,
+            "status": "disabled",
+            "summary": {"checked": 0},
+            "items": [],
+        }
+
+    cloudflare_config = _saved_cloudflare_config(cfg)
+    _require_cloudflare_config(cloudflare_config)
+    entries = _published_bip353_verification_entries(cfg, normalized_scope)
+
+    lookup_results: dict[str, dict[str, Any]] = {}
+    semaphore = asyncio.Semaphore(4)
+
+    async def lookup(dns_name: str) -> tuple[str, dict[str, Any]]:
+        async with semaphore:
+            try:
+                records = await _cloudflare_lookup_txt_records(
+                    name=dns_name,
+                    cloudflare_config=cloudflare_config,
+                )
+                return dns_name, {"records": records, "error": ""}
+            except HTTPException as exc:
+                return dns_name, {
+                    "records": [],
+                    "error": f"Cloudflare HTTP {exc.status_code}",
+                }
+            except Exception as exc:
+                return dns_name, {
+                    "records": [],
+                    "error": type(exc).__name__,
+                }
+
+    if entries:
+        lookup_results = dict(
+            await asyncio.gather(
+                *(lookup(dns_name) for dns_name in sorted({entry["dns_name"] for entry in entries}))
+            )
+        )
+
+    results: list[dict[str, str]] = []
+    summary = {
+        "checked": len(entries),
+        "present": 0,
+        "missing": 0,
+        "mismatch": 0,
+        "invalid": 0,
+        "error": 0,
+    }
+
+    for entry in entries:
+        lookup_result = lookup_results.get(entry["dns_name"], {})
+        records = lookup_result.get("records", []) or []
+        error = str(lookup_result.get("error") or "")
+        actual_offers = [
+            offer
+            for record in records
+            if (offer := _extract_offer_from_txt_record(str(record.get("content", ""))))
+        ]
+
+        if error:
+            status = "error"
+        elif not records:
+            status = "missing"
+        elif not actual_offers:
+            status = "invalid"
+        elif entry["expected_offer"] and entry["expected_offer"] not in actual_offers:
+            status = "mismatch"
+        else:
+            status = "present"
+
+        summary[status] += 1
+        results.append(
+            {
+                "source": entry["source"],
+                "name": entry["name"],
+                "address": entry["address"],
+                "dns_name": entry["dns_name"],
+                "status": status,
+                "detail": error,
+            }
+        )
+
+    print(
+        "[BIP353 verify] "
+        f"scope={normalized_scope} checked={summary['checked']} "
+        f"present={summary['present']} missing={summary['missing']} "
+        f"mismatch={summary['mismatch']} invalid={summary['invalid']} "
+        f"error={summary['error']}",
+        flush=True,
+    )
+
+    return {
+        "ok": True,
+        "scope": normalized_scope,
+        "status": "completed",
+        "summary": summary,
+        "items": results,
+    }
+
 # --- API -------------------------------------------------------------------
 @app.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
@@ -3439,6 +3608,15 @@ async def repair_public_bip353_record(request: StarletteRequest):
         _require_csrf(request)
 
     return await _repair_public_bip353_record()
+
+
+@app.get("/api/bip353/verify-published")
+async def verify_published_bip353_records(
+    request: StarletteRequest,
+    scope: str = Query(default="all"),
+):
+    require_pay_auth(request)
+    return await _verify_published_bip353_records(scope)
 
 from fastapi.staticfiles import StaticFiles
 
