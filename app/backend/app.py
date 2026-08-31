@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
@@ -315,6 +316,8 @@ DNS_RESOLVER_NAMESERVERS = [
     for server in os.environ.get("DNS_RESOLVER_NAMESERVERS", "").replace(",", " ").split()
     if server
 ]
+
+PUBLIC_BIP353_REPAIR_LOCK = asyncio.Lock()
 
 # BIP353 lookup outcomes that should fall through to the LNURL path in pay_address:
 # no record (404), lookup failed (502), lookup timed out (504).
@@ -2979,6 +2982,221 @@ async def _cloudflare_delete_txt_record(
         "deleted_record_ids": deleted_ids,
     }
 
+
+def _saved_cloudflare_config(cfg: dict[str, Any]) -> dict[str, Any]:
+    cloudflare = cfg.get("cloudflare", {}) or {}
+    dns_mode = str(cfg.get("dns_mode", "none")).strip().lower()
+    return {
+        "enabled": bool(cloudflare.get("enabled")) or dns_mode == "cloudflare",
+        "zone_name": str(cloudflare.get("zone_name", "")).strip().lower().rstrip("."),
+        "zone_id": str(cloudflare.get("zone_id", "")).strip(),
+        "api_token": str(cloudflare.get("api_token", "")).strip(),
+    }
+
+
+def _offer_from_cloudflare_records(records: list[dict[str, Any]]) -> Optional[str]:
+    return next(
+        (
+            offer
+            for record in records
+            if (offer := _extract_offer_from_txt_record(str(record.get("content", ""))))
+        ),
+        None,
+    )
+
+
+def _redacted_bip353_dns_name(dns_name: str) -> str:
+    marker = ".user._bitcoin-payment."
+    normalized = str(dns_name or "").strip().lower().rstrip(".")
+    if marker not in normalized:
+        return "<redacted>"
+
+    username, _domain = normalized.split(marker, 1)
+    return f"{username}.user._bitcoin-payment.<domain>"
+
+
+def _set_public_bip353_runtime_status(
+    status: str,
+    *,
+    address: str = "",
+    dns_name: str = "",
+    detail: str = "",
+) -> dict[str, Any]:
+    result = {
+        "status": status,
+        "address": address,
+        "dns_name": dns_name,
+        "detail": detail,
+        "checked_at": int(time.time()),
+    }
+    app.state.public_bip353_status = result
+    return result
+
+
+async def _check_public_bip353_record() -> dict[str, Any]:
+    cfg = load_config()
+    dns_mode = str(cfg.get("dns_mode", "none")).strip().lower()
+    if dns_mode != "cloudflare":
+        print(
+            f"[BIP353 check] skipped: dns_mode={dns_mode or 'none'}",
+            flush=True,
+        )
+        return _set_public_bip353_runtime_status(
+            "disabled",
+            detail=f"dns_mode={dns_mode or 'none'}",
+        )
+
+    address = str(cfg.get("public_bolt12_address", "")).strip().lower()
+    cloudflare_config = _saved_cloudflare_config(cfg)
+
+    try:
+        dns_name = _public_bip353_dns_name(
+            address,
+            cloudflare_config["zone_name"],
+        )
+        _require_cloudflare_config(cloudflare_config)
+    except HTTPException as exc:
+        print(
+            f"[BIP353 check] configuration_error (HTTP {exc.status_code})",
+            flush=True,
+        )
+        return _set_public_bip353_runtime_status(
+            "configuration_error",
+            address=address,
+            detail=f"HTTP {exc.status_code}",
+        )
+
+    try:
+        existing_records = await _cloudflare_lookup_txt_records(
+            name=dns_name,
+            cloudflare_config=cloudflare_config,
+        )
+    except HTTPException as exc:
+        print(
+            f"[BIP353 check] failed (Cloudflare HTTP {exc.status_code}): "
+            f"{_redacted_bip353_dns_name(dns_name)}",
+            flush=True,
+        )
+        return _set_public_bip353_runtime_status(
+            "error",
+            address=address,
+            dns_name=dns_name,
+            detail=f"Cloudflare HTTP {exc.status_code}",
+        )
+    except Exception as exc:
+        print(
+            f"[BIP353 check] failed ({type(exc).__name__}): "
+            f"{_redacted_bip353_dns_name(dns_name)}",
+            flush=True,
+        )
+        return _set_public_bip353_runtime_status(
+            "error",
+            address=address,
+            dns_name=dns_name,
+            detail=type(exc).__name__,
+        )
+
+    existing_offer = _offer_from_cloudflare_records(existing_records)
+    if existing_offer:
+        status = "present"
+    elif existing_records:
+        status = "invalid"
+    else:
+        status = "missing"
+
+    print(
+        f"[BIP353 check] {status}: {_redacted_bip353_dns_name(dns_name)}",
+        flush=True,
+    )
+    return _set_public_bip353_runtime_status(
+        status,
+        address=address,
+        dns_name=dns_name,
+    )
+
+
+async def _repair_public_bip353_record() -> dict[str, Any]:
+    async with PUBLIC_BIP353_REPAIR_LOCK:
+        status = await _check_public_bip353_record()
+        if status["status"] == "present":
+            return {"ok": True, "created": False, "status": status}
+        if status["status"] == "invalid":
+            raise HTTPException(
+                status_code=409,
+                detail="An existing TXT record is not a usable BOLT12 record",
+            )
+        if status["status"] != "missing":
+            raise HTTPException(
+                status_code=503,
+                detail="Public BIP353 record cannot be repaired in the current state",
+            )
+
+        cfg = load_config()
+        address = str(cfg.get("public_bolt12_address", "")).strip().lower()
+        cloudflare_config = _saved_cloudflare_config(cfg)
+        dns_name = _public_bip353_dns_name(
+            address,
+            cloudflare_config["zone_name"],
+        )
+        _require_cloudflare_config(cloudflare_config)
+
+        if address != status["address"] or dns_name != status["dns_name"]:
+            raise HTTPException(
+                status_code=409,
+                detail="Setup changed while the BIP353 record was being checked; please try again",
+            )
+
+        offer_response = await asyncio.to_thread(
+            _create_offer_internal,
+            OfferRequest(amount=None, description=address),
+        )
+
+        # A record may have appeared while the user was confirming the repair.
+        latest_records = await _cloudflare_lookup_txt_records(
+            name=dns_name,
+            cloudflare_config=cloudflare_config,
+        )
+        latest_offer = _offer_from_cloudflare_records(latest_records)
+        if latest_offer:
+            current = _set_public_bip353_runtime_status(
+                "present",
+                address=address,
+                dns_name=dns_name,
+            )
+            print(
+                "[BIP353 repair] reused_existing: "
+                f"{_redacted_bip353_dns_name(dns_name)}",
+                flush=True,
+            )
+            return {"ok": True, "created": False, "status": current}
+        if latest_records:
+            current = _set_public_bip353_runtime_status(
+                "invalid",
+                address=address,
+                dns_name=dns_name,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail="A TXT record appeared but is not a usable BOLT12 record",
+            )
+
+        await _cloudflare_upsert_txt_record(
+            name=dns_name,
+            content=build_bip353_txt_value(offer_response.offer),
+            cloudflare_config=cloudflare_config,
+            existing_records=latest_records,
+        )
+        current = _set_public_bip353_runtime_status(
+            "present",
+            address=address,
+            dns_name=dns_name,
+        )
+        print(
+            f"[BIP353 repair] created: {_redacted_bip353_dns_name(dns_name)}",
+            flush=True,
+        )
+        return {"ok": True, "created": True, "status": current}
+
 # --- API -------------------------------------------------------------------
 @app.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
@@ -3204,6 +3422,23 @@ def get_setup_config(request: StarletteRequest):
         require_pay_auth(request)
 
     return load_config()
+
+
+@app.get("/api/setup/public-bip353-status")
+async def get_public_bip353_status(request: StarletteRequest):
+    if _is_pay_ui_enabled():
+        require_pay_auth(request)
+
+    return await _check_public_bip353_record()
+
+
+@app.post("/api/setup/public-bip353-repair")
+async def repair_public_bip353_record(request: StarletteRequest):
+    if _is_pay_ui_enabled():
+        require_pay_auth(request)
+        _require_csrf(request)
+
+    return await _repair_public_bip353_record()
 
 from fastapi.staticfiles import StaticFiles
 
@@ -5617,7 +5852,6 @@ async def nostr_well_known(name: str = Query(default=None)):
 
 # ===== ZAP EVENT PUBLISHING =====
 
-import asyncio
 from contextlib import suppress
 
 import coincurve
@@ -6503,9 +6737,20 @@ async def startup_background_tasks():
     app.state.tx_sync_task = asyncio.create_task(_tx_history_sync_loop())
     app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
     app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
+    app.state.public_bip353_status = {
+        "status": "checking",
+        "address": "",
+        "dns_name": "",
+        "detail": "",
+        "checked_at": int(time.time()),
+    }
+    app.state.public_bip353_check_task = asyncio.create_task(
+        _check_public_bip353_record()
+    )
 
     print("zap publisher loop started", flush=True)
     print("[NWC] startup task scheduled", flush=True)
+    print("[BIP353 check] startup check scheduled", flush=True)
 
 @app.get("/api/debug/invoices")
 async def api_debug_invoices(request: StarletteRequest):
