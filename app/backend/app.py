@@ -316,6 +316,13 @@ DNS_RESOLVER_NAMESERVERS = [
     for server in os.environ.get("DNS_RESOLVER_NAMESERVERS", "").replace(",", " ").split()
     if server
 ]
+BIP353_DNS_FALLBACK_NAMESERVER = "1.1.1.1"
+BIP353_DNS_RETRYABLE_ERRORS = (
+    dns.resolver.NXDOMAIN,
+    dns.resolver.NoAnswer,
+    dns.resolver.NoNameservers,
+    dns.exception.Timeout,
+)
 
 PUBLIC_BIP353_REPAIR_LOCK = asyncio.Lock()
 
@@ -1713,6 +1720,47 @@ def _new_resolver() -> dns.resolver.Resolver:
     return resolver
 
 
+def _new_bip353_fallback_resolver() -> dns.resolver.Resolver:
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.nameservers = [BIP353_DNS_FALLBACK_NAMESERVER]
+    resolver.lifetime = DNS_RESOLVER_LIFETIME
+    resolver.timeout = DNS_RESOLVER_TIMEOUT
+    return resolver
+
+
+def _resolve_bip353_txt(
+    resolver: dns.resolver.Resolver,
+    fqdn: str,
+) -> dns.resolver.Answer:
+    try:
+        return resolver.resolve(fqdn, "TXT")
+    except BIP353_DNS_RETRYABLE_ERRORS as primary_exc:
+        lookup_name = _redacted_bip353_dns_name(fqdn)
+        print(
+            f"[BIP353 DNS] system resolver failed ({type(primary_exc).__name__}) "
+            f"for {lookup_name}; retrying via {BIP353_DNS_FALLBACK_NAMESERVER}",
+            flush=True,
+        )
+
+        fallback_resolver = _new_bip353_fallback_resolver()
+        try:
+            answers = fallback_resolver.resolve(fqdn, "TXT")
+        except Exception as fallback_exc:
+            print(
+                f"[BIP353 DNS] fallback via {BIP353_DNS_FALLBACK_NAMESERVER} "
+                f"failed ({type(fallback_exc).__name__}) for {lookup_name}",
+                flush=True,
+            )
+            raise
+
+        print(
+            f"[BIP353 DNS] fallback via {BIP353_DNS_FALLBACK_NAMESERVER} "
+            f"succeeded for {lookup_name}",
+            flush=True,
+        )
+        return answers
+
+
 _BECH32_ALPHABET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 
 
@@ -1819,7 +1867,7 @@ def _resolve_bip353_address(address: str) -> str:
 
     for fqdn in candidate_fqdns:
         try:
-            answers = resolver.resolve(fqdn, "TXT")
+            answers = _resolve_bip353_txt(resolver, fqdn)
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers) as exc:
             last_lookup_error = exc
             continue
