@@ -19,6 +19,7 @@ COPY --from=lndkstage /usr/local/bin/lndk-cli /usr/local/bin/lndk-cli
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY VERSION /app/VERSION
 COPY backend ./backend
 COPY frontend ./frontend
 COPY assets /app/assets

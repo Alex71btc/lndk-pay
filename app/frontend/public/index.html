@@ -351,6 +351,14 @@
       color: var(--muted);
     }
 
+    .appVersion {
+      margin-top: 18px;
+      text-align: center;
+      color: var(--muted);
+      font-size: .78rem;
+      opacity: .82;
+    }
+
     .modeBadge {
       display: inline-block;
       padding: 6px 10px;
@@ -945,6 +953,9 @@ protocol.custom-init=39</pre>
         <button id="saveSetupBtn" type="button" data-i18n="setup.btn.save">Setup speichern</button>
       </div>
     </section>
+    <div class="appVersion" data-app-version hidden>
+      BOLT12 Pay <span id="setupAppVersion"></span>
+    </div>
   </main>
 
   <div
@@ -1093,7 +1104,7 @@ protocol.custom-init=39</pre>
 </div>
 
     <section class="section">
-  <label class="label" style="margin-top:14px;" id="lnurlFallbackOptionalLabel">LNURL Fallback (optional)</label>
+  <label class="label" style="margin-top:14px;" id="lnurlFallbackOptionalLabel" data-i18n="console.label.bolt12_address">BOLT12-Adresse (BIP353)</label>
       <div id="addressBox" class="valueBox mono copyable active" title="Antippen = kopieren + QR auf BOLT12-Adresse umschalten">
         Lade Adresse...
       </div>
@@ -1217,6 +1228,9 @@ protocol.custom-init=39</pre>
 
       <div id="aliasList" class="aliasList"></div>
     </section>
+    <div class="appVersion" data-app-version hidden>
+      BOLT12 Pay <span id="consoleAppVersion"></span>
+    </div>
   </main>
 
   <script>
@@ -1482,6 +1496,21 @@ function getCookie(name) {
     // ------------------------------------------------------------------
     // View and setup helpers
     // ------------------------------------------------------------------
+    function renderAppVersion(version) {
+      const cleanVersion = String(version || '').trim();
+      if (!cleanVersion) return;
+
+      const displayVersion = cleanVersion.startsWith('v')
+        ? cleanVersion
+        : `v${cleanVersion}`;
+
+      document.querySelectorAll('[data-app-version]').forEach(element => {
+        const value = element.querySelector('span');
+        if (value) value.textContent = displayVersion;
+        element.hidden = false;
+      });
+    }
+
     function showSetupCard() {
       setupCard.hidden = false;
       payCard.hidden = true;
@@ -1705,6 +1734,8 @@ function getCookie(name) {
         throw new Error(statusData?.detail || 'Setup-Status konnte nicht geladen werden');
       }
 
+      renderAppVersion(statusData.app_version);
+
       // LND 0.21+ uses native Onion Messaging.
       if (statusData.native_onion_messaging) {
         const legacy = document.getElementById('legacyOnionConfig');
@@ -1875,6 +1906,8 @@ async function saveSetup() {
         if (!response.ok) {
           throw new Error(data?.detail || window.__t('error.public_info_load_failed'));
         }
+
+        renderAppVersion(data.version);
 
         currentAddress = data.address || '';
         fallbackAddress = localStorage.getItem('lnurl_fallback_address')
@@ -3030,7 +3063,8 @@ installBtn.addEventListener('click', async () => {
       "console.btn.copy_content": "Inhalt kopieren",
       "console.btn.wallet_open": "Wallet / WebLN",
       "console.btn.go_pay": "Zu Pay",
-      "console.btn.logout": "Logout"
+      "console.btn.logout": "Logout",
+      "console.label.bolt12_address": "BOLT12-Adresse (BIP353)"
     },
     en: {
       "setup.pill": "Initial setup",
@@ -3132,7 +3166,8 @@ installBtn.addEventListener('click', async () => {
       "console.btn.copy_content": "Copy content",
       "console.btn.wallet_open": "Wallet / WebLN",
       "console.btn.go_pay": "Go to Pay",
-      "console.btn.logout": "Logout"
+      "console.btn.logout": "Logout",
+      "console.label.bolt12_address": "BOLT12 Address (BIP353)"
     }
   };
 
@@ -3614,7 +3649,7 @@ window.applyTranslations = function applyTranslations() {
   }
   const T = {
     de: {
-      optional: "LNURL Fallback (optional)",
+      optional: "BOLT12-Adresse (BIP353)",
       address: "LNURL Fallback (Lightning Address)",
       preset_lnurl: "Preset: lnurl",
       preset_coffee: "Preset: coffee",
@@ -3629,7 +3664,7 @@ window.applyTranslations = function applyTranslations() {
       qr_suffix: "Wenn du auf LNURL-Fallback umschaltest, wird stattdessen der LNURL-Inhalt angezeigt."
     },
     en: {
-      optional: "LNURL fallback (optional)",
+      optional: "BOLT12 Address (BIP353)",
       address: "LNURL fallback (Lightning Address)",
       preset_lnurl: "Preset: lnurl",
       preset_coffee: "Preset: coffee",

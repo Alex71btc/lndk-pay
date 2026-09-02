@@ -16,7 +16,10 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse, quote
 
 import dns.exception
+import dns.message
+import dns.rcode
 import dns.resolver
+import dns.rdatatype
 import httpx
 import qrcode
 import hashlib
@@ -52,6 +55,20 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 PUBLIC_DIR = PROJECT_ROOT / "frontend" / "public"
 ADMIN_DIR = PROJECT_ROOT / "frontend" / "admin"
+
+
+def _load_app_version() -> str:
+    configured_version = os.environ.get("BOLT12_PAY_VERSION", "").strip()
+    if configured_version:
+        return configured_version
+
+    try:
+        return (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip() or "dev"
+    except OSError:
+        return "dev"
+
+
+APP_VERSION = _load_app_version()
 
 LNDK_CLI = os.environ.get("LNDK_CLI", "lndk-cli")
 LNDK_NETWORK = os.environ.get("LNDK_NETWORK", "bitcoin")
@@ -317,6 +334,7 @@ DNS_RESOLVER_NAMESERVERS = [
     if server
 ]
 BIP353_DNS_FALLBACK_NAMESERVER = "1.1.1.1"
+BIP353_DNS_FALLBACK_URL = "https://1.1.1.1/dns-query"
 BIP353_DNS_RETRYABLE_ERRORS = (
     dns.resolver.NXDOMAIN,
     dns.resolver.NoAnswer,
@@ -1273,6 +1291,7 @@ class HealthResponse(BaseModel):
 
 
 class PublicInfoResponse(BaseModel):
+    version: str
     address: str
     fallback_address: str
     offer: str
@@ -1463,7 +1482,7 @@ NOSTR_NAME_MAP = _get_setting("NOSTR_NAME_MAP", "nostr", "name_map", default={})
 
 app = FastAPI(
     title="LNDK Backend",
-    version="0.5.0",
+    version=APP_VERSION,
 )
 
 app.add_middleware(
@@ -1720,42 +1739,76 @@ def _new_resolver() -> dns.resolver.Resolver:
     return resolver
 
 
-def _new_bip353_fallback_resolver() -> dns.resolver.Resolver:
-    resolver = dns.resolver.Resolver(configure=False)
-    resolver.nameservers = [BIP353_DNS_FALLBACK_NAMESERVER]
-    resolver.lifetime = DNS_RESOLVER_LIFETIME
-    resolver.timeout = DNS_RESOLVER_TIMEOUT
-    return resolver
+def _resolve_bip353_txt_via_doh(fqdn: str) -> list[Any]:
+    query = dns.message.make_query(fqdn, dns.rdatatype.TXT)
+
+    try:
+        response = httpx.post(
+            BIP353_DNS_FALLBACK_URL,
+            content=query.to_wire(),
+            headers={
+                "accept": "application/dns-message",
+                "content-type": "application/dns-message",
+            },
+            timeout=DNS_RESOLVER_LIFETIME,
+        )
+    except httpx.TimeoutException as exc:
+        raise dns.exception.Timeout from exc
+
+    response.raise_for_status()
+    message = dns.message.from_wire(response.content)
+
+    if not query.is_response(message):
+        raise RuntimeError("Cloudflare DoH returned a response for a different DNS query")
+
+    response_code = message.rcode()
+    if response_code == dns.rcode.NXDOMAIN:
+        raise dns.resolver.NXDOMAIN()
+    if response_code != dns.rcode.NOERROR:
+        raise RuntimeError(
+            f"Cloudflare DoH returned DNS status {dns.rcode.to_text(response_code)}"
+        )
+
+    answers = [
+        record
+        for rrset in message.answer
+        if rrset.rdtype == dns.rdatatype.TXT
+        for record in rrset
+    ]
+    if not answers:
+        raise dns.resolver.NoAnswer()
+
+    return answers
 
 
 def _resolve_bip353_txt(
     resolver: dns.resolver.Resolver,
     fqdn: str,
-) -> dns.resolver.Answer:
+) -> Any:
     try:
         return resolver.resolve(fqdn, "TXT")
     except BIP353_DNS_RETRYABLE_ERRORS as primary_exc:
         lookup_name = _redacted_bip353_dns_name(fqdn)
         print(
             f"[BIP353 DNS] system resolver failed ({type(primary_exc).__name__}) "
-            f"for {lookup_name}; retrying via {BIP353_DNS_FALLBACK_NAMESERVER}",
+            f"for {lookup_name}; retrying via {BIP353_DNS_FALLBACK_NAMESERVER} "
+            "over HTTPS",
             flush=True,
         )
 
-        fallback_resolver = _new_bip353_fallback_resolver()
         try:
-            answers = fallback_resolver.resolve(fqdn, "TXT")
+            answers = _resolve_bip353_txt_via_doh(fqdn)
         except Exception as fallback_exc:
             print(
                 f"[BIP353 DNS] fallback via {BIP353_DNS_FALLBACK_NAMESERVER} "
-                f"failed ({type(fallback_exc).__name__}) for {lookup_name}",
+                f"over HTTPS failed ({type(fallback_exc).__name__}) for {lookup_name}",
                 flush=True,
             )
             raise
 
         print(
             f"[BIP353 DNS] fallback via {BIP353_DNS_FALLBACK_NAMESERVER} "
-            f"succeeded for {lookup_name}",
+            f"over HTTPS succeeded for {lookup_name}",
             flush=True,
         )
         return answers
@@ -3436,6 +3489,7 @@ def public_info() -> PublicInfoResponse:
     offer = _resolve_bip353_address(address)
 
     return PublicInfoResponse(
+        version=APP_VERSION,
         address=address,
         fallback_address=fallback_address,
         offer=offer,
@@ -3628,6 +3682,7 @@ async def setup_status(request: StarletteRequest):
         print("setup status lnd getinfo failed:", repr(exc))
 
     return {
+        "app_version": APP_VERSION,
         "configured": configured,
         "lnd_version": lnd_version,
         "native_onion_messaging": native_onion_messaging,
