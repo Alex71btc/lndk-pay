@@ -767,6 +767,10 @@
         cursor: crosshair;
       }
 
+      #scannerModal .scannerViewport.zoomAvailable {
+        touch-action: pan-y;
+      }
+
       #scannerModal .scannerFocusIndicator {
         position: absolute;
         z-index: 6;
@@ -3123,6 +3127,9 @@
       let scannerZoomFeature = null;
       let scannerZoomTimer = null;
       let scannerFocusModes = [];
+      let scannerPinchStartDistance = 0;
+      let scannerPinchStartZoom = 1;
+      let scannerSuppressFocusUntil = 0;
 
       function setStatus(message, type = "ok", persist = false) {
         statusBar.textContent = message;
@@ -7156,6 +7163,7 @@
         scannerZoomControls.hidden = true;
         scannerCameraHint.hidden = true;
         scannerViewport.classList.remove("focusAvailable");
+        scannerViewport.classList.remove("zoomAvailable");
 
         try {
           const cameraCapabilities =
@@ -7181,6 +7189,7 @@
                 step,
               );
               scannerZoomControls.hidden = false;
+              scannerViewport.classList.add("zoomAvailable");
             }
           }
         } catch {}
@@ -7214,8 +7223,82 @@
         }
       }
 
+      function normalizeScannerZoom(value) {
+        const min = Number(scannerZoomInput.min);
+        const max = Number(scannerZoomInput.max);
+        const step = Number(scannerZoomInput.step) || 0.1;
+        const clamped = Math.min(max, Math.max(min, Number(value)));
+        const stepped = min + Math.round((clamped - min) / step) * step;
+        return Math.min(max, Math.max(min, Number(stepped.toFixed(4))));
+      }
+
+      function queueScannerZoom(value) {
+        if (!scannerZoomFeature) {
+          return;
+        }
+
+        const normalized = normalizeScannerZoom(value);
+        const step = Number(scannerZoomInput.step) || 0.1;
+        scannerZoomInput.value = String(normalized);
+        scannerZoomValue.textContent = formatScannerZoom(normalized, step);
+
+        if (scannerZoomTimer) {
+          clearTimeout(scannerZoomTimer);
+        }
+        scannerZoomTimer = setTimeout(async () => {
+          scannerZoomTimer = null;
+          if (!scannerZoomFeature || !html5Qr || !html5Qr.isScanning) {
+            return;
+          }
+          try {
+            await scannerZoomFeature.apply(normalized);
+          } catch {}
+        }, 60);
+      }
+
+      function scannerTouchDistance(touches) {
+        const x = touches[0].clientX - touches[1].clientX;
+        const y = touches[0].clientY - touches[1].clientY;
+        return Math.hypot(x, y);
+      }
+
+      function startScannerPinch(event) {
+        if (!scannerZoomFeature || event.touches.length !== 2) {
+          return;
+        }
+        event.preventDefault();
+        scannerPinchStartDistance = scannerTouchDistance(event.touches);
+        scannerPinchStartZoom = Number(scannerZoomInput.value) || 1;
+        scannerSuppressFocusUntil = Date.now() + 600;
+      }
+
+      function moveScannerPinch(event) {
+        if (
+          !scannerZoomFeature ||
+          event.touches.length !== 2 ||
+          scannerPinchStartDistance <= 0
+        ) {
+          return;
+        }
+        event.preventDefault();
+        const scale = scannerTouchDistance(event.touches)
+          / scannerPinchStartDistance;
+        queueScannerZoom(scannerPinchStartZoom * scale);
+        scannerSuppressFocusUntil = Date.now() + 600;
+      }
+
+      function endScannerPinch(event) {
+        if (event.touches.length < 2) {
+          scannerPinchStartDistance = 0;
+        }
+      }
+
       async function focusScannerCamera(event) {
-        if (!html5Qr || !html5Qr.isScanning) {
+        if (
+          !html5Qr ||
+          !html5Qr.isScanning ||
+          Date.now() < scannerSuppressFocusUntil
+        ) {
           return;
         }
 
@@ -7279,7 +7362,11 @@
         scannerZoomControls.hidden = true;
         scannerCameraHint.hidden = true;
         scannerViewport.classList.remove("focusAvailable");
+        scannerViewport.classList.remove("zoomAvailable");
         scannerFocusIndicator.classList.remove("show");
+        scannerPinchStartDistance = 0;
+        scannerPinchStartZoom = 1;
+        scannerSuppressFocusUntil = 0;
         if (scannerZoomTimer) {
           clearTimeout(scannerZoomTimer);
           scannerZoomTimer = null;
@@ -7978,25 +8065,18 @@
       });
 
       scannerZoomInput.addEventListener("input", () => {
-        const value = Number(scannerZoomInput.value);
-        const step = Number(scannerZoomInput.step) || 0.1;
-        scannerZoomValue.textContent = formatScannerZoom(value, step);
-
-        if (scannerZoomTimer) {
-          clearTimeout(scannerZoomTimer);
-        }
-        scannerZoomTimer = setTimeout(async () => {
-          scannerZoomTimer = null;
-          if (!scannerZoomFeature || !html5Qr || !html5Qr.isScanning) {
-            return;
-          }
-          try {
-            await scannerZoomFeature.apply(value);
-          } catch {}
-        }, 80);
+        queueScannerZoom(scannerZoomInput.value);
       });
 
       scannerViewport.addEventListener("click", focusScannerCamera);
+      scannerViewport.addEventListener("touchstart", startScannerPinch, {
+        passive: false,
+      });
+      scannerViewport.addEventListener("touchmove", moveScannerPinch, {
+        passive: false,
+      });
+      scannerViewport.addEventListener("touchend", endScannerPinch);
+      scannerViewport.addEventListener("touchcancel", endScannerPinch);
 
       document.addEventListener("keydown", async (event) => {
         if (event.key === "Escape" && scannerModal.classList.contains("show")) {
@@ -8415,8 +8495,9 @@
             "scanner.close": "Scanner schließen",
             "scanner.zoom": "Zoom",
             "scanner.camera_hint_zoom_focus":
-              "Zum Zoomen schieben. QR-Code zum Fokussieren antippen.",
-            "scanner.camera_hint_zoom": "Zum Zoomen schieben.",
+              "Regler oder zwei Finger zum Zoomen. QR-Code zum Fokussieren antippen.",
+            "scanner.camera_hint_zoom":
+              "Regler oder zwei Finger zum Zoomen.",
             "scanner.camera_hint_focus":
               "QR-Code zum Fokussieren antippen.",
             "scanner.hint":
@@ -8880,8 +8961,9 @@
             "scanner.close": "Close scanner",
             "scanner.zoom": "Zoom",
             "scanner.camera_hint_zoom_focus":
-              "Slide to zoom. Tap the QR code to focus.",
-            "scanner.camera_hint_zoom": "Slide to zoom.",
+              "Use the slider or pinch to zoom. Tap the QR code to focus.",
+            "scanner.camera_hint_zoom":
+              "Use the slider or pinch to zoom.",
             "scanner.camera_hint_focus": "Tap the QR code to focus.",
             "scanner.hint":
               "Scans lno..., lightning:..., bitcoin:... or user@domain.",
