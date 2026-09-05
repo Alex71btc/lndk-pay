@@ -3126,10 +3126,15 @@
       let scanTarget = "decode";
       let scannerZoomFeature = null;
       let scannerZoomTimer = null;
+      let scannerZoomPendingValue = null;
+      let scannerZoomApplying = false;
+      let scannerZoomLastAppliedAt = 0;
+      let scannerZoomSession = 0;
       let scannerFocusModes = [];
       let scannerPinchStartDistance = 0;
       let scannerPinchStartZoom = 1;
       let scannerSuppressFocusUntil = 0;
+      const scannerZoomIntervalMs = 45;
 
       function setStatus(message, type = "ok", persist = false) {
         statusBar.textContent = message;
@@ -7157,7 +7162,19 @@
         return `${Number(value).toFixed(decimals)}×`;
       }
 
+      function resetScannerZoomQueue() {
+        scannerZoomSession += 1;
+        scannerZoomPendingValue = null;
+        scannerZoomApplying = false;
+        scannerZoomLastAppliedAt = 0;
+        if (scannerZoomTimer) {
+          clearTimeout(scannerZoomTimer);
+          scannerZoomTimer = null;
+        }
+      }
+
       function configureScannerCameraControls() {
+        resetScannerZoomQueue();
         scannerZoomFeature = null;
         scannerFocusModes = [];
         scannerZoomControls.hidden = true;
@@ -7232,6 +7249,63 @@
         return Math.min(max, Math.max(min, Number(stepped.toFixed(4))));
       }
 
+      async function applyPendingScannerZoom(session) {
+        if (
+          session !== scannerZoomSession ||
+          scannerZoomApplying ||
+          scannerZoomPendingValue === null ||
+          !scannerZoomFeature ||
+          !html5Qr ||
+          !html5Qr.isScanning
+        ) {
+          return;
+        }
+
+        const zoomFeature = scannerZoomFeature;
+        const value = scannerZoomPendingValue;
+        scannerZoomPendingValue = null;
+        scannerZoomApplying = true;
+        scannerZoomLastAppliedAt = performance.now();
+
+        try {
+          await zoomFeature.apply(value);
+        } catch {}
+
+        if (session !== scannerZoomSession) {
+          return;
+        }
+
+        scannerZoomApplying = false;
+        scheduleScannerZoomApply();
+      }
+
+      function scheduleScannerZoomApply() {
+        if (
+          scannerZoomApplying ||
+          scannerZoomTimer ||
+          scannerZoomPendingValue === null ||
+          !scannerZoomFeature
+        ) {
+          return;
+        }
+
+        const elapsed = performance.now() - scannerZoomLastAppliedAt;
+        const delay = Math.max(0, scannerZoomIntervalMs - elapsed);
+        const session = scannerZoomSession;
+        const applyZoom = () => {
+          scannerZoomTimer = null;
+          if (session === scannerZoomSession) {
+            void applyPendingScannerZoom(session);
+          }
+        };
+
+        if (delay > 0) {
+          scannerZoomTimer = setTimeout(applyZoom, delay);
+        } else {
+          applyZoom();
+        }
+      }
+
       function queueScannerZoom(value) {
         if (!scannerZoomFeature) {
           return;
@@ -7241,19 +7315,8 @@
         const step = Number(scannerZoomInput.step) || 0.1;
         scannerZoomInput.value = String(normalized);
         scannerZoomValue.textContent = formatScannerZoom(normalized, step);
-
-        if (scannerZoomTimer) {
-          clearTimeout(scannerZoomTimer);
-        }
-        scannerZoomTimer = setTimeout(async () => {
-          scannerZoomTimer = null;
-          if (!scannerZoomFeature || !html5Qr || !html5Qr.isScanning) {
-            return;
-          }
-          try {
-            await scannerZoomFeature.apply(normalized);
-          } catch {}
-        }, 60);
+        scannerZoomPendingValue = normalized;
+        scheduleScannerZoomApply();
       }
 
       function scannerTouchDistance(touches) {
@@ -7367,10 +7430,7 @@
         scannerPinchStartDistance = 0;
         scannerPinchStartZoom = 1;
         scannerSuppressFocusUntil = 0;
-        if (scannerZoomTimer) {
-          clearTimeout(scannerZoomTimer);
-          scannerZoomTimer = null;
-        }
+        resetScannerZoomQueue();
 
         if (showMessage) {
           setStatus(window.__t("toast.scanner_closed"), "warn");
