@@ -22,7 +22,7 @@
     <title>BOLT12 Pay</title>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
     <style>
       :root {
@@ -729,14 +729,96 @@
 
       #scannerModal #scannerReader,
       #scannerModal #scannerReader > div {
+        width: 100% !important;
+        height: 100% !important;
         max-width: 100%;
       }
 
       #scannerModal #scannerReader video,
       #scannerModal #scannerReader canvas {
-        max-width: 100% !important;
-        max-height: 100% !important;
+        width: 100% !important;
+        height: 100% !important;
         object-fit: cover;
+      }
+
+      #scannerModal .scannerFrame {
+        position: absolute;
+        z-index: 5;
+        top: 50%;
+        left: 50%;
+        width: min(72%, 300px);
+        aspect-ratio: 1 / 1;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        border-radius: 4px;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.48);
+        background:
+          linear-gradient(#fff, #fff) left top / 40px 5px no-repeat,
+          linear-gradient(#fff, #fff) right top / 40px 5px no-repeat,
+          linear-gradient(#fff, #fff) left bottom / 40px 5px no-repeat,
+          linear-gradient(#fff, #fff) right bottom / 40px 5px no-repeat,
+          linear-gradient(#fff, #fff) left top / 5px 40px no-repeat,
+          linear-gradient(#fff, #fff) right top / 5px 40px no-repeat,
+          linear-gradient(#fff, #fff) left bottom / 5px 40px no-repeat,
+          linear-gradient(#fff, #fff) right bottom / 5px 40px no-repeat;
+      }
+
+      #scannerModal .scannerViewport.focusAvailable {
+        cursor: crosshair;
+      }
+
+      #scannerModal .scannerFocusIndicator {
+        position: absolute;
+        z-index: 6;
+        width: 54px;
+        height: 54px;
+        border: 2px solid #fff;
+        border-radius: 10px;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      #scannerModal .scannerFocusIndicator.show {
+        animation: scannerFocusPulse 0.7s ease-out;
+      }
+
+      @keyframes scannerFocusPulse {
+        0% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1.18);
+        }
+        100% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.82);
+        }
+      }
+
+      #scannerModal .scannerZoomControls {
+        width: min(100%, 560px);
+        margin: 14px auto 0;
+      }
+
+      #scannerModal .scannerZoomLabel {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--text);
+        font-weight: 650;
+      }
+
+      #scannerModal .scannerZoomControls input[type="range"] {
+        width: 100%;
+        margin: 10px 0 0;
+        accent-color: var(--accent);
+      }
+
+      #scannerModal .scannerCameraHint {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.84rem;
+        text-align: center;
       }
 
       #scannerModal .row {
@@ -782,25 +864,28 @@
         #scannerModal {
           align-items: flex-start;
           justify-content: center;
-          padding: 12px;
+          padding: 6px;
         }
 
         #scannerModal .scannerCard {
-          width: min(100%, 360px);
-          max-width: 360px;
-          max-height: calc(100vh - 24px);
-          max-height: calc(100dvh - 24px);
-          padding: 14px;
+          width: 100%;
+          max-width: 520px;
+          max-height: calc(100vh - 12px);
+          max-height: calc(100dvh - 12px);
+          padding: 12px;
           border-radius: 18px;
           margin: 0 auto;
         }
 
         #scannerModal .scannerViewport {
-          width: min(100%, 300px);
-          aspect-ratio: 4 / 3;
-          max-height: 42vh;
-          max-height: 42dvh;
+          width: 100%;
+          aspect-ratio: 1 / 1;
+          max-height: none;
           margin-top: 12px;
+        }
+
+        #scannerModal .scannerFrame {
+          width: min(82%, 340px);
         }
 
         #scannerModal .scannerHint {
@@ -2448,12 +2533,40 @@
           Scanne ein Offer oder eine BIP353-Adresse.
         </div>
 
-        <div class="scannerViewport">
+        <div class="scannerViewport" id="scannerViewport">
           <video id="scannerVideo" autoplay playsinline muted></video>
           <div
             id="scannerReader"
-            style="width: 100%; height: 100%; display: none"
+            style="width: 100%; display: none"
           ></div>
+          <div class="scannerFrame" aria-hidden="true"></div>
+          <div
+            class="scannerFocusIndicator"
+            id="scannerFocusIndicator"
+            aria-hidden="true"
+          ></div>
+        </div>
+
+        <div class="scannerZoomControls" id="scannerZoomControls" hidden>
+          <label class="scannerZoomLabel" for="scannerZoomInput">
+            <span data-i18n="scanner.zoom">Zoom</span>
+            <output id="scannerZoomValue" for="scannerZoomInput">1×</output>
+          </label>
+          <input
+            id="scannerZoomInput"
+            type="range"
+            min="1"
+            max="1"
+            step="0.1"
+            value="1"
+          />
+        </div>
+
+        <div
+          class="scannerCameraHint"
+          id="scannerCameraHint"
+          hidden
+        >
         </div>
 
         <div class="row">
@@ -2731,6 +2844,16 @@
       const scannerModal = document.getElementById("scannerModal");
       const scannerVideo = document.getElementById("scannerVideo");
       const scannerReader = document.getElementById("scannerReader");
+      const scannerViewport = document.getElementById("scannerViewport");
+      const scannerFocusIndicator = document.getElementById(
+        "scannerFocusIndicator",
+      );
+      const scannerZoomControls = document.getElementById(
+        "scannerZoomControls",
+      );
+      const scannerZoomInput = document.getElementById("scannerZoomInput");
+      const scannerZoomValue = document.getElementById("scannerZoomValue");
+      const scannerCameraHint = document.getElementById("scannerCameraHint");
       const scannerTitle = document.getElementById("scannerTitle");
       const publicBip353RepairModal = document.getElementById(
         "publicBip353RepairModal",
@@ -2997,6 +3120,9 @@
       let deferredPrompt = null;
       let html5Qr = null;
       let scanTarget = "decode";
+      let scannerZoomFeature = null;
+      let scannerZoomTimer = null;
+      let scannerFocusModes = [];
 
       function setStatus(message, type = "ok", persist = false) {
         statusBar.textContent = message;
@@ -6994,30 +7120,14 @@
             {
               fps: 10,
               aspectRatio: 4 / 3,
-              qrbox: (viewfinderWidth, viewfinderHeight) => {
-                const scannerViewport = scannerReader.parentElement;
-                const renderedWidth =
-                  scannerViewport?.clientWidth || viewfinderWidth;
-                const renderedHeight =
-                  scannerViewport?.clientHeight || viewfinderHeight;
-                const shortestEdge = Math.min(
-                  viewfinderWidth,
-                  viewfinderHeight,
-                  renderedWidth,
-                  renderedHeight,
-                );
-                const size = Math.max(
-                  120,
-                  Math.min(260, Math.floor(shortestEdge * 0.72)),
-                );
-                return { width: size, height: size };
-              },
             },
             (decodedText) => {
               applyScanResult(decodedText);
             },
             () => {},
           );
+
+          configureScannerCameraControls();
         } catch (error) {
           const message = errorToMessage(error);
           closeScanner(false);
@@ -7033,6 +7143,118 @@
             );
           }
         }
+      }
+
+      function formatScannerZoom(value, step) {
+        const decimals = step > 0 && step < 1 ? 1 : 0;
+        return `${Number(value).toFixed(decimals)}×`;
+      }
+
+      function configureScannerCameraControls() {
+        scannerZoomFeature = null;
+        scannerFocusModes = [];
+        scannerZoomControls.hidden = true;
+        scannerCameraHint.hidden = true;
+        scannerViewport.classList.remove("focusAvailable");
+
+        try {
+          const cameraCapabilities =
+            html5Qr.getRunningTrackCameraCapabilities();
+          const zoomFeature = cameraCapabilities.zoomFeature();
+          if (zoomFeature.isSupported()) {
+            const min = Number(zoomFeature.min());
+            const max = Number(zoomFeature.max());
+            const step = Number(zoomFeature.step()) || 0.1;
+            const current = Number(zoomFeature.value());
+            if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+              scannerZoomFeature = zoomFeature;
+              scannerZoomInput.min = String(min);
+              scannerZoomInput.max = String(max);
+              scannerZoomInput.step = String(step);
+              scannerZoomInput.value = String(
+                Number.isFinite(current)
+                  ? Math.min(max, Math.max(min, current))
+                  : min,
+              );
+              scannerZoomValue.textContent = formatScannerZoom(
+                scannerZoomInput.value,
+                step,
+              );
+              scannerZoomControls.hidden = false;
+            }
+          }
+        } catch {}
+
+        try {
+          const capabilities = html5Qr.getRunningTrackCapabilities();
+          const modes = capabilities && capabilities.focusMode;
+          scannerFocusModes = Array.isArray(modes)
+            ? modes.map((mode) => String(mode))
+            : modes
+              ? [String(modes)]
+              : [];
+          if (
+            scannerFocusModes.includes("single-shot") ||
+            scannerFocusModes.includes("continuous")
+          ) {
+            scannerViewport.classList.add("focusAvailable");
+          }
+        } catch {}
+
+        const canZoom = Boolean(scannerZoomFeature);
+        const canFocus = scannerViewport.classList.contains("focusAvailable");
+        if (canZoom || canFocus) {
+          const hintKey = canZoom && canFocus
+            ? "scanner.camera_hint_zoom_focus"
+            : canZoom
+              ? "scanner.camera_hint_zoom"
+              : "scanner.camera_hint_focus";
+          scannerCameraHint.textContent = window.__t(hintKey);
+          scannerCameraHint.hidden = false;
+        }
+      }
+
+      async function focusScannerCamera(event) {
+        if (!html5Qr || !html5Qr.isScanning) {
+          return;
+        }
+
+        const focusMode = scannerFocusModes.includes("single-shot")
+          ? "single-shot"
+          : scannerFocusModes.includes("continuous")
+            ? "continuous"
+            : "";
+        if (!focusMode) {
+          return;
+        }
+
+        const rect = scannerViewport.getBoundingClientRect();
+        scannerFocusIndicator.style.left = `${event.clientX - rect.left}px`;
+        scannerFocusIndicator.style.top = `${event.clientY - rect.top}px`;
+        scannerFocusIndicator.classList.remove("show");
+        void scannerFocusIndicator.offsetWidth;
+        scannerFocusIndicator.classList.add("show");
+
+        try {
+          await html5Qr.applyVideoConstraints({
+            advanced: [{ focusMode }],
+          });
+          if (
+            focusMode === "single-shot" &&
+            scannerFocusModes.includes("continuous")
+          ) {
+            setTimeout(async () => {
+              if (!html5Qr || !html5Qr.isScanning) {
+                return;
+              }
+              try {
+                await html5Qr.applyVideoConstraints({
+                  advanced: [{ focusMode: "continuous" }],
+                });
+              } catch {}
+            }, 1200);
+          }
+        } catch {}
       }
 
       async function closeScanner(showMessage = false) {
@@ -7052,6 +7274,16 @@
 
         scannerReader.style.display = "none";
         scannerVideo.style.display = "none";
+        scannerZoomFeature = null;
+        scannerFocusModes = [];
+        scannerZoomControls.hidden = true;
+        scannerCameraHint.hidden = true;
+        scannerViewport.classList.remove("focusAvailable");
+        scannerFocusIndicator.classList.remove("show");
+        if (scannerZoomTimer) {
+          clearTimeout(scannerZoomTimer);
+          scannerZoomTimer = null;
+        }
 
         if (showMessage) {
           setStatus(window.__t("toast.scanner_closed"), "warn");
@@ -7745,6 +7977,27 @@
         }
       });
 
+      scannerZoomInput.addEventListener("input", () => {
+        const value = Number(scannerZoomInput.value);
+        const step = Number(scannerZoomInput.step) || 0.1;
+        scannerZoomValue.textContent = formatScannerZoom(value, step);
+
+        if (scannerZoomTimer) {
+          clearTimeout(scannerZoomTimer);
+        }
+        scannerZoomTimer = setTimeout(async () => {
+          scannerZoomTimer = null;
+          if (!scannerZoomFeature || !html5Qr || !html5Qr.isScanning) {
+            return;
+          }
+          try {
+            await scannerZoomFeature.apply(value);
+          } catch {}
+        }, 80);
+      });
+
+      scannerViewport.addEventListener("click", focusScannerCamera);
+
       document.addEventListener("keydown", async (event) => {
         if (event.key === "Escape" && scannerModal.classList.contains("show")) {
           await closeScanner(false);
@@ -8160,6 +8413,12 @@
             "scanner.subtitle.decode":
               "Scanne ein Offer oder eine BIP353-Adresse für Decode.",
             "scanner.close": "Scanner schließen",
+            "scanner.zoom": "Zoom",
+            "scanner.camera_hint_zoom_focus":
+              "Zum Zoomen schieben. QR-Code zum Fokussieren antippen.",
+            "scanner.camera_hint_zoom": "Zum Zoomen schieben.",
+            "scanner.camera_hint_focus":
+              "QR-Code zum Fokussieren antippen.",
             "scanner.hint":
               "Scannt lno..., lightning:..., bitcoin:... oder user@domain.",
             "badge.nwc_qr": "QR: NWC Verbindung",
@@ -8619,6 +8878,11 @@
             "scanner.subtitle.decode":
               "Scan an offer or a BIP353 address for Decode.",
             "scanner.close": "Close scanner",
+            "scanner.zoom": "Zoom",
+            "scanner.camera_hint_zoom_focus":
+              "Slide to zoom. Tap the QR code to focus.",
+            "scanner.camera_hint_zoom": "Slide to zoom.",
+            "scanner.camera_hint_focus": "Tap the QR code to focus.",
             "scanner.hint":
               "Scans lno..., lightning:..., bitcoin:... or user@domain.",
             "badge.nwc_qr": "QR: NWC Connection",
