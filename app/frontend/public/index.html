@@ -1617,6 +1617,77 @@ function getCookie(name) {
       setupRepairRecordLaterBtn.focus();
     }
 
+    async function readJsonOrThrow(response) {
+      const rawText = await response.text();
+      let data = null;
+
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        const contentType = response.headers.get('content-type') || '';
+        const looksLikeHtml =
+          contentType.toLowerCase().includes('text/html') ||
+          /^\s*(?:<!doctype\s+html|<html\b)/i.test(rawText);
+        const status = String(response.status || '?');
+        let key = 'error.response_not_json';
+        let fallback =
+          'The server returned an unexpected response instead of JSON (HTTP {status}). Reload the page and retry.';
+
+        if (looksLikeHtml && [502, 503, 504].includes(response.status)) {
+          key = 'error.response_gateway_html';
+          fallback =
+            'The server or proxy timed out (HTTP {status}). Reload the page and check whether the action still completed.';
+        } else if (looksLikeHtml && [401, 403].includes(response.status)) {
+          key = 'error.response_auth_html';
+          fallback =
+            'The session or app access was rejected (HTTP {status}). Sign in again and retry.';
+        }
+
+        const translated = window.__t ? window.__t(key) : fallback;
+        throw new Error(
+          (translated === key ? fallback : translated).replace('{status}', status)
+        );
+      }
+
+      if (!response.ok) {
+        const detail = data?.detail || data?.message || data?.error;
+        throw new Error(
+          typeof detail === 'string'
+            ? detail
+            : detail
+              ? JSON.stringify(detail)
+              : `HTTP ${response.status}`
+        );
+      }
+
+      return data;
+    }
+
+    function wait(milliseconds) {
+      return new Promise(resolve => setTimeout(resolve, milliseconds));
+    }
+
+    async function waitForPublicBip353Repair() {
+      const deadline = Date.now() + 180000;
+
+      while (Date.now() < deadline) {
+        const response = await fetch('/api/setup/public-bip353-repair-status', {
+          cache: 'no-store',
+          credentials: 'same-origin'
+        });
+        const data = await readJsonOrThrow(response);
+
+        if (data.state === 'completed') return data;
+        if (data.state === 'error') {
+          throw new Error(data.detail || window.__t('setup.repair_record.error'));
+        }
+
+        await wait(2000);
+      }
+
+      throw new Error(window.__t('setup.repair_record.background_timeout'));
+    }
+
     setupRepairRecordLaterBtn.addEventListener('click', () => {
       if (!setupRepairInProgress) closeSetupRepairRecordModal();
     });
@@ -1637,11 +1708,11 @@ function getCookie(name) {
             'X-CSRF-Token': getCookie('csrf_token') || ''
           }
         });
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data?.detail || window.__t('setup.repair_record.error'));
-        }
+        const started = await readJsonOrThrow(response);
+        const data =
+          started.state === 'completed'
+            ? started
+            : await waitForPublicBip353Repair();
 
         sessionStorage.setItem(
           'public_bip353_repair_notice',
@@ -1687,11 +1758,7 @@ function getCookie(name) {
         cache: 'no-store',
         credentials: 'same-origin'
       });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.detail || window.__t('setup.repair_record.check_error'));
-      }
+      const data = await readJsonOrThrow(response);
 
       if (data.address) {
         currentAddress = data.address;
@@ -1717,7 +1784,7 @@ function getCookie(name) {
       }
 
       const response = await fetch(`/api/lnurl/address/${encodeURIComponent(fallbackAddress)}`, { cache: 'no-store' });
-      const data = await response.json();
+      const data = await readJsonOrThrow(response);
 
       if (!response.ok) {
         throw new Error(data?.detail || 'LNURL konnte nicht geladen werden');
@@ -1728,7 +1795,7 @@ function getCookie(name) {
 
     async function loadSetupState() {
       const statusResponse = await fetch('/api/setup/status', { cache: 'no-store' });
-      const statusData = await statusResponse.json();
+      const statusData = await readJsonOrThrow(statusResponse);
 
       if (!statusResponse.ok) {
         throw new Error(statusData?.detail || 'Setup-Status konnte nicht geladen werden');
@@ -1766,7 +1833,7 @@ function getCookie(name) {
        });
 
        if (configResponse.ok) {
-         configData = await configResponse.json();
+         configData = await readJsonOrThrow(configResponse);
         }
       } catch (e) {
         console.log('Setup config unavailable', e);
@@ -1855,7 +1922,7 @@ async function saveSetup() {
       body: JSON.stringify(payload),
     });
 
-    const data = await response.json();
+    const data = await readJsonOrThrow(response);
 
     if (!response.ok) {
       throw new Error(data?.detail || window.__t('error.setup_save_failed'));
@@ -1901,7 +1968,7 @@ async function saveSetup() {
     async function loadPublicInfo() {
       try {
         const response = await fetch('/api/info', { cache: 'no-store' });
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || window.__t('error.public_info_load_failed'));
@@ -2065,7 +2132,7 @@ function renderAliasList(items) {
     async function loadAliases() {
       try {
         const response = await fetch('/api/alias', { cache: 'no-store' });
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'Alias-Liste konnte nicht geladen werden');
@@ -2146,7 +2213,7 @@ function renderAliasList(items) {
           cache: 'no-store',
           credentials: 'same-origin'
         });
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || window.__t('bip353.verify.failed'));
@@ -2208,7 +2275,7 @@ function renderAliasList(items) {
           body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'Alias konnte nicht angelegt werden');
@@ -2240,7 +2307,7 @@ function renderAliasList(items) {
           method: 'POST'
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'Alias konnte nicht veröffentlicht werden');
@@ -2258,7 +2325,7 @@ function renderAliasList(items) {
           method: 'POST'
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'Offer konnte nicht erneuert werden');
@@ -2281,7 +2348,7 @@ function renderAliasList(items) {
           method: 'DELETE'
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'Alias konnte nicht gelöscht werden');
@@ -2304,7 +2371,7 @@ function renderAliasList(items) {
           method: 'DELETE'
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'Alias konnte nicht gelöscht werden');
@@ -2373,7 +2440,7 @@ function renderAliasList(items) {
           })
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'BOLT11 Rechnung konnte nicht erzeugt werden');
@@ -2453,7 +2520,7 @@ function renderAliasList(items) {
           body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'Alias konnte nicht bearbeitet werden');
@@ -2639,7 +2706,7 @@ document.addEventListener('click', function (e) {
           body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data?.detail || 'Offer konnte nicht erzeugt werden');
@@ -2970,6 +3037,10 @@ installBtn.addEventListener('click', async () => {
       "setup.repair_record.invalid": "Für die öffentliche BOLT12-Adresse existiert ein TXT-Eintrag, aber ohne gültiges BOLT12-Offer.",
       "setup.repair_record.error": "BIP353-TXT-Eintrag konnte nicht erstellt werden",
       "setup.repair_record.check_error": "BIP353-TXT-Eintrag konnte nicht überprüft werden.",
+      "setup.repair_record.background_timeout": "Die Erstellung dauert länger als erwartet. Prüfe den Status nach einem Neuladen erneut.",
+      "error.response_not_json": "Der Server hat statt der erwarteten Daten eine unerwartete Antwort geliefert (HTTP {status}). Lade die Seite neu und versuche es erneut.",
+      "error.response_gateway_html": "Der Server oder Proxy hat zu lange gebraucht (HTTP {status}). Lade die Seite neu und prüfe, ob die Aktion trotzdem abgeschlossen wurde.",
+      "error.response_auth_html": "Die Sitzung oder der App-Zugriff wurde abgelehnt (HTTP {status}). Melde dich erneut an und versuche es noch einmal.",
       "alias.verify.button": "Veröffentlichte TXT-Einträge prüfen",
       "alias.verify.none_published": "Keine veröffentlichten Alias-Einträge zum Prüfen vorhanden. Entwürfe wurden übersprungen.",
       "bip353.verify.checking": "TXT-Einträge werden geprüft...",
@@ -3113,6 +3184,10 @@ installBtn.addEventListener('click', async () => {
       "setup.repair_record.invalid": "A TXT record exists for the public BOLT12 address, but it does not contain a valid BOLT12 offer.",
       "setup.repair_record.error": "Could not recreate the BIP353 TXT record",
       "setup.repair_record.check_error": "Could not verify the BIP353 TXT record.",
+      "setup.repair_record.background_timeout": "Creation is taking longer than expected. Reload the page and check the status again.",
+      "error.response_not_json": "The server returned an unexpected response instead of the expected data (HTTP {status}). Reload the page and retry.",
+      "error.response_gateway_html": "The server or proxy timed out (HTTP {status}). Reload the page and check whether the action still completed.",
+      "error.response_auth_html": "The session or app access was rejected (HTTP {status}). Sign in again and retry.",
       "alias.verify.button": "Verify published TXT records",
       "alias.verify.none_published": "There are no published alias records to verify. Drafts were skipped.",
       "bip353.verify.checking": "Checking TXT records...",

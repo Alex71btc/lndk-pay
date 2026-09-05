@@ -709,6 +709,46 @@
         font-size: 0.92rem;
       }
 
+      #scannerModal .scannerCard {
+        width: min(640px, 100%);
+        max-width: 640px;
+        padding: 24px;
+      }
+
+      #scannerModal .scannerCard h2 {
+        margin: 0;
+      }
+
+      #scannerModal .scannerViewport {
+        width: min(100%, 560px, 74vh);
+        width: min(100%, 560px, 74dvh);
+        aspect-ratio: 4 / 3;
+        max-height: 420px;
+        margin: 16px auto 0;
+      }
+
+      #scannerModal #scannerReader,
+      #scannerModal #scannerReader > div {
+        max-width: 100%;
+      }
+
+      #scannerModal #scannerReader video,
+      #scannerModal #scannerReader canvas {
+        max-width: 100% !important;
+        max-height: 100% !important;
+        object-fit: cover;
+      }
+
+      #scannerModal .row {
+        justify-content: flex-end;
+        margin-top: 16px;
+      }
+
+      #scannerModal #closeScannerBtn {
+        width: auto;
+        min-width: 170px;
+      }
+
       @media (max-width: 940px) {
         .heroGrid,
         .midGrid {
@@ -737,6 +777,40 @@
 
         .row button {
           width: 100%;
+        }
+
+        #scannerModal {
+          align-items: flex-start;
+          justify-content: center;
+          padding: 12px;
+        }
+
+        #scannerModal .scannerCard {
+          width: min(100%, 360px);
+          max-width: 360px;
+          max-height: calc(100vh - 24px);
+          max-height: calc(100dvh - 24px);
+          padding: 14px;
+          border-radius: 18px;
+          margin: 0 auto;
+        }
+
+        #scannerModal .scannerViewport {
+          width: min(100%, 300px);
+          aspect-ratio: 4 / 3;
+          max-height: 42vh;
+          max-height: 42dvh;
+          margin-top: 12px;
+        }
+
+        #scannerModal .scannerHint {
+          font-size: 0.86rem;
+          line-height: 1.4;
+        }
+
+        #scannerModal #closeScannerBtn {
+          width: 100%;
+          min-width: 0;
         }
 
         #contactsModal .scannerCard {
@@ -1343,9 +1417,9 @@
           <span data-i18n="hint.identity"
             >Ordnet einer Lightning Address wie
             <span class="mono">name@domain</span> einen Nostr Pubkey zu. Diese
-            Zuordnung wird für NIP-05 und LNURL Zaps verwendet.</span
+            Zuordnung veröffentlicht eine NIP-05-Identity, aktiviert LNURL-Zaps
+            und legt die Relays für verschlüsselte Zap-Benachrichtigungen fest.</span
           >
-          Diese Zuordnung wird für NIP-05 und LNURL Zaps verwendet.
         </div>
 
         <label class="label" for="identityResultOutput" style="margin-top: 14px"
@@ -1365,32 +1439,37 @@
 
       <details class="section">
       <summary>
-        🔔 <span data-i18n="title.notification_keys">Nostr Notification Keys</span>
+        🔔 <span data-i18n="title.notification_keys">Zap-Benachrichtigungen</span>
       </summary>
 
-        <label class="label"
-          ><span data-i18n="label.server_signer">Server signer</span></label
-        >
-        <div id="nostrServerStatus" class="valueBox" data-i18n="label.loading">
-          Loading...
+        <div class="hint" data-i18n="hint.notification_initialize">
+          Beim Initialisieren prüft und speichert BOLT12 Pay deinen
+          Notification-nsec. Falls noch kein interner App-Signierer existiert,
+          wird das benötigte Schlüsselpaar automatisch im Hintergrund erzeugt.
+          Der private Signer-nsec wird aus Sicherheitsgründen nie angezeigt.
         </div>
-        <div
-          id="nostrServerPubkey"
-          class="hint mono"
-          style="margin-top: 8px"
-        ></div>
 
-        <div class="row" style="margin-top: 12px">
-          <button id="generateNostrServerKeyBtn" type="button">
-            <span data-i18n="btn.generate_server_key"
-              >Neuen Server-Key generieren</span
-            >
-          </button>
+        <div
+          id="nostrSecretStoreStatus"
+          class="valueBox"
+          style="margin-top: 12px"
+          aria-live="polite"
+        >
+          …
         </div>
+        <button
+          id="resetNostrSecretStoreBtn"
+          class="danger"
+          type="button"
+          style="margin-top: 10px"
+          hidden
+        >
+          <span data-i18n="btn.reset_nostr_keys">Verschlüsselte Nostr-Schlüssel zurücksetzen</span>
+        </button>
 
         <label class="label" for="nostrNotifyNsecInput" style="margin-top: 18px"
           ><span data-i18n="label.notification_nsec"
-            >Notification NSEC</span
+            >Eigener Benachrichtigungs-nsec</span
           ></label
         >
         <input
@@ -1398,29 +1477,113 @@
           type="password"
           data-i18n-placeholder="ph.notification_nsec"
           placeholder="nsec1..."
+          autocomplete="off"
+          spellcheck="false"
         />
 
-        <div id="nostrNotifyStatus" class="hint" style="margin-top: 8px"></div>
+        <div
+          id="nostrNotifyStatus"
+          class="valueBox"
+          style="margin-top: 12px"
+          aria-live="polite"
+        >
+          …
+        </div>
         <div
           id="nostrNotifyPubkey"
           class="hint mono"
           style="margin-top: 6px"
         ></div>
+        <div
+          id="nostrNotifyChangeHint"
+          class="hint"
+          style="margin-top: 8px"
+          data-i18n="hint.notification_nsec_change"
+          hidden
+        >
+          Der gespeicherte nsec wird aus Sicherheitsgründen nicht wieder in
+          dieses Feld geladen. Zum Ändern oben den neuen nsec eingeben und
+          „Neuen Notification-nsec speichern“ wählen.
+        </div>
 
         <div class="row" style="margin-top: 12px">
           <button id="saveNostrNotifyKeyBtn" type="button">
-            <span data-i18n="btn.save_notification_nsec"
-              >Notification NSEC speichern</span
+            <span
+              id="initializeNostrNotificationsLabel"
+              data-i18n="btn.initialize_zap_notifications"
+              >Zap-Benachrichtigungen initialisieren</span
+            >
+          </button>
+          <button
+            id="toggleNostrServerSignerBtn"
+            class="secondary"
+            type="button"
+            hidden
+          >
+            <span
+              id="toggleNostrServerSignerLabel"
+              data-i18n="btn.show_app_signer"
+              >App-Signierer anzeigen</span
             >
           </button>
         </div>
 
-        <div class="hint" style="margin-top: 12px">
-          <span data-i18n="hint.notification_keys"
-            >Der Server-Key signiert App-interne Nostr-Events. Der
-            Notification-NSEC wird für DM-/Push-kompatible
-            Zap-Benachrichtigungen verwendet.</span
+        <div
+          id="nostrSignerDetails"
+          hidden
+          style="margin-top: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel)"
+        >
+          <label class="label">
+            <span data-i18n="label.public_app_signer">Öffentlicher App-Signierer</span>
+          </label>
+          <div
+            id="nostrServerStatus"
+            class="valueBox"
+            aria-live="polite"
           >
+            …
+          </div>
+          <div
+            id="nostrServerPubkey"
+            class="hint mono"
+            style="margin-top: 8px; word-break: break-all"
+          ></div>
+          <div class="hint" style="margin-top: 10px" data-i18n="hint.app_signer_keypair">
+            BOLT12 Pay erzeugt dafür ein Schlüsselpaar. Hier wird nur der
+            öffentliche npub angezeigt; der private nsec bleibt verborgen.
+          </div>
+          <div class="row" style="margin-top: 12px">
+            <button
+              id="regenerateNostrServerSignerBtn"
+              class="danger"
+              type="button"
+            >
+              <span
+                id="regenerateNostrServerSignerLabel"
+                data-i18n="btn.regenerate_app_signer"
+                >App-Signierer neu erzeugen</span
+              >
+            </button>
+          </div>
+          <div
+            class="hint"
+            style="margin-top: 8px"
+            data-i18n="hint.regenerate_app_signer"
+          >
+            Nur verwenden, wenn der App-Signierer fehlerhaft oder kompromittiert
+            ist. Der Notification-nsec wird dabei nicht verändert.
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top: 12px" data-i18n="hint.notification_profile_match">
+          Verwende den nsec desselben Nostr-Profils, in dem du deine
+          Zap-fähige Lightning Address eingetragen hast. Der nach dem
+          Initialisieren angezeigte npub muss zur gespeicherten Identity passen.
+        </div>
+        <div class="hint" style="margin-top: 8px" data-i18n="hint.notification_nsec_security">
+          Dein nsec erlaubt die vollständige Kontrolle über deine
+          Nostr-Identität. Speichere ihn nur auf einem vertrauenswürdigen Node
+          und gib ihn niemals weiter.
         </div>
       </details>
 
@@ -2265,9 +2428,18 @@
       </div>
     </div>
 
-    <div class="scannerModal" id="scannerModal" aria-hidden="true">
+    <div
+      class="scannerModal"
+      id="scannerModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="qrScannerTitle"
+      aria-hidden="true"
+    >
       <div class="scannerCard">
-        <h2><span data-i18n="scanner.title">QR-Scanner</span></h2>
+        <h2>
+          <span id="qrScannerTitle" data-i18n="scanner.title">QR-Scanner</span>
+        </h2>
         <div
           class="scannerHint"
           id="scannerTitle"
@@ -2314,7 +2486,7 @@
         try {
           const res = await fetch("/api/setup/config", { cache: "no-store" });
           if (!res.ok) return;
-          const data = await res.json();
+          const data = await readJsonOrThrow(res);
           const candidate = String(
             data?.public_bolt12_address ||
               data?.bolt12_address ||
@@ -2394,11 +2566,45 @@
 
       const nostrServerStatus = document.getElementById("nostrServerStatus");
       const nostrServerPubkey = document.getElementById("nostrServerPubkey");
+      const nostrSignerDetails = document.getElementById("nostrSignerDetails");
+      const toggleNostrServerSignerBtn = document.getElementById(
+        "toggleNostrServerSignerBtn",
+      );
+      const toggleNostrServerSignerLabel = document.getElementById(
+        "toggleNostrServerSignerLabel",
+      );
+      const regenerateNostrServerSignerBtn = document.getElementById(
+        "regenerateNostrServerSignerBtn",
+      );
+      const regenerateNostrServerSignerLabel = document.getElementById(
+        "regenerateNostrServerSignerLabel",
+      );
       const nostrNotifyNsecInput = document.getElementById(
         "nostrNotifyNsecInput",
       );
       const nostrNotifyStatus = document.getElementById("nostrNotifyStatus");
       const nostrNotifyPubkey = document.getElementById("nostrNotifyPubkey");
+      const nostrSecretStoreStatus = document.getElementById(
+        "nostrSecretStoreStatus",
+      );
+      const resetNostrSecretStoreBtn = document.getElementById(
+        "resetNostrSecretStoreBtn",
+      );
+      const nostrNotifyChangeHint = document.getElementById(
+        "nostrNotifyChangeHint",
+      );
+      const saveNostrNotifyKeyBtn = document.getElementById(
+        "saveNostrNotifyKeyBtn",
+      );
+      const initializeNostrNotificationsLabel = document.getElementById(
+        "initializeNostrNotificationsLabel",
+      );
+      let nostrServerSignerVisible = false;
+      let nostrServerSignerConfigured = false;
+      let nostrNotificationsConfigured = false;
+      let nostrSecretStoreLocked = true;
+      let nostrStatusCache = null;
+      let nostrStatusRetryTimer = null;
 
       // ------------------------------------------------------------------
       // Contacts DOM references
@@ -2863,6 +3069,38 @@
         return data;
       }
 
+      function wait(milliseconds) {
+        return new Promise((resolve) => setTimeout(resolve, milliseconds));
+      }
+
+      async function waitForPublicBip353Repair() {
+        const deadline = Date.now() + 180000;
+
+        while (Date.now() < deadline) {
+          const response = await fetch(
+            "/api/setup/public-bip353-repair-status",
+            {
+              cache: "no-store",
+              credentials: "same-origin",
+            },
+          );
+          const data = await readJsonOrThrow(response);
+
+          if (data.state === "completed") return data;
+          if (data.state === "error") {
+            throw new Error(
+              data.detail || window.__t("setup.repair_record.error"),
+            );
+          }
+
+          await wait(2000);
+        }
+
+        throw new Error(
+          window.__t("setup.repair_record.background_timeout"),
+        );
+      }
+
       publicBip353RepairLaterBtn?.addEventListener("click", () => {
         if (!publicBip353RepairInProgress) {
           closePublicBip353RepairModal();
@@ -2887,7 +3125,11 @@
               "X-CSRF-Token": getCookie("csrf_token") || "",
             },
           });
-          const data = await readJsonOrThrow(response);
+          const started = await readJsonOrThrow(response);
+          const data =
+            started.state === "completed"
+              ? started
+              : await waitForPublicBip353Repair();
 
           sessionStorage.setItem(
             "public_bip353_repair_notice",
@@ -3115,7 +3357,7 @@
             body: JSON.stringify({ password }),
           });
 
-          const data = await res.json();
+          const data = await readJsonOrThrow(res);
           if (!res.ok) {
             throw new Error(
               data.detail || data.error || getNwcText().unlockFailed,
@@ -3282,7 +3524,7 @@
           return [];
         }
 
-        const data = await res.json();
+        const data = await readJsonOrThrow(res);
         if (!res.ok) {
           throw new Error(
             data.detail || data.error || "Failed to load NWC connections",
@@ -3313,6 +3555,8 @@
         ) {
           renderEditContactEntries();
         }
+
+        renderNostrStatus();
       }
 
       function initNwcUi() {
@@ -3355,7 +3599,7 @@
           ...options,
         });
 
-        const data = await response.json();
+        const data = await readJsonOrThrow(response);
 
         if (!response.ok) {
           throw new Error(data.detail || data.error || "NWC request failed");
@@ -4830,7 +5074,7 @@
           throw new Error(`Contacts request failed: HTTP ${res.status}`);
         }
 
-        const data = await res.json();
+        const data = await readJsonOrThrow(res);
         loadedContacts = data.contacts || [];
 
         return loadedContacts;
@@ -5052,7 +5296,7 @@
       async function loadHistory() {
         try {
           const response = await fetch("/api/history");
-          const data = await response.json();
+          const data = await readJsonOrThrow(response);
           return data.items || [];
         } catch {
           return [];
@@ -5086,7 +5330,7 @@
           throw new Error("Failed to load tx history");
         }
 
-        return await response.json();
+        return await readJsonOrThrow(response);
       }
 
       async function loadTxHistory() {
@@ -5907,14 +6151,42 @@
       };
       
 
-        async function readJsonOrThrow(response) {
+      async function readJsonOrThrow(response) {
         const rawText = await response.text();
         let data = null;
 
         try {
           data = rawText ? JSON.parse(rawText) : null;
         } catch {
-          throw new Error(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
+          const contentType = response.headers.get("content-type") || "";
+          const looksLikeHtml =
+            contentType.toLowerCase().includes("text/html") ||
+            /^\s*(?:<!doctype\s+html|<html\b)/i.test(rawText);
+          const status = String(response.status || "?");
+          let key = "error.response_not_json";
+
+          if (looksLikeHtml && [502, 503, 504].includes(response.status)) {
+            key = "error.response_gateway_html";
+          } else if (
+            looksLikeHtml &&
+            [401, 403].includes(response.status)
+          ) {
+            key = "error.response_auth_html";
+          }
+
+          const fallback =
+            key === "error.response_gateway_html"
+              ? "The server or proxy timed out (HTTP {status}). Reload the page and check whether the action still completed."
+              : key === "error.response_auth_html"
+                ? "The session or app access was rejected (HTTP {status}). Sign in again and retry."
+                : "The server returned an unexpected response instead of JSON (HTTP {status}). Reload the page and retry.";
+          const translated = window.__t ? window.__t(key) : fallback;
+          throw new Error(
+            (translated === key ? fallback : translated).replace(
+              "{status}",
+              status,
+            ),
+          );
         }
 
         if (!response.ok) {
@@ -6155,54 +6427,193 @@
         return String(error);
       }
 
+      function nostrText(key, fallback) {
+        try {
+          const translated = window.__t ? window.__t(key) : "";
+          return translated && translated !== key ? translated : fallback;
+        } catch {
+          return fallback;
+        }
+      }
+
+      function renderNostrNotificationAction(busy = false) {
+        const actionKey = busy
+          ? nostrNotificationsConfigured
+            ? "btn.saving_new_notification_nsec"
+            : "btn.initializing_zap_notifications"
+          : nostrNotificationsConfigured
+            ? "btn.save_new_notification_nsec"
+            : "btn.initialize_zap_notifications";
+        const actionFallback = busy
+          ? nostrNotificationsConfigured
+            ? "Saving new notification nsec..."
+            : "Initializing..."
+          : nostrNotificationsConfigured
+            ? "Save new notification nsec"
+            : "Initialize Zap Notifications";
+
+        if (initializeNostrNotificationsLabel) {
+          initializeNostrNotificationsLabel.dataset.i18n = actionKey;
+          initializeNostrNotificationsLabel.textContent = nostrText(
+            actionKey,
+            actionFallback,
+          );
+        }
+
+        const placeholderKey = nostrNotificationsConfigured
+          ? "ph.new_notification_nsec"
+          : "ph.notification_nsec";
+        const placeholderFallback = nostrNotificationsConfigured
+          ? "Enter new nsec1..."
+          : "nsec1...";
+        if (nostrNotifyNsecInput) {
+          nostrNotifyNsecInput.dataset.i18nPlaceholder = placeholderKey;
+          nostrNotifyNsecInput.placeholder = nostrText(
+            placeholderKey,
+            placeholderFallback,
+          );
+        }
+
+        if (nostrNotifyChangeHint) {
+          nostrNotifyChangeHint.hidden = !nostrNotificationsConfigured;
+        }
+      }
+
+      function renderNostrServerSignerVisibility() {
+        if (toggleNostrServerSignerBtn) {
+          toggleNostrServerSignerBtn.hidden = !nostrServerSignerConfigured;
+        }
+
+        if (nostrSignerDetails) {
+          nostrSignerDetails.hidden =
+            !nostrServerSignerConfigured || !nostrServerSignerVisible;
+        }
+
+        if (toggleNostrServerSignerLabel) {
+          const key = nostrServerSignerVisible
+            ? "btn.hide_app_signer"
+            : "btn.show_app_signer";
+          toggleNostrServerSignerLabel.dataset.i18n = key;
+          toggleNostrServerSignerLabel.textContent = window.__t
+            ? window.__t(key)
+            : nostrServerSignerVisible
+              ? "App-Signierer ausblenden"
+              : "App-Signierer anzeigen";
+        }
+      }
+
+      function renderNostrStatus(data = nostrStatusCache) {
+        if (!data) return;
+
+        const secretStore = data.secret_store || {};
+        const secretStoreState = secretStore.state || "starting";
+        nostrSecretStoreLocked = Boolean(secretStore.locked);
+        nostrServerSignerConfigured = Boolean(data.server_key_configured);
+        nostrNotificationsConfigured = Boolean(
+          data.notify_key_configured && data.server_key_configured,
+        );
+        if (!nostrServerSignerConfigured) {
+          nostrServerSignerVisible = false;
+        }
+        renderNostrServerSignerVisibility();
+        renderNostrNotificationAction();
+
+        if (nostrNotifyNsecInput) {
+          nostrNotifyNsecInput.disabled = nostrSecretStoreLocked;
+        }
+        if (saveNostrNotifyKeyBtn) {
+          saveNostrNotifyKeyBtn.disabled = nostrSecretStoreLocked;
+        }
+        if (regenerateNostrServerSignerBtn) {
+          regenerateNostrServerSignerBtn.disabled = nostrSecretStoreLocked;
+        }
+        if (resetNostrSecretStoreBtn) {
+          resetNostrSecretStoreBtn.hidden = secretStoreState !== "error";
+        }
+
+        if (nostrSecretStoreStatus) {
+          const statusKey =
+            secretStoreState === "unlocked"
+              ? "label.nostr_keys_encrypted_unlocked"
+              : secretStoreState === "error"
+                ? "label.nostr_keys_encryption_error"
+                : "label.nostr_keys_waiting_for_lnd";
+          const statusFallback =
+            secretStoreState === "unlocked"
+              ? "Nostr keys are encrypted and automatically unlocked by LND"
+              : secretStoreState === "error"
+                ? "The encrypted Nostr keys do not match this LND node or are damaged"
+                : "Waiting for LND to unlock the encrypted Nostr keys automatically";
+          nostrSecretStoreStatus.textContent = nostrText(
+            statusKey,
+            statusFallback,
+          );
+        }
+
+        if (nostrServerStatus) {
+          nostrServerStatus.textContent = data.server_key_configured
+            ? nostrText("label.configured", "Configured")
+            : nostrText("label.missing", "Missing");
+        }
+
+        if (nostrServerPubkey) {
+          nostrServerPubkey.textContent =
+            data.server_npub || data.server_pubkey_hex || "";
+        }
+
+        if (nostrNotifyStatus) {
+          nostrNotifyStatus.textContent = nostrNotificationsConfigured
+            ? nostrText(
+                "label.zap_notifications_ready",
+                "Zap notifications are ready",
+              )
+            : nostrText(
+                "label.zap_notifications_not_initialized",
+                "Zap notifications are not initialized",
+              );
+        }
+
+        if (nostrNotifyPubkey) {
+          const notifyPubkey =
+            data.notify_npub || data.notify_pubkey_hex || "";
+          nostrNotifyPubkey.textContent = notifyPubkey
+            ? `${nostrText("label.notification_profile", "Notification profile")}: ${notifyPubkey}`
+            : "";
+        }
+
+        if (nostrStatusRetryTimer) {
+          clearTimeout(nostrStatusRetryTimer);
+          nostrStatusRetryTimer = null;
+        }
+        if (secretStoreState === "starting" || secretStoreState === "waiting_for_lnd") {
+          nostrStatusRetryTimer = setTimeout(() => {
+            loadNostrStatus().catch((err) =>
+              console.error("Nostr key unlock status refresh failed", err),
+            );
+          }, 5000);
+        }
+      }
+
       async function loadNostrStatus() {
-        const t = (key, fallback) => {
-          try {
-            return (window.__t && window.__t(key)) || fallback;
-          } catch {
-            return fallback;
-          }
-        };
 
         try {
           const res = await fetch("/api/admin/nostr-status", {
             credentials: "same-origin",
           });
-          if (!res.ok) {
-            if (nostrServerStatus)
-              nostrServerStatus.textContent = t("label.error", "Error");
-            if (nostrNotifyStatus)
-              nostrNotifyStatus.textContent = t("label.error", "Error");
-            return;
-          }
-
-          const data = await res.json();
-
-          if (nostrServerStatus) {
-            nostrServerStatus.textContent = data.server_key_configured
-              ? t("label.configured", "Configured")
-              : t("label.missing", "Missing");
-          }
-
-          if (nostrServerPubkey) {
-            nostrServerPubkey.textContent =
-              data.server_npub || data.server_pubkey_hex || "";
-          }
-
-          if (nostrNotifyStatus) {
-            nostrNotifyStatus.textContent = data.notify_key_configured
-              ? `${t("label.configured", "Configured")}: ${data.notify_nsec_masked || ""}`
-              : t("label.missing", "Missing");
-          }
-
-          if (nostrNotifyPubkey) {
-            nostrNotifyPubkey.textContent =
-              data.notify_npub || data.notify_pubkey_hex || "";
-          }
+          const data = await readJsonOrThrow(res);
+          nostrStatusCache = data;
+          renderNostrStatus(data);
         } catch (err) {
           console.error("loadNostrStatus failed", err);
-          if (nostrServerStatus) nostrServerStatus.textContent = "Error";
-          if (nostrNotifyStatus) nostrNotifyStatus.textContent = "Error";
+          const unavailable = nostrText(
+            "label.nostr_status_unavailable",
+            "Status temporarily unavailable",
+          );
+          if (nostrServerStatus) nostrServerStatus.textContent = unavailable;
+          if (nostrNotifyStatus) nostrNotifyStatus.textContent = unavailable;
+          if (nostrSecretStoreStatus) {
+            nostrSecretStoreStatus.textContent = unavailable;
+          }
         }
       }
 
@@ -6213,48 +6624,152 @@
           return;
         }
 
-        const res = await fetch("/api/admin/nostr-notify-key", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ notify_nsec }),
-        });
+        const replacingExistingNsec = nostrNotificationsConfigured;
+        if (saveNostrNotifyKeyBtn) saveNostrNotifyKeyBtn.disabled = true;
+        renderNostrNotificationAction(true);
 
-        const data = await res.json().catch(() => ({}));
+        try {
+          const res = await fetch("/api/admin/nostr-notify-key", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": getCookie("csrf_token") || "",
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({ notify_nsec }),
+          });
+          const data = await readJsonOrThrow(res);
 
-        if (!res.ok) {
+          if (nostrNotifyNsecInput) nostrNotifyNsecInput.value = "";
+          nostrServerSignerVisible = false;
+          await loadNostrStatus();
           setStatus(
-            data.detail || "Notification NSEC konnte nicht gespeichert werden.",
+            window.__t(
+              data.server_signer_created
+                ? "toast.zap_notifications_initialized_with_signer"
+                : replacingExistingNsec
+                  ? "toast.notification_nsec_updated"
+                  : "toast.zap_notifications_initialized",
+            ),
+            "ok",
+          );
+        } catch (error) {
+          setStatus(
+            errorToMessage(error) ||
+              "Notification NSEC konnte nicht gespeichert werden.",
             "error",
             true,
           );
-          return;
+        } finally {
+          if (saveNostrNotifyKeyBtn) {
+            saveNostrNotifyKeyBtn.disabled = nostrSecretStoreLocked;
+          }
+          renderNostrNotificationAction();
         }
-
-        if (nostrNotifyNsecInput) nostrNotifyNsecInput.value = "";
-        await loadNostrStatus();
-        setStatus(window.__t("toast.nostr_nsec_saved"), "ok");
       }
 
-      async function generateNostrServerKey() {
-        const res = await fetch("/api/admin/nostr-server-key/generate", {
-          method: "POST",
-          credentials: "same-origin",
-        });
+      async function regenerateNostrServerSigner() {
+        const confirmed = confirm(
+          nostrText(
+            "confirm.regenerate_app_signer",
+            "Generate a new app signer? The current signer will no longer be used for future Zap receipts. The notification nsec will not be changed.",
+          ),
+        );
+        if (!confirmed) return;
 
-        const data = await res.json().catch(() => ({}));
+        if (regenerateNostrServerSignerBtn) {
+          regenerateNostrServerSignerBtn.disabled = true;
+        }
+        if (regenerateNostrServerSignerLabel) {
+          regenerateNostrServerSignerLabel.dataset.i18n =
+            "btn.regenerating_app_signer";
+          regenerateNostrServerSignerLabel.textContent = nostrText(
+            "btn.regenerating_app_signer",
+            "Generating new app signer...",
+          );
+        }
 
-        if (!res.ok) {
+        try {
+          const res = await fetch("/api/admin/nostr-server-key/generate", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "X-CSRF-Token": getCookie("csrf_token") || "",
+            },
+          });
+          const data = await readJsonOrThrow(res);
+
+          nostrStatusCache = data.status || null;
+          nostrServerSignerVisible = true;
+          if (nostrStatusCache) {
+            renderNostrStatus(nostrStatusCache);
+          } else {
+            await loadNostrStatus();
+          }
+          setStatus(window.__t("toast.app_signer_regenerated"), "ok");
+        } catch (error) {
           setStatus(
-            data.detail || "Server-Key konnte nicht generiert werden.",
+            errorToMessage(error) ||
+              nostrText(
+                "error.app_signer_regenerate_failed",
+                "The app signer could not be regenerated.",
+              ),
             "error",
             true,
           );
-          return;
+        } finally {
+          if (regenerateNostrServerSignerBtn) {
+            regenerateNostrServerSignerBtn.disabled = nostrSecretStoreLocked;
+          }
+          if (regenerateNostrServerSignerLabel) {
+            regenerateNostrServerSignerLabel.dataset.i18n =
+              "btn.regenerate_app_signer";
+            regenerateNostrServerSignerLabel.textContent = nostrText(
+              "btn.regenerate_app_signer",
+              "Regenerate app signer",
+            );
+          }
         }
+      }
 
-        await loadNostrStatus();
-        setStatus(window.__t("toast.server_key_generated"), "ok");
+      async function resetNostrSecretStore() {
+        const confirmed = confirm(
+          nostrText(
+            "confirm.reset_nostr_keys",
+            "Reset the encrypted Nostr keys for this LND node? The saved notification nsec and app signer will be deleted and must be entered or created again.",
+          ),
+        );
+        if (!confirmed) return;
+
+        if (resetNostrSecretStoreBtn) {
+          resetNostrSecretStoreBtn.disabled = true;
+        }
+        try {
+          const res = await fetch("/api/admin/nostr-secret-store/reset", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "X-CSRF-Token": getCookie("csrf_token") || "",
+            },
+          });
+          const data = await readJsonOrThrow(res);
+          nostrStatusCache = data.status || null;
+          if (nostrStatusCache) renderNostrStatus(nostrStatusCache);
+          else await loadNostrStatus();
+          setStatus(
+            nostrText(
+              "toast.nostr_keys_reset",
+              "A new encrypted Nostr key store was created. Enter your notification nsec again.",
+            ),
+            "ok",
+          );
+        } catch (error) {
+          setStatus(errorToMessage(error), "error", true);
+        } finally {
+          if (resetNostrSecretStoreBtn) {
+            resetNostrSecretStoreBtn.disabled = false;
+          }
+        }
       }
 
       async function loadIdentityConfig(alias = "") {
@@ -6311,7 +6826,7 @@
           ...options,
         });
 
-        const data = await res.json();
+        const data = await readJsonOrThrow(res);
 
         if (!res.ok) {
           throw new Error(
@@ -6478,7 +6993,25 @@
             { facingMode: "environment" },
             {
               fps: 10,
-              qrbox: { width: 260, height: 260 },
+              aspectRatio: 4 / 3,
+              qrbox: (viewfinderWidth, viewfinderHeight) => {
+                const scannerViewport = scannerReader.parentElement;
+                const renderedWidth =
+                  scannerViewport?.clientWidth || viewfinderWidth;
+                const renderedHeight =
+                  scannerViewport?.clientHeight || viewfinderHeight;
+                const shortestEdge = Math.min(
+                  viewfinderWidth,
+                  viewfinderHeight,
+                  renderedWidth,
+                  renderedHeight,
+                );
+                const size = Math.max(
+                  120,
+                  Math.min(260, Math.floor(shortestEdge * 0.72)),
+                );
+                return { width: size, height: size };
+              },
             },
             (decodedText) => {
               applyScanResult(decodedText);
@@ -7268,11 +7801,20 @@
             await saveNostrNotifyKey();
           });
 
-        document
-          .getElementById("generateNostrServerKeyBtn")
-          ?.addEventListener("click", async () => {
-            await generateNostrServerKey();
-          });
+        toggleNostrServerSignerBtn?.addEventListener("click", () => {
+          nostrServerSignerVisible = !nostrServerSignerVisible;
+          renderNostrServerSignerVisibility();
+        });
+
+        regenerateNostrServerSignerBtn?.addEventListener(
+          "click",
+          regenerateNostrServerSigner,
+        );
+
+        resetNostrSecretStoreBtn?.addEventListener(
+          "click",
+          resetNostrSecretStore,
+        );
 
         identityResultOutput?.addEventListener("click", async () => {
           await copyText(
@@ -7338,7 +7880,7 @@
             credentials: "same-origin",
             cache: "no-store",
           });
-          const data = await res.json();
+          const data = await readJsonOrThrow(res);
           if (data.enabled && !data.ok) {
             window.location.href = "/pay-login";
           }
@@ -7583,9 +8125,18 @@
             "toast.cf_result_copied": "Cloudflare-Ergebnis kopiert.",
             "toast.identity_result_copied": "Identity-Ergebnis kopiert.",
             "toast.offer_copied": "Offer kopiert.",
-            "toast.nostr_nsec_required": "Bitte Notification NSEC eingeben.",
-            "toast.nostr_nsec_saved": "Notification NSEC gespeichert.",
-            "toast.server_key_generated": "Neuer Nostr Server-Key generiert.",
+            "toast.nostr_nsec_required":
+              "Bitte den nsec des Nostr-Profils eingeben.",
+            "toast.zap_notifications_initialized_with_signer":
+              "Zap-Benachrichtigungen initialisiert. Das interne Signer-Schlüsselpaar wurde automatisch erzeugt.",
+            "toast.zap_notifications_initialized":
+              "Zap-Benachrichtigungen initialisiert. Der vorhandene App-Signierer wird weiterverwendet.",
+            "toast.notification_nsec_updated":
+              "Der neue Notification-nsec wurde gespeichert.",
+            "toast.app_signer_regenerated":
+              "Neuer App-Signierer erzeugt. Der Notification-nsec wurde nicht verändert.",
+            "toast.nostr_keys_reset":
+              "Neuer verschlüsselter Nostr-Schlüsselspeicher angelegt. Bitte den Notification-nsec erneut eingeben.",
             "toast.alias_required_first": "Bitte zuerst einen Alias eingeben.",
             "toast.identity_alias_required":
               "Bitte einen Lightning Address Alias eingeben.",
@@ -7652,7 +8203,7 @@
             "history.search_placeholder":
               "Transaktionen, Kontakte, Adressen oder Payment Hash durchsuchen...",
             "title.offer_history": "Generierte Offers",
-            "title.notification_keys": "Nostr Notification Keys",
+            "title.notification_keys": "Zap-Benachrichtigungen",
             "title.nwc_wallet": "NWC / Zap Wallet",
             "title.alias_cloudflare": "Alias / Cloudflare BIP353",
             "btn.clear_history": "History löschen",
@@ -7676,22 +8227,65 @@
             "btn.identity_save": "Identity speichern",
             "btn.identity_save_busy": "Speichere...",
             "hint.identity":
-              "Ordnet einer Lightning Address wie name@domain einen Nostr Pubkey zu. Diese Zuordnung wird für NIP-05 und LNURL Zaps verwendet.",
+              "Verbindet den Lightning-Address-Alias mit einem Nostr-Pubkey. NIP-05 veröffentlicht alias@domain als Nostr-Identity; Zap / Nostr aktiviert LNURL-Zaps. Die gespeicherten Relays werden auch für verschlüsselte Zap-Benachrichtigungen verwendet.",
             "label.identity_result": "Identity Ergebnis",
             "ph.identity_result":
               "Hier erscheint die Identity-Konfiguration...",
-            "title.nostr_notification_keys": "Nostr Notification Keys",
-            "label.server_signer": "Server signer",
-            "label.configured": "Configured",
+            "title.nostr_notification_keys": "Zap-Benachrichtigungen",
+            "label.public_app_signer": "Öffentlicher App-Signierer",
+            "label.configured": "Eingerichtet",
             "label.missing": "Fehlt",
-            "label.loading": "Loading...",
-            "label.configured_prefix": "Configured:",
-            "btn.generate_server_key": "Neuen Server-Key generieren",
-            "label.notification_nsec": "Notification NSEC",
-            "btn.save_notification_nsec": "Notification NSEC speichern",
-            "hint.notification_keys":
-              "Der Server-Key signiert App-interne Nostr-Events. Der Notification-NSEC wird für DM-/Push-kompatible Zap-Benachrichtigungen verwendet.",
+            "label.loading": "Wird geladen...",
+            "label.configured_prefix": "Eingerichtet:",
+            "label.notification_nsec":
+              "Eigener Benachrichtigungs-nsec",
+            "btn.initialize_zap_notifications":
+              "Zap-Benachrichtigungen initialisieren",
+            "btn.initializing_zap_notifications": "Wird initialisiert...",
+            "btn.save_new_notification_nsec":
+              "Neuen Notification-nsec speichern",
+            "btn.saving_new_notification_nsec":
+              "Neuer nsec wird gespeichert...",
+            "btn.show_app_signer": "App-Signierer anzeigen",
+            "btn.hide_app_signer": "App-Signierer ausblenden",
+            "btn.regenerate_app_signer": "App-Signierer neu erzeugen",
+            "btn.regenerating_app_signer":
+              "Neuer App-Signierer wird erzeugt...",
+            "btn.reset_nostr_keys":
+              "Verschlüsselte Nostr-Schlüssel zurücksetzen",
+            "label.zap_notifications_ready":
+              "Zap-Benachrichtigungen sind eingerichtet",
+            "label.zap_notifications_not_initialized":
+              "Zap-Benachrichtigungen sind noch nicht eingerichtet",
+            "label.notification_profile": "Benachrichtigungsprofil",
+            "label.nostr_status_unavailable":
+              "Status vorübergehend nicht verfügbar",
+            "label.nostr_keys_encrypted_unlocked":
+              "🔒 Nostr-Schlüssel sind verschlüsselt und wurden automatisch durch LND entsperrt",
+            "label.nostr_keys_waiting_for_lnd":
+              "⏳ Warte auf LND, um die verschlüsselten Nostr-Schlüssel automatisch zu entsperren",
+            "label.nostr_keys_encryption_error":
+              "⚠️ Die verschlüsselten Nostr-Schlüssel passen nicht zu diesem LND-Node oder sind beschädigt",
+            "hint.notification_initialize":
+              "Beim Initialisieren prüft und verschlüsselt BOLT12 Pay deinen Notification-nsec. Falls noch kein interner App-Signierer existiert, wird das benötigte Schlüsselpaar automatisch im Hintergrund erzeugt. LND entsperrt beide Schlüssel nach jedem App- oder Node-Neustart automatisch; die privaten Schlüssel werden nie angezeigt.",
+            "hint.app_signer_keypair":
+              "BOLT12 Pay erzeugt dafür ein Schlüsselpaar. Hier wird nur der öffentliche npub angezeigt; der private nsec bleibt verborgen.",
+            "hint.regenerate_app_signer":
+              "Nur verwenden, wenn der App-Signierer fehlerhaft oder kompromittiert ist. Der Notification-nsec wird dabei nicht verändert.",
+            "hint.notification_profile_match":
+              "Verwende den nsec desselben Nostr-Profils, in dem du deine Zap-fähige Lightning Address eingetragen hast. Der nach dem Initialisieren angezeigte npub muss zur gespeicherten Identity passen.",
+            "hint.notification_nsec_security":
+              "Dein nsec erlaubt die vollständige Kontrolle über deine Nostr-Identität. Speichere ihn nur auf einem vertrauenswürdigen Node und gib ihn niemals weiter.",
+            "hint.notification_nsec_change":
+              "Der gespeicherte nsec wird aus Sicherheitsgründen nicht wieder in dieses Feld geladen. Zum Ändern oben den neuen nsec eingeben und „Neuen Notification-nsec speichern“ wählen.",
+            "confirm.regenerate_app_signer":
+              "Wirklich einen neuen App-Signierer erzeugen? Der bisherige Signierer wird für zukünftige Zap-Belege nicht mehr verwendet. Der Notification-nsec bleibt unverändert.",
+            "confirm.reset_nostr_keys":
+              "Verschlüsselte Nostr-Schlüssel für diesen LND-Node zurücksetzen? Der gespeicherte Notification-nsec und App-Signierer werden gelöscht und müssen anschließend neu eingegeben beziehungsweise erzeugt werden.",
+            "error.app_signer_regenerate_failed":
+              "Der App-Signierer konnte nicht neu erzeugt werden.",
             "ph.notification_nsec": "nsec1...",
+            "ph.new_notification_nsec": "Neuen nsec1... eingeben",
             "title.nwc": "NWC / Zap Wallet",
             "label.nwc_name": "Verbindungsname",
             "ph.nwc_name": "z. B. Amethyst auf Pixel",
@@ -7790,6 +8384,14 @@
               "BIP353-TXT-Eintrag konnte nicht erstellt werden",
             "setup.repair_record.check_error":
               "BIP353-TXT-Eintrag konnte nicht überprüft werden.",
+            "setup.repair_record.background_timeout":
+              "Die Erstellung dauert länger als erwartet. Prüfe den Status nach einem Neuladen erneut.",
+            "error.response_not_json":
+              "Der Server hat statt der erwarteten Daten eine unerwartete Antwort geliefert (HTTP {status}). Lade die Seite neu und versuche es erneut.",
+            "error.response_gateway_html":
+              "Der Server oder Proxy hat zu lange gebraucht (HTTP {status}). Lade die Seite neu und prüfe, ob die Aktion trotzdem abgeschlossen wurde.",
+            "error.response_auth_html":
+              "Die Sitzung oder der App-Zugriff wurde abgelehnt (HTTP {status}). Melde dich erneut an und versuche es noch einmal.",
             "history.verify.button":
               "Veröffentlichte TXT-Einträge prüfen",
             "history.verify.none_published":
@@ -7984,9 +8586,18 @@
             "toast.cf_result_copied": "Cloudflare result copied.",
             "toast.identity_result_copied": "Identity result copied.",
             "toast.offer_copied": "Offer copied.",
-            "toast.nostr_nsec_required": "Please enter a notification NSEC.",
-            "toast.nostr_nsec_saved": "Notification NSEC saved.",
-            "toast.server_key_generated": "New Nostr server key generated.",
+            "toast.nostr_nsec_required":
+              "Please enter the nsec of the Nostr profile.",
+            "toast.zap_notifications_initialized_with_signer":
+              "Zap notifications initialized. The internal signer key pair was created automatically.",
+            "toast.zap_notifications_initialized":
+              "Zap notifications initialized. The existing app signer will continue to be used.",
+            "toast.notification_nsec_updated":
+              "The new notification nsec was saved.",
+            "toast.app_signer_regenerated":
+              "A new app signer was generated. The notification nsec was not changed.",
+            "toast.nostr_keys_reset":
+              "A new encrypted Nostr key store was created. Enter your notification nsec again.",
             "toast.alias_required_first": "Please enter an alias first.",
             "toast.identity_alias_required":
               "Please enter a Lightning Address alias.",
@@ -8048,7 +8659,7 @@
             "history.pending": "Pending",
             "history.failed": "Failed",
             "title.offer_history": "Generated Offers",
-            "title.notification_keys": "Nostr Notification Keys",
+            "title.notification_keys": "Zap Notifications",
             "title.nwc_wallet": "NWC / Zap Wallet",
             "title.alias_cloudflare": "Alias / Cloudflare BIP353",
             "btn.clear_history": "Clear history",
@@ -8075,22 +8686,63 @@
             "btn.identity_save": "Save identity",
             "btn.identity_save_busy": "Saving...",
             "hint.identity":
-              "Assigns a Nostr pubkey to a Lightning Address like name@domain. This mapping is used for NIP-05 and LNURL zaps.",
+              "Connects the Lightning Address alias to a Nostr pubkey. NIP-05 publishes alias@domain as a Nostr identity; Zap / Nostr enables LNURL Zaps. The saved relays are also used for encrypted Zap notifications.",
             "label.identity_result": "Identity result",
             "ph.identity_result":
               "The identity configuration will appear here...",
-            "title.nostr_notification_keys": "Nostr Notification Keys",
-            "label.server_signer": "Server signer",
+            "title.nostr_notification_keys": "Zap Notifications",
+            "label.public_app_signer": "Public app signer",
             "label.configured": "Configured",
             "label.missing": "Missing",
             "label.loading": "Loading...",
             "label.configured_prefix": "Configured:",
-            "btn.generate_server_key": "Generate new server key",
-            "label.notification_nsec": "Notification NSEC",
-            "btn.save_notification_nsec": "Save notification NSEC",
-            "hint.notification_keys":
-              "The server key signs internal app Nostr events. The notification NSEC is used for DM-/push-compatible zap notifications.",
+            "label.notification_nsec":
+              "Your notification nsec",
+            "btn.initialize_zap_notifications":
+              "Initialize Zap Notifications",
+            "btn.initializing_zap_notifications": "Initializing...",
+            "btn.save_new_notification_nsec":
+              "Save new notification nsec",
+            "btn.saving_new_notification_nsec":
+              "Saving new nsec...",
+            "btn.show_app_signer": "Show app signer",
+            "btn.hide_app_signer": "Hide app signer",
+            "btn.regenerate_app_signer": "Regenerate app signer",
+            "btn.regenerating_app_signer":
+              "Generating new app signer...",
+            "btn.reset_nostr_keys": "Reset encrypted Nostr keys",
+            "label.zap_notifications_ready": "Zap notifications are ready",
+            "label.zap_notifications_not_initialized":
+              "Zap notifications are not initialized yet",
+            "label.notification_profile": "Notification profile",
+            "label.nostr_status_unavailable":
+              "Status temporarily unavailable",
+            "label.nostr_keys_encrypted_unlocked":
+              "🔒 Nostr keys are encrypted and were unlocked automatically by LND",
+            "label.nostr_keys_waiting_for_lnd":
+              "⏳ Waiting for LND to unlock the encrypted Nostr keys automatically",
+            "label.nostr_keys_encryption_error":
+              "⚠️ The encrypted Nostr keys do not match this LND node or are damaged",
+            "hint.notification_initialize":
+              "When initialized, BOLT12 Pay validates and encrypts your notification nsec. If no internal app signer exists yet, the required key pair is created automatically in the background. LND automatically unlocks both keys after every app or node restart; private keys are never displayed.",
+            "hint.app_signer_keypair":
+              "BOLT12 Pay creates a key pair for this. Only the public npub is shown here; the private nsec remains hidden.",
+            "hint.regenerate_app_signer":
+              "Use this only if the app signer is faulty or compromised. The notification nsec is not changed.",
+            "hint.notification_profile_match":
+              "Use the nsec of the same Nostr profile in which you entered your Zap-enabled Lightning Address. The npub shown after initialization must match the saved Identity.",
+            "hint.notification_nsec_security":
+              "Your nsec grants full control of your Nostr identity. Store it only on a node you trust and never share it with third parties.",
+            "hint.notification_nsec_change":
+              "For security, the saved nsec is never loaded back into this field. To replace it, enter the new nsec above and select Save new notification nsec.",
+            "confirm.regenerate_app_signer":
+              "Generate a new app signer? The current signer will no longer be used for future Zap receipts. The notification nsec will not be changed.",
+            "confirm.reset_nostr_keys":
+              "Reset the encrypted Nostr keys for this LND node? The saved notification nsec and app signer will be deleted and must be entered or created again.",
+            "error.app_signer_regenerate_failed":
+              "The app signer could not be regenerated.",
             "ph.notification_nsec": "nsec1...",
+            "ph.new_notification_nsec": "Enter new nsec1...",
             "title.nwc": "NWC / Zap Wallet",
             "label.nwc_name": "Connection Name",
             "ph.nwc_name": "e.g. Amethyst on Pixel",
@@ -8187,6 +8839,14 @@
               "Could not recreate the BIP353 TXT record",
             "setup.repair_record.check_error":
               "Could not verify the BIP353 TXT record.",
+            "setup.repair_record.background_timeout":
+              "Creation is taking longer than expected. Reload the page and check the status again.",
+            "error.response_not_json":
+              "The server returned an unexpected response instead of the expected data (HTTP {status}). Reload the page and retry.",
+            "error.response_gateway_html":
+              "The server or proxy timed out (HTTP {status}). Reload the page and check whether the action still completed.",
+            "error.response_auth_html":
+              "The session or app access was rejected (HTTP {status}). Sign in again and retry.",
             "history.verify.button": "Verify published TXT records",
             "history.verify.none_published":
               "There are no BIP353 addresses published from offer history to verify.",

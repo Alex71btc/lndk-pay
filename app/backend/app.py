@@ -161,6 +161,13 @@ CLOUDFLARE_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("CLOUDFLARE_RATE_LIMIT_WIND
 CLOUDFLARE_RATE_LIMIT_MAX_REQUESTS = int(os.getenv("CLOUDFLARE_RATE_LIMIT_MAX_REQUESTS", "5"))
 
 _CLOUDFLARE_RATE_LIMITS: dict[str, list[float]] = {}
+PUBLIC_ALIAS_INVOICE_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.getenv("PUBLIC_ALIAS_INVOICE_RATE_LIMIT_WINDOW_SECONDS", "60")
+)
+PUBLIC_ALIAS_INVOICE_RATE_LIMIT_MAX_REQUESTS = int(
+    os.getenv("PUBLIC_ALIAS_INVOICE_RATE_LIMIT_MAX_REQUESTS", "3")
+)
+_PUBLIC_ALIAS_INVOICE_RATE_LIMITS: dict[str, list[float]] = {}
 
 def _check_cloudflare_rate_limit(request: StarletteRequest):
     ip = _client_ip(request)
@@ -177,6 +184,34 @@ def _check_cloudflare_rate_limit(request: StarletteRequest):
             status_code=429,
             detail=f"Rate limit exceeded. Try again in {retry_after}s."
         )
+
+
+def _check_public_alias_invoice_rate_limit(
+    request: StarletteRequest,
+    alias_name: str,
+) -> None:
+    key = f"{_client_ip(request)}:{alias_name}"
+    now = time.time()
+    attempts = _PUBLIC_ALIAS_INVOICE_RATE_LIMITS.get(key, [])
+    attempts = [
+        timestamp
+        for timestamp in attempts
+        if (now - timestamp) <= PUBLIC_ALIAS_INVOICE_RATE_LIMIT_WINDOW_SECONDS
+    ]
+    if len(attempts) >= PUBLIC_ALIAS_INVOICE_RATE_LIMIT_MAX_REQUESTS:
+        retry_after = max(
+            1,
+            int(
+                PUBLIC_ALIAS_INVOICE_RATE_LIMIT_WINDOW_SECONDS
+                - (now - attempts[0])
+            ),
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many fallback invoices. Try again in {retry_after}s.",
+        )
+    attempts.append(now)
+    _PUBLIC_ALIAS_INVOICE_RATE_LIMITS[key] = attempts
 
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
@@ -265,15 +300,30 @@ def _normalize_nsec_to_hex(nsec: str) -> str:
     nsec = (nsec or "").strip()
     if not nsec:
         return ""
+
     if len(nsec) == 64:
-        return nsec.lower()
-    hrp, data = bech32.bech32_decode(nsec)
-    if hrp != "nsec" or data is None:
-        raise ValueError("Invalid nsec")
-    decoded = bech32.convertbits(data, 5, 8, False)
-    if not decoded:
+        try:
+            private_key = bytes.fromhex(nsec)
+        except ValueError as exc:
+            raise ValueError("Invalid nsec") from exc
+    else:
+        hrp, data = bech32.bech32_decode(nsec.lower())
+        if hrp != "nsec" or data is None:
+            raise ValueError("Invalid nsec")
+        decoded = bech32.convertbits(data, 5, 8, False)
+        if decoded is None:
+            raise ValueError("Invalid nsec payload")
+        private_key = bytes(decoded)
+
+    if len(private_key) != 32:
         raise ValueError("Invalid nsec payload")
-    return bytes(decoded).hex()
+
+    try:
+        coincurve.PrivateKey(private_key)
+    except Exception as exc:
+        raise ValueError("Invalid nsec private key") from exc
+
+    return private_key.hex()
 
 
 def _generate_nostr_private_key_hex() -> str:
@@ -281,17 +331,13 @@ def _generate_nostr_private_key_hex() -> str:
 
 
 def _get_nostr_admin_status() -> dict[str, Any]:
-    cfg = load_config()
-
     server_privkey = str(
-        cfg.get("nostr_server_privkey")
-        or _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
         or ""
     ).strip().lower()
 
     notify_nsec = str(
-        cfg.get("nostr_notify_nsec")
-        or _get_secret("NOSTR_NOTIFY_NSEC", "nostr_notify_nsec", default="")
+        _get_secret("NOSTR_NOTIFY_NSEC", "nostr_notify_nsec", default="")
         or ""
     ).strip()
 
@@ -312,6 +358,7 @@ def _get_nostr_admin_status() -> dict[str, Any]:
         "notify_pubkey_hex": notify_pubkey_hex,
         "notify_npub": _hex_pubkey_to_npub(notify_pubkey_hex) if notify_pubkey_hex else "",
         "notify_nsec_masked": _mask_secret(notify_nsec),
+        "secret_store": _nostr_secret_store_public_status(),
     }
 
 def get_cloudflare_config():
@@ -343,6 +390,14 @@ BIP353_DNS_RETRYABLE_ERRORS = (
 )
 
 PUBLIC_BIP353_REPAIR_LOCK = asyncio.Lock()
+PUBLIC_BIP353_REPAIR_TASK: Optional[asyncio.Task] = None
+PUBLIC_BIP353_REPAIR_JOB: dict[str, Any] = {
+    "state": "idle",
+    "created": False,
+    "detail": "",
+    "http_status": 200,
+    "updated_at": "",
+}
 
 # BIP353 lookup outcomes that should fall through to the LNURL path in pay_address:
 # no record (404), lookup failed (502), lookup timed out (504).
@@ -366,6 +421,19 @@ CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(APP_DATA_DIR / "config.json")))
 SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
 DB_PATH = APP_DATA_DIR / "bolt12pay.db"
+NOSTR_SECRET_FIELDS = ("nostr_server_privkey", "nostr_notify_nsec")
+NOSTR_SECRET_STORE_VERSION = 1
+NOSTR_SECRET_STORE_PROVIDER = "lnd-ecdh-v1"
+NOSTR_SECRET_STORE_INFO = b"bolt12-pay:nostr-secret-store:v1"
+NOSTR_SECRET_STORE_CHECK = "bolt12-pay-nostr-secret-store-v1"
+NOSTR_SECRET_STORE_KEY: Optional[bytes] = None
+NOSTR_SECRET_STORE_LOCK = asyncio.Lock()
+NOSTR_SECRET_STORE_STATUS: dict[str, Any] = {
+    "state": "starting",
+    "encrypted": False,
+    "detail": "",
+    "updated_at": int(time.time()),
+}
 CONTACT_ENTRY_TYPES = {
     "lightning_address",
     "bolt12",
@@ -1070,10 +1138,8 @@ def _get_secret(env_name, *config_path, default=None):
     env_val = os.getenv(env_name)
     if env_val not in (None, ""):
         return env_val
-    return _deep_get(_load_json_file(SECRETS_JSON_PATH), *config_path, default=default)
+    return _deep_get(load_secrets(), *config_path, default=default)
 
-NOSTR_SERVER_PRIVKEY = _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="").strip().lower()
-NOSTR_NOTIFY_NSEC = _get_secret("NOSTR_NOTIFY_NSEC", "nostr_notify_nsec", default="").strip()
 _NOSTR_DEFAULT_RELAYS_RAW = _get_setting(
     "NOSTR_DEFAULT_RELAYS",
     "nostr",
@@ -3320,6 +3386,74 @@ async def _repair_public_bip353_record() -> dict[str, Any]:
         return {"ok": True, "created": True, "status": current}
 
 
+def _set_public_bip353_repair_job(
+    state: str,
+    *,
+    created: bool = False,
+    detail: str = "",
+    http_status: int = 200,
+) -> dict[str, Any]:
+    global PUBLIC_BIP353_REPAIR_JOB
+
+    PUBLIC_BIP353_REPAIR_JOB = {
+        "state": state,
+        "created": bool(created),
+        "detail": str(detail or ""),
+        "http_status": int(http_status),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    return dict(PUBLIC_BIP353_REPAIR_JOB)
+
+
+def _public_bip353_repair_job_snapshot() -> dict[str, Any]:
+    return dict(PUBLIC_BIP353_REPAIR_JOB)
+
+
+async def _run_public_bip353_repair_job() -> None:
+    try:
+        result = await _repair_public_bip353_record()
+        _set_public_bip353_repair_job(
+            "completed",
+            created=bool(result.get("created")),
+        )
+    except HTTPException as exc:
+        detail = exc.detail
+        if not isinstance(detail, str):
+            try:
+                detail = json.dumps(detail, ensure_ascii=False)
+            except Exception:
+                detail = str(detail)
+
+        _set_public_bip353_repair_job(
+            "error",
+            detail=detail,
+            http_status=exc.status_code,
+        )
+    except Exception as exc:
+        print(
+            f"[BIP353 repair] background job failed ({type(exc).__name__})",
+            flush=True,
+        )
+        _set_public_bip353_repair_job(
+            "error",
+            detail="Unexpected error while recreating the BIP353 TXT record",
+            http_status=500,
+        )
+
+
+def _start_public_bip353_repair_job() -> dict[str, Any]:
+    global PUBLIC_BIP353_REPAIR_TASK
+
+    if PUBLIC_BIP353_REPAIR_TASK and not PUBLIC_BIP353_REPAIR_TASK.done():
+        return _public_bip353_repair_job_snapshot()
+
+    job = _set_public_bip353_repair_job("running", http_status=202)
+    PUBLIC_BIP353_REPAIR_TASK = asyncio.create_task(
+        _run_public_bip353_repair_job()
+    )
+    return job
+
+
 def _published_bip353_verification_entries(
     cfg: dict[str, Any],
     scope: str,
@@ -3620,6 +3754,7 @@ async def lnurl_callback(
 
             pending[payment_hash] = {
                 "created_at": int(time.time()),
+                "identity_alias": username,
                 "recipient_pubkey_hex": recipient_nostr_hex,
                 "payer_pubkey_hex": zap_request.get("pubkey"),
                 "amount_msat": amount,
@@ -3710,7 +3845,22 @@ async def repair_public_bip353_record(request: StarletteRequest):
         require_pay_auth(request)
         _require_csrf(request)
 
-    return await _repair_public_bip353_record()
+    return JSONResponse(
+        _start_public_bip353_repair_job(),
+        status_code=202,
+        headers=_no_store_headers({"Retry-After": "2"}),
+    )
+
+
+@app.get("/api/setup/public-bip353-repair-status")
+async def get_public_bip353_repair_status(request: StarletteRequest):
+    if _is_pay_ui_enabled():
+        require_pay_auth(request)
+
+    return JSONResponse(
+        _public_bip353_repair_job_snapshot(),
+        headers=_no_store_headers(),
+    )
 
 
 @app.get("/api/bip353/verify-published")
@@ -4323,6 +4473,62 @@ async def create_invoice(payload: CreateInvoiceRequest, request: StarletteReques
         payment_hash=result["payment_hash"],
         expires_at=None,
     )
+
+
+@app.post("/api/alias/{name}/bolt11-fallback")
+async def create_public_alias_bolt11_fallback(
+    name: str,
+    request: StarletteRequest,
+):
+    if privacy_mode_enabled():
+        raise HTTPException(status_code=404, detail="BOLT11 fallback is disabled")
+
+    alias_name = _normalize_alias_name(name)
+    cfg = load_config()
+    alias_data = (cfg.get("aliases", {}) or {}).get(alias_name)
+    if not isinstance(alias_data, dict):
+        raise HTTPException(status_code=404, detail="Alias not found")
+
+    fixed_amount_sat = alias_data.get("amount_sat")
+    request_data: dict[str, Any] = {}
+    try:
+        parsed_request_data = await request.json()
+        if isinstance(parsed_request_data, dict):
+            request_data = parsed_request_data
+    except Exception:
+        request_data = {}
+
+    amount_sat = fixed_amount_sat or request_data.get("amount_sat")
+    try:
+        amount_sat = int(amount_sat)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter an amount for the BOLT11 fallback invoice",
+        ) from exc
+
+    max_amount_sat = max(1, LNURL_MAX_SENDABLE_MSAT // 1000)
+    if amount_sat < 1 or amount_sat > max_amount_sat:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amount must be between 1 and {max_amount_sat} sats",
+        )
+
+    _check_public_alias_invoice_rate_limit(request, alias_name)
+    address = _alias_address(alias_name)
+    description = str(alias_data.get("description") or "Lightning payment").strip()
+    result = await _create_bolt11_invoice(
+        amount_sat=amount_sat,
+        memo=f"BOLT11 alias fallback: {address} · {description}",
+        expiry=3600,
+        method="bolt11_alias_fallback",
+        counterparty=address,
+    )
+    return {
+        "payment_request": result["payment_request"],
+        "payment_hash": result["payment_hash"],
+        "expires_in": 3600,
+    }
 
 @app.post("/api/alias/{name}/publish", response_model=AliasResponse)
 async def publish_alias(name: str, request: StarletteRequest):
@@ -5377,22 +5583,6 @@ async def public_alias_page(alias_name: str):
     except Exception:
         lnurl_fallback = ""
 
-    bolt11_invoice = None
-    try:
-        if amount_sat:
-            invoice = await _create_bolt11_invoice(
-                amount_sat=amount_sat,
-                memo=description,
-                expiry=3600,
-            )
-            bolt11_invoice = (
-                invoice["payment_request"]
-                if isinstance(invoice, dict)
-                else str(invoice)
-            )
-    except Exception:
-        bolt11_invoice = None
-
     subline = (
         "BOLT12 only"
         if privacy_mode
@@ -5417,20 +5607,46 @@ async def public_alias_page(alias_name: str):
         </div>
         """
     bolt11_section = ""
-    if bolt11_invoice and not privacy_mode:
+    if not privacy_mode:
+        bolt11_amount_input = ""
+        if not amount_sat:
+            max_amount_sat = max(1, LNURL_MAX_SENDABLE_MSAT // 1000)
+            bolt11_amount_input = f"""
+          <div class="bolt11AmountField">
+            <label id="aliasBolt11AmountLabel" for="aliasBolt11AmountInput">Amount in sats</label>
+            <input
+              id="aliasBolt11AmountInput"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              max="{max_amount_sat}"
+              step="1"
+              placeholder="Enter amount"
+            >
+          </div>
+            """
         bolt11_section = f"""
         <div class="section">
-          <div class="sectionTitle">BOLT11 Compatibility Fallback</div>
-          <div class="qr">
-            <img id="aliasBolt11Qr" class="copyable" src="/api/qr/{bolt11_invoice}" width="220" height="220" alt="BOLT11 Invoice QR" title="Tap to copy QR content">
-          </div>
-          <div id="aliasBolt11String" class="mono copyable" title="Tap to copy">{bolt11_invoice}</div>
-          <div class="row">
-          <button id="aliasBolt11WalletBtn" onclick="payBolt11Invoice()">WebLN / Wallet</button>
-          <button id="aliasCopyInvoiceBtn" class="secondary">Copy invoice</button>
-          </div>
+          <div id="aliasBolt11Title" class="sectionTitle">Optional BOLT11 fallback</div>
           <div id="aliasBolt11Hint" class="hint">
-          Only for wallets without BOLT12 or LNURL support.
+          Most wallets can use the Lightning Address or LNURL above. Generate a one-time BOLT11 invoice only for an older wallet that needs it.
+          </div>
+          {bolt11_amount_input}
+          <div class="row">
+            <button id="aliasGenerateBolt11Btn">Generate BOLT11 fallback invoice</button>
+          </div>
+          <div id="aliasBolt11Result" hidden>
+            <div class="qr">
+              <img id="aliasBolt11Qr" class="copyable" width="220" height="220" alt="BOLT11 Invoice QR" title="Tap to copy QR content">
+            </div>
+            <div id="aliasBolt11String" class="mono copyable" title="Tap to copy"></div>
+            <div class="row">
+              <button id="aliasBolt11WalletBtn">WebLN / Wallet</button>
+              <button id="aliasCopyInvoiceBtn" class="secondary">Copy invoice</button>
+            </div>
+            <div id="aliasBolt11ExpiryHint" class="hint">
+              This invoice is valid for one hour. Generate another only if it expires.
+            </div>
           </div>
         </div>
         """
@@ -5574,6 +5790,35 @@ button:hover {{
   text-align:center;
   margin-top:8px;
 }}
+
+.bolt11AmountField {{
+  width:min(320px, 100%);
+  margin:16px auto 4px;
+}}
+
+.bolt11AmountField label {{
+  display:block;
+  color:#c7d0e0;
+  font-size:.9rem;
+  margin-bottom:7px;
+  text-align:left;
+}}
+
+.bolt11AmountField input {{
+  width:100%;
+  box-sizing:border-box;
+  border:1px solid #26324a;
+  background:#0c1322;
+  color:#eef2ff;
+  padding:12px 14px;
+  border-radius:12px;
+  font:inherit;
+}}
+
+.bolt11AmountField input:focus {{
+  outline:2px solid rgba(247,147,26,.38);
+  border-color:#f7931a;
+}}
 .toastWrap {{
   position: fixed;
   top: 14px;
@@ -5701,8 +5946,10 @@ button:hover {{
 </main>
 
 <script>
+let currentAliasBolt11Invoice = "";
+
 async function payBolt11Invoice() {{
-  const invoice = {repr(bolt11_invoice)};
+  const invoice = currentAliasBolt11Invoice;
 
   if (!invoice) return;
 
@@ -5737,8 +5984,17 @@ async function payBolt11Invoice() {{
       copyLnurl: "Copy LNURL",
       lnurlWallet: "Open fallback with wallet",
       lnurlHint: "For wallets without BOLT12 support. QR contains the LNURL, wallet button uses Lightning Address.",
+      bolt11Title: "Optional BOLT11 fallback",
+      bolt11Amount: "Amount in sats",
+      bolt11AmountPlaceholder: "Enter amount",
+      invoiceAmountRequired: "Enter an amount before generating the invoice.",
+      generateInvoice: "Generate BOLT11 fallback invoice",
+      generatingInvoice: "Generating invoice...",
       copyInvoice: "Copy invoice",
-      bolt11Hint: "Only for wallets without BOLT12 or LNURL support.",
+      bolt11Hint: "Most wallets can use the Lightning Address or LNURL above. Generate a one-time BOLT11 invoice only for an older wallet that needs it.",
+      bolt11Expiry: "This invoice is valid for one hour. Generate another only if it expires.",
+      invoiceCreated: "BOLT11 fallback invoice created.",
+      invoiceFailed: "The BOLT11 fallback invoice could not be created.",
       copiedAddress: "Address copied.",
       copiedOffer: "Offer copied.",
       copiedLnurl: "LNURL copied.",
@@ -5762,8 +6018,17 @@ async function payBolt11Invoice() {{
       copyLnurl: "LNURL kopieren",
       lnurlWallet: "Fallback mit Wallet öffnen",
       lnurlHint: "Für Wallets ohne BOLT12-Unterstützung. QR enthält den LNURL-String, der Wallet-Button nutzt die Lightning Address.",
+      bolt11Title: "Optionaler BOLT11-Fallback",
+      bolt11Amount: "Betrag in Sats",
+      bolt11AmountPlaceholder: "Betrag eingeben",
+      invoiceAmountRequired: "Gib zuerst einen Betrag ein.",
+      generateInvoice: "BOLT11-Fallback-Invoice erzeugen",
+      generatingInvoice: "Invoice wird erzeugt...",
       copyInvoice: "Invoice kopieren",
-      bolt11Hint: "Nur für Wallets ohne BOLT12- oder LNURL-Unterstützung.",
+      bolt11Hint: "Fast alle Wallets können die Lightning Address oder LNURL oben verwenden. Erzeuge nur für eine ältere Wallet bei Bedarf eine einmalige BOLT11-Invoice.",
+      bolt11Expiry: "Diese Invoice ist eine Stunde gültig. Erzeuge nur nach Ablauf eine neue.",
+      invoiceCreated: "BOLT11-Fallback-Invoice erzeugt.",
+      invoiceFailed: "Die BOLT11-Fallback-Invoice konnte nicht erzeugt werden.",
       copiedAddress: "Adresse kopiert.",
       copiedOffer: "Offer kopiert.",
       copiedLnurl: "LNURL kopiert.",
@@ -5847,8 +6112,14 @@ async function payBolt11Invoice() {{
     const copyLnurl = document.getElementById("aliasCopyLnurlBtn");
     const lnurlWallet = document.getElementById("aliasLnurlWalletBtn");
     const lnurlHint = document.getElementById("aliasLnurlHint");
+    const bolt11Title = document.getElementById("aliasBolt11Title");
+    const bolt11AmountLabel = document.getElementById("aliasBolt11AmountLabel");
+    const bolt11AmountInput = document.getElementById("aliasBolt11AmountInput");
+    const generateInvoice = document.getElementById("aliasGenerateBolt11Btn");
+    const bolt11Wallet = document.getElementById("aliasBolt11WalletBtn");
     const copyInvoice = document.getElementById("aliasCopyInvoiceBtn");
     const bolt11Hint = document.getElementById("aliasBolt11Hint");
+    const bolt11Expiry = document.getElementById("aliasBolt11ExpiryHint");
 
     if (title) title.textContent = t.title;
     if (amount) amount.textContent = t.amount;
@@ -5865,8 +6136,16 @@ async function payBolt11Invoice() {{
     if (copyLnurl) copyLnurl.textContent = t.copyLnurl;
     if (lnurlWallet) lnurlWallet.textContent = t.lnurlWallet;
     if (lnurlHint) lnurlHint.textContent = t.lnurlHint;
+    if (bolt11Title) bolt11Title.textContent = t.bolt11Title;
+    if (bolt11AmountLabel) bolt11AmountLabel.textContent = t.bolt11Amount;
+    if (bolt11AmountInput) bolt11AmountInput.placeholder = t.bolt11AmountPlaceholder;
+    if (generateInvoice && !generateInvoice.disabled) {{
+      generateInvoice.textContent = t.generateInvoice;
+    }}
+    if (bolt11Wallet) bolt11Wallet.textContent = t.openWallet;
     if (copyInvoice) copyInvoice.textContent = t.copyInvoice;
     if (bolt11Hint) bolt11Hint.textContent = t.bolt11Hint;
+    if (bolt11Expiry) bolt11Expiry.textContent = t.bolt11Expiry;
 
     applyAliasTooltips();
     setActive(lang);
@@ -5935,6 +6214,70 @@ async function payBolt11Invoice() {{
     }}
   }}
 
+  async function generateBolt11Fallback() {{
+    const t = T[getLang()] || T.en;
+    const button = document.getElementById("aliasGenerateBolt11Btn");
+    const result = document.getElementById("aliasBolt11Result");
+    const invoiceString = document.getElementById("aliasBolt11String");
+    const invoiceQr = document.getElementById("aliasBolt11Qr");
+    const amountInput = document.getElementById("aliasBolt11AmountInput");
+    let requestedAmount = null;
+
+    if (amountInput) {{
+      requestedAmount = Number(amountInput.value);
+      if (!Number.isInteger(requestedAmount) || requestedAmount < 1) {{
+        showAliasToast(t.invoiceAmountRequired, "error");
+        amountInput.focus();
+        return;
+      }}
+    }}
+
+    if (button) {{
+      button.disabled = true;
+      button.textContent = t.generatingInvoice;
+    }}
+
+    try {{
+      const response = await fetch(
+        "/api/alias/{alias_name}/bolt11-fallback",
+        {{
+          method: "POST",
+          cache: "no-store",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify(requestedAmount === null ? {{}} : {{ amount_sat: requestedAmount }}),
+        }},
+      );
+      const bodyText = await response.text();
+      let data = {{}};
+      try {{
+        data = bodyText ? JSON.parse(bodyText) : {{}};
+      }} catch (_) {{
+        data = {{ detail: bodyText }};
+      }}
+      if (!response.ok) {{
+        throw new Error(data.detail || t.invoiceFailed);
+      }}
+
+      currentAliasBolt11Invoice = String(data.payment_request || "").trim();
+      if (!currentAliasBolt11Invoice) {{
+        throw new Error(t.invoiceFailed);
+      }}
+      if (invoiceString) invoiceString.textContent = currentAliasBolt11Invoice;
+      if (invoiceQr) {{
+        invoiceQr.src = "/api/qr/" + encodeURIComponent(currentAliasBolt11Invoice);
+      }}
+      if (result) result.hidden = false;
+      showAliasToast(t.invoiceCreated, "ok");
+    }} catch (error) {{
+      showAliasToast(error?.message || t.invoiceFailed, "error");
+    }} finally {{
+      if (button) {{
+        button.disabled = false;
+        button.textContent = (T[getLang()] || T.en).generateInvoice;
+      }}
+    }}
+  }}
+
   window.addEventListener("load", function () {{
     const deBtn = document.getElementById("aliasLangDe");
     const enBtn = document.getElementById("aliasLangEn");
@@ -5943,6 +6286,8 @@ async function payBolt11Invoice() {{
     const copyOfferBtn = document.getElementById("aliasCopyOfferBtn");
     const copyLnurlBtn = document.getElementById("aliasCopyLnurlBtn");
     const copyInvoiceBtn = document.getElementById("aliasCopyInvoiceBtn");
+    const generateInvoiceBtn = document.getElementById("aliasGenerateBolt11Btn");
+    const bolt11WalletBtn = document.getElementById("aliasBolt11WalletBtn");
 
     const bip353String = document.getElementById("aliasBip353String");
     const offerString = document.getElementById("aliasOfferString");
@@ -5956,6 +6301,8 @@ async function payBolt11Invoice() {{
 
     if (deBtn) deBtn.onclick = function () {{ window.setAliasLang("de"); }};
     if (enBtn) enBtn.onclick = function () {{ window.setAliasLang("en"); }};
+    if (generateInvoiceBtn) generateInvoiceBtn.onclick = generateBolt11Fallback;
+    if (bolt11WalletBtn) bolt11WalletBtn.onclick = payBolt11Invoice;
 
     if (copyAddressBtn) copyAddressBtn.onclick = function () {{
       copyWithToast("{bip353_address}", (T[getLang()] || T.en).copiedAddress);
@@ -5967,7 +6314,7 @@ async function payBolt11Invoice() {{
       copyWithToast("{lnurl_fallback}", (T[getLang()] || T.en).copiedLnurl);
     }};
     if (copyInvoiceBtn) copyInvoiceBtn.onclick = function () {{
-      copyWithToast("{bolt11_invoice or ''}", (T[getLang()] || T.en).copiedInvoice);
+      copyWithToast(currentAliasBolt11Invoice, (T[getLang()] || T.en).copiedInvoice);
     }};
 
     if (bip353String) bip353String.onclick = function () {{
@@ -5980,7 +6327,7 @@ async function payBolt11Invoice() {{
       copyWithToast("{lnurl_address}", (T[getLang()] || T.en).copiedAddress);
     }};
     if (bolt11String) bolt11String.onclick = function () {{
-      copyWithToast("{bolt11_invoice or ''}", (T[getLang()] || T.en).copiedInvoice);
+      copyWithToast(currentAliasBolt11Invoice, (T[getLang()] || T.en).copiedInvoice);
     }};
 
     if (bip353Qr) bip353Qr.onclick = function () {{
@@ -5993,7 +6340,7 @@ async function payBolt11Invoice() {{
       copyWithToast("{lnurl_fallback}", (T[getLang()] || T.en).copiedLnurl);
     }};
     if (bolt11Qr) bolt11Qr.onclick = function () {{
-      copyWithToast("{bolt11_invoice or ''}", (T[getLang()] || T.en).copiedInvoice);
+      copyWithToast(currentAliasBolt11Invoice, (T[getLang()] || T.en).copiedInvoice);
     }};
 
     applyAliasLang();
@@ -6144,7 +6491,6 @@ def _hex_to_bytes(value: str) -> bytes:
 def _nostr_server_pubkey_hex() -> str:
     server_privkey = str(
         _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
-        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
         or ""
     ).strip().lower()
     if not server_privkey:
@@ -6204,7 +6550,6 @@ def _notification_signing_privkey_hex() -> str:
 
     server_privkey = str(
         _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
-        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
         or ""
     ).strip().lower()
     if server_privkey:
@@ -6238,7 +6583,6 @@ def _sign_nostr_event(event):
 
     server_privkey = str(
         _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
-        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
         or ""
     ).strip().lower()
     if not server_privkey:
@@ -6576,6 +6920,10 @@ def _invoice_to_tx_history(inv: dict):
         tx_type = "zap"
         method = "zap"
 
+    elif memo.startswith("BOLT11 alias fallback:"):
+        method = "bolt11_alias_fallback"
+        counterparty = memo.split(":", 1)[1].split(" · ", 1)[0].strip()
+
     elif memo.startswith("OCEAN"):
         tx_type = "mining"
         method = "mining"
@@ -6745,6 +7093,7 @@ async def sync_tx_history():
             if item.get("method") == "bolt11" and existing.get("method") in {
                 "lnurl",
                 "lightning_address",
+                "bolt11_alias_fallback",
                 "zap",
                 "nwc",
             }:
@@ -6926,6 +7275,22 @@ async def _tx_history_sync_loop():
 
         await asyncio.sleep(5)
 
+
+def _notification_relays_for_pending_zap(item: dict[str, Any]) -> list[str]:
+    alias = str(item.get("identity_alias") or "").strip().lower()
+    if not alias:
+        identifier = str(item.get("identifier") or "").strip().lower()
+        alias = identifier.split("@", 1)[0]
+
+    if alias:
+        identity = _get_nostr_identity_for_name(alias)
+        identity_relays = _normalize_relays(identity.get("relays") or [])
+        if identity_relays:
+            return identity_relays
+
+    return _normalize_relays(_effective_default_nostr_relays())
+
+
 async def _process_pending_zaps_once():
     pending = _get_pending_zaps()
 
@@ -6937,67 +7302,84 @@ async def _process_pending_zaps_once():
         if not inv.get("settled"):
             continue
 
-        zap_request = item.get("zap_request_event") or {}
+        if not item.get("receipt_published"):
+            zap_request = item.get("zap_request_event") or {}
 
-        tags = [
-            ["p", item["recipient_pubkey_hex"]],
-            ["bolt11", item["payment_request"]],
-            ["description", json.dumps(zap_request, separators=(",", ":"), ensure_ascii=False)],
-        ]
+            tags = [
+                ["p", item["recipient_pubkey_hex"]],
+                ["bolt11", item["payment_request"]],
+                ["description", json.dumps(zap_request, separators=(",", ":"), ensure_ascii=False)],
+            ]
 
-        payer_pubkey = item.get("payer_pubkey_hex")
-        if payer_pubkey:
-            tags.append(["P", payer_pubkey])
+            payer_pubkey = item.get("payer_pubkey_hex")
+            if payer_pubkey:
+                tags.append(["P", payer_pubkey])
 
-        for t in zap_request.get("tags", []):
-            if isinstance(t, list) and len(t) >= 2 and t[0] in {"e", "a"}:
-                tags.append(t)
+            for t in zap_request.get("tags", []):
+                if isinstance(t, list) and len(t) >= 2 and t[0] in {"e", "a"}:
+                    tags.append(t)
 
-        if item.get("amount_msat"):
-            tags.append(["amount", str(item["amount_msat"])])
+            if item.get("amount_msat"):
+                tags.append(["amount", str(item["amount_msat"])])
 
-        preimage = inv.get("r_preimage") or inv.get("payment_preimage") or ""
-        if preimage:
-            tags.append(["preimage", preimage])
+            preimage = inv.get("r_preimage") or inv.get("payment_preimage") or ""
+            if preimage:
+                tags.append(["preimage", preimage])
 
-        event = {
-            "kind": 9735,
-            "created_at": int(time.time()),
-            "tags": tags,
-            "content": "",
-        }
+            event = {
+                "kind": 9735,
+                "created_at": int(time.time()),
+                "tags": tags,
+                "content": "",
+            }
 
-        signed = _sign_nostr_event(event)
-        relays = item.get("relays") or NOSTR_DEFAULT_RELAYS
-
-        result = await _publish_nostr_event(relays, signed)
-        print("⚡ Zap receipt:", result, flush=True)
-
-        try:
-            dm_message = _build_zap_dm_message(item)
-            notify_privkey_hex = _notification_signing_privkey_hex()
-            if not notify_privkey_hex:
-                raise ValueError("No notification signing key configured")
-
-            encrypted_dm = _nip04_encrypt(
-                notify_privkey_hex,
-                item["recipient_pubkey_hex"],
-                dm_message,
+            signed = _sign_nostr_event(event)
+            receipt_relays = _normalize_relays(
+                item.get("relays") or NOSTR_DEFAULT_RELAYS
             )
-            dm_event = _build_dm_event(item["recipient_pubkey_hex"], encrypted_dm)
-            notify_privkey_hex = _notification_signing_privkey_hex()
-            if not notify_privkey_hex:
-                raise ValueError("No notification signing key configured")
-            signed_dm = _sign_nostr_event_with_privkey(dm_event, notify_privkey_hex)
-            dm_result = await _publish_nostr_event(relays, signed_dm)
-            print("✉️ Zap DM:", dm_result, flush=True)
-            item["dm_event"] = signed_dm
-            item["dm_result"] = dm_result
-        except Exception as exc:
-            item["dm_error"] = str(exc)
+            result = await _publish_nostr_event(receipt_relays, signed)
+            item["result"] = result
+            item["receipt_published"] = any(
+                bool(entry.get("ok")) for entry in result if isinstance(entry, dict)
+            )
+            print("⚡ Zap receipt relays:", result, flush=True)
 
-        item["published"] = True
-        item["result"] = result
+        if not item.get("notification_published"):
+            try:
+                dm_message = _build_zap_dm_message(item)
+                notify_privkey_hex = _notification_signing_privkey_hex()
+                if not notify_privkey_hex:
+                    raise ValueError("No notification signing key configured")
+
+                encrypted_dm = _nip04_encrypt(
+                    notify_privkey_hex,
+                    item["recipient_pubkey_hex"],
+                    dm_message,
+                )
+                dm_event = _build_dm_event(item["recipient_pubkey_hex"], encrypted_dm)
+                signed_dm = _sign_nostr_event_with_privkey(dm_event, notify_privkey_hex)
+                notification_relays = _notification_relays_for_pending_zap(item)
+                dm_result = await _publish_nostr_event(notification_relays, signed_dm)
+                item["dm_event"] = signed_dm
+                item["dm_result"] = dm_result
+                item["notification_published"] = any(
+                    bool(entry.get("ok"))
+                    for entry in dm_result
+                    if isinstance(entry, dict)
+                )
+                if item["notification_published"]:
+                    item.pop("dm_error", None)
+                else:
+                    item["dm_error"] = "No saved Identity relay accepted the notification DM"
+                print("✉️ Zap notification DM relays:", dm_result, flush=True)
+            except Exception as exc:
+                item["notification_published"] = False
+                item["dm_error"] = str(exc)
+                print(f"[Nostr notify] DM failed: {exc}", flush=True)
+
+        item["published"] = bool(
+            item.get("receipt_published") and item.get("notification_published")
+        )
         pending[k] = item
     _save_pending_zaps(pending)
 
@@ -7013,9 +7395,17 @@ async def _zap_publisher_loop():
 async def startup_background_tasks():
     init_db()
 
-    await sync_tx_history()
+    try:
+        await sync_tx_history()
+    except Exception as exc:
+        # LND can still be starting after an Umbrel or StartOS reboot. The
+        # background loop retries without preventing the web app from loading.
+        print(f"tx history initial sync waiting for LND: {exc}", flush=True)
 
     app.state.tx_sync_task = asyncio.create_task(_tx_history_sync_loop())
+    app.state.nostr_secret_store_task = asyncio.create_task(
+        _nostr_secret_store_unlock_loop()
+    )
     app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
     app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
     app.state.public_bip353_status = {
@@ -7030,6 +7420,7 @@ async def startup_background_tasks():
     )
 
     print("zap publisher loop started", flush=True)
+    print("[Nostr keys] automatic LND unlock scheduled", flush=True)
     print("[NWC] startup task scheduled", flush=True)
     print("[BIP353 check] startup check scheduled", flush=True)
 
@@ -7421,21 +7812,452 @@ async def api_admin_nostr_status(request: StarletteRequest):
     return _get_nostr_admin_status()
 
 
+@app.post("/api/admin/nostr-secret-store/reset")
+async def api_admin_nostr_secret_store_reset(request: StarletteRequest):
+    if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if _is_pay_ui_enabled():
+        _require_csrf(request)
+    if NOSTR_SECRET_STORE_STATUS.get("state") != "error":
+        raise HTTPException(
+            status_code=409,
+            detail="The encrypted Nostr key store is not in an error state",
+        )
+    try:
+        await _reset_nostr_secret_store_for_current_lnd()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="LND could not initialize a new encrypted Nostr key store",
+        ) from exc
+    return {"ok": True, "status": _get_nostr_admin_status()}
 
-def load_secrets() -> dict:
-    path = Path("/data/config/secrets.json")
-    if not path.exists():
+
+
+class NostrSecretStoreLockedError(RuntimeError):
+    pass
+
+
+class NostrSecretStoreKeyError(RuntimeError):
+    pass
+
+
+def _set_nostr_secret_store_status(
+    state: str,
+    *,
+    encrypted: Optional[bool] = None,
+    detail: str = "",
+) -> None:
+    NOSTR_SECRET_STORE_STATUS["state"] = state
+    if encrypted is not None:
+        NOSTR_SECRET_STORE_STATUS["encrypted"] = encrypted
+    NOSTR_SECRET_STORE_STATUS["detail"] = detail
+    NOSTR_SECRET_STORE_STATUS["updated_at"] = int(time.time())
+
+
+def _nostr_secret_store_public_status() -> dict[str, Any]:
+    status = dict(NOSTR_SECRET_STORE_STATUS)
+    status["locked"] = NOSTR_SECRET_STORE_KEY is None
+    status["server_key_from_environment"] = bool(
+        str(os.getenv("NOSTR_SERVER_PRIVKEY") or "").strip()
+    )
+    status["notify_key_from_environment"] = bool(
+        str(os.getenv("NOSTR_NOTIFY_NSEC") or "").strip()
+    )
+    return status
+
+
+def _load_secret_store_raw() -> dict[str, Any]:
+    if not SECRETS_JSON_PATH.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+        data = json.loads(SECRETS_JSON_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise NostrSecretStoreKeyError("The Nostr secret store cannot be read") from exc
+    if not isinstance(data, dict):
+        raise NostrSecretStoreKeyError("The Nostr secret store has an invalid format")
+    return data
+
+
+def _write_secret_store_raw(data: dict[str, Any]) -> None:
+    path = SECRETS_JSON_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    encoded = json.dumps(data, indent=2, sort_keys=True).encode("utf-8")
+    fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+        path.chmod(0o600)
+    finally:
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _secret_b64encode(value: bytes) -> str:
+    return base64.b64encode(value).decode("ascii")
+
+
+def _secret_b64decode(value: Any, label: str) -> bytes:
+    if not isinstance(value, str) or not value:
+        raise NostrSecretStoreKeyError(f"Missing encrypted {label}")
+    try:
+        return base64.b64decode(value, validate=True)
+    except Exception as exc:
+        raise NostrSecretStoreKeyError(f"Invalid encrypted {label}") from exc
+
+
+def _derive_nostr_secret_store_key(shared_key: bytes, salt: bytes) -> bytes:
+    if len(shared_key) != 32 or len(salt) < 16:
+        raise NostrSecretStoreKeyError("Invalid LND encryption key material")
+    extract = hmac.new(salt, shared_key, hashlib.sha256).digest()
+    return hmac.new(
+        extract,
+        NOSTR_SECRET_STORE_INFO + b"\x01",
+        hashlib.sha256,
+    ).digest()
+
+
+def _encrypt_nostr_secret(value: str, key: bytes, field: str) -> dict[str, Any]:
+    nonce = os.urandom(12)
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+    cipher.update(f"bolt12-pay:{field}:v1".encode("utf-8"))
+    ciphertext, tag = cipher.encrypt_and_digest(value.encode("utf-8"))
+    return {
+        "version": 1,
+        "algorithm": "AES-256-GCM",
+        "nonce": _secret_b64encode(nonce),
+        "ciphertext": _secret_b64encode(ciphertext),
+        "tag": _secret_b64encode(tag),
+    }
+
+
+def _decrypt_nostr_secret(payload: Any, key: bytes, field: str) -> str:
+    if not isinstance(payload, dict):
+        raise NostrSecretStoreKeyError(f"Invalid encrypted {field}")
+    if payload.get("version") != 1 or payload.get("algorithm") != "AES-256-GCM":
+        raise NostrSecretStoreKeyError(f"Unsupported encrypted {field}")
+    nonce = _secret_b64decode(payload.get("nonce"), f"{field} nonce")
+    ciphertext = _secret_b64decode(payload.get("ciphertext"), f"{field} value")
+    tag = _secret_b64decode(payload.get("tag"), f"{field} tag")
+    if len(nonce) != 12 or len(tag) != 16:
+        raise NostrSecretStoreKeyError(f"Invalid encrypted {field}")
+    try:
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        cipher.update(f"bolt12-pay:{field}:v1".encode("utf-8"))
+        plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+        return plaintext.decode("utf-8")
+    except Exception as exc:
+        raise NostrSecretStoreKeyError(
+            "The Nostr secret store belongs to another LND node or is damaged"
+        ) from exc
+
+
+def _logical_secrets_from_raw(
+    raw: dict[str, Any],
+    key: Optional[bytes],
+    *,
+    include_plaintext_for_migration: bool = False,
+) -> dict[str, Any]:
+    logical = {
+        name: value
+        for name, value in raw.items()
+        if name != "_encryption"
+        and not name.endswith("_encrypted")
+        and name not in NOSTR_SECRET_FIELDS
+    }
+    for field in NOSTR_SECRET_FIELDS:
+        encrypted_name = f"{field}_encrypted"
+        if key is not None and encrypted_name in raw:
+            logical[field] = _decrypt_nostr_secret(raw[encrypted_name], key, field)
+        elif include_plaintext_for_migration and raw.get(field) not in (None, ""):
+            logical[field] = raw[field]
+    return logical
+
+
+def _serialize_secret_store(
+    logical: dict[str, Any],
+    raw: dict[str, Any],
+    metadata: dict[str, Any],
+    key: bytes,
+) -> dict[str, Any]:
+    stored = {
+        name: value
+        for name, value in raw.items()
+        if name != "_encryption"
+        and not name.endswith("_encrypted")
+        and name not in NOSTR_SECRET_FIELDS
+    }
+    stored.update(
+        {
+            name: value
+            for name, value in logical.items()
+            if name not in NOSTR_SECRET_FIELDS
+        }
+    )
+    stored["_encryption"] = metadata
+    for field in NOSTR_SECRET_FIELDS:
+        value = logical.get(field)
+        if value not in (None, ""):
+            stored[f"{field}_encrypted"] = _encrypt_nostr_secret(
+                str(value), key, field
+            )
+    return stored
+
+
+def load_secrets() -> dict:
+    try:
+        raw = _load_secret_store_raw()
+        return _logical_secrets_from_raw(raw, NOSTR_SECRET_STORE_KEY)
+    except NostrSecretStoreKeyError:
         return {}
 
 
 def save_secrets(data: dict) -> None:
-    path = Path("/data/config/secrets.json")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    if NOSTR_SECRET_STORE_KEY is None:
+        raise NostrSecretStoreLockedError(
+            "Nostr keys are waiting for LND and cannot be changed yet"
+        )
+    raw = _load_secret_store_raw()
+    metadata = raw.get("_encryption")
+    if not isinstance(metadata, dict):
+        raise NostrSecretStoreLockedError("Nostr key encryption is not initialized")
+    stored = _serialize_secret_store(
+        data,
+        raw,
+        metadata,
+        NOSTR_SECRET_STORE_KEY,
+    )
+    _write_secret_store_raw(stored)
+
+
+async def _request_lnd_nostr_shared_key(ephemeral_pubkey: bytes) -> bytes:
+    if not LND_REST_URL:
+        raise RuntimeError("LND REST is not configured")
+    if len(ephemeral_pubkey) != 33:
+        raise NostrSecretStoreKeyError("Invalid Nostr encryption public key")
+    headers = {
+        "Grpc-Metadata-macaroon": _read_macaroon_hex(LND_MACAROON_PATH),
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(
+        timeout=LND_REST_TIMEOUT,
+        verify=_lnd_rest_verify_setting(),
+    ) as client:
+        response = await client.post(
+            f"{LND_REST_URL}/v2/signer/sharedkey",
+            headers=headers,
+            json={"ephemeral_pubkey": _secret_b64encode(ephemeral_pubkey)},
+        )
+    response.raise_for_status()
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise RuntimeError("LND returned an unreadable shared-key response") from exc
+    shared_key = _secret_b64decode(
+        payload.get("shared_key") if isinstance(payload, dict) else None,
+        "LND shared key",
+    )
+    if len(shared_key) != 32:
+        raise NostrSecretStoreKeyError("LND returned an invalid shared key")
+    return shared_key
+
+
+def _migrate_legacy_nostr_config(logical: dict[str, Any]) -> bool:
+    cfg = load_config()
+    changed = False
+    for field, env_name in (
+        ("nostr_server_privkey", "NOSTR_SERVER_PRIVKEY"),
+        ("nostr_notify_nsec", "NOSTR_NOTIFY_NSEC"),
+    ):
+        legacy_value = cfg.get(field)
+        if (
+            not str(os.getenv(env_name) or "").strip()
+            and logical.get(field) in (None, "")
+            and legacy_value not in (None, "")
+        ):
+            logical[field] = legacy_value
+        if field in cfg:
+            cfg.pop(field, None)
+            changed = True
+    if changed:
+        save_config(cfg)
+    return changed
+
+
+async def _unlock_nostr_secret_store_once() -> None:
+    global NOSTR_SECRET_STORE_KEY
+
+    async with NOSTR_SECRET_STORE_LOCK:
+        if NOSTR_SECRET_STORE_KEY is not None:
+            return
+
+        raw = _load_secret_store_raw()
+        metadata = raw.get("_encryption")
+        is_existing_store = isinstance(metadata, dict)
+
+        if is_existing_store:
+            if (
+                metadata.get("version") != NOSTR_SECRET_STORE_VERSION
+                or metadata.get("provider") != NOSTR_SECRET_STORE_PROVIDER
+            ):
+                raise NostrSecretStoreKeyError(
+                    "The Nostr secret store uses an unsupported encryption format"
+                )
+            ephemeral_pubkey = _secret_b64decode(
+                metadata.get("ephemeral_pubkey"), "LND binding public key"
+            )
+            salt = _secret_b64decode(metadata.get("salt"), "encryption salt")
+        else:
+            ephemeral_key = PrivateKey()
+            ephemeral_pubkey = ephemeral_key.public_key.format(compressed=True)
+            salt = os.urandom(32)
+            metadata = {
+                "version": NOSTR_SECRET_STORE_VERSION,
+                "provider": NOSTR_SECRET_STORE_PROVIDER,
+                "ephemeral_pubkey": _secret_b64encode(ephemeral_pubkey),
+                "salt": _secret_b64encode(salt),
+            }
+
+        if len(ephemeral_pubkey) != 33 or len(salt) < 16:
+            raise NostrSecretStoreKeyError("Invalid Nostr encryption metadata")
+
+        shared_key = await _request_lnd_nostr_shared_key(ephemeral_pubkey)
+        encryption_key = _derive_nostr_secret_store_key(shared_key, salt)
+
+        if is_existing_store:
+            check_value = _decrypt_nostr_secret(
+                metadata.get("check"), encryption_key, "__check__"
+            )
+            if check_value != NOSTR_SECRET_STORE_CHECK:
+                raise NostrSecretStoreKeyError(
+                    "The Nostr secret store belongs to another LND node or is damaged"
+                )
+        else:
+            metadata["check"] = _encrypt_nostr_secret(
+                NOSTR_SECRET_STORE_CHECK,
+                encryption_key,
+                "__check__",
+            )
+
+        logical = _logical_secrets_from_raw(
+            raw,
+            encryption_key,
+            include_plaintext_for_migration=True,
+        )
+        stored = _serialize_secret_store(
+            logical,
+            raw,
+            metadata,
+            encryption_key,
+        )
+        _write_secret_store_raw(stored)
+        legacy_cleanup_error = False
+        try:
+            _migrate_legacy_nostr_config(logical)
+        except Exception:
+            # The encrypted copy is already safe. Retry legacy cleanup on the
+            # next application start without withholding notification access.
+            legacy_cleanup_error = True
+
+        # Re-write once if values were imported from the legacy config file.
+        stored = _serialize_secret_store(
+            logical,
+            stored,
+            metadata,
+            encryption_key,
+        )
+        _write_secret_store_raw(stored)
+        NOSTR_SECRET_STORE_KEY = encryption_key
+        _set_nostr_secret_store_status(
+            "unlocked",
+            encrypted=True,
+            detail=(
+                "Nostr keys are encrypted and unlocked by LND; legacy config cleanup will retry after restart"
+                if legacy_cleanup_error
+                else "Nostr keys are encrypted and unlocked by LND"
+            ),
+        )
+
+
+async def _nostr_secret_store_unlock_loop() -> None:
+    while NOSTR_SECRET_STORE_KEY is None:
+        try:
+            await _unlock_nostr_secret_store_once()
+        except NostrSecretStoreKeyError as exc:
+            _set_nostr_secret_store_status(
+                "error",
+                encrypted=bool(
+                    _load_json_file(SECRETS_JSON_PATH).get("_encryption")
+                ),
+                detail=str(exc),
+            )
+            print(f"[Nostr keys] {exc}", flush=True)
+            await asyncio.sleep(60)
+            continue
+        except Exception:
+            _set_nostr_secret_store_status(
+                "waiting_for_lnd",
+                encrypted=bool(
+                    _load_json_file(SECRETS_JSON_PATH).get("_encryption")
+                ),
+                detail="Waiting for LND to unlock Nostr keys",
+            )
+            await asyncio.sleep(10)
+            continue
+
+        print("[Nostr keys] encrypted secret store unlocked by LND", flush=True)
+        try:
+            await reload_nwc_runtime()
+        except Exception as exc:
+            print(f"[NWC] reload after Nostr key unlock failed: {exc}", flush=True)
+
+
+async def _reset_nostr_secret_store_for_current_lnd() -> None:
+    global NOSTR_SECRET_STORE_KEY
+
+    try:
+        raw = _load_secret_store_raw()
+    except NostrSecretStoreKeyError:
+        raw = {}
+    preserved = {
+        name: value
+        for name, value in raw.items()
+        if name != "_encryption"
+        and not name.endswith("_encrypted")
+        and name not in NOSTR_SECRET_FIELDS
+    }
+    _write_secret_store_raw(preserved)
+    NOSTR_SECRET_STORE_KEY = None
+    _set_nostr_secret_store_status(
+        "starting",
+        encrypted=False,
+        detail="Creating a new encrypted Nostr key store for this LND node",
+    )
+    await _unlock_nostr_secret_store_once()
+    await reload_nwc_runtime()
+
+
+def _initialize_nostr_notification_keys(nsec: str) -> bool:
+    secrets_data = load_secrets()
+    existing_server_privkey = str(
+        _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
+        or ""
+    ).strip().lower()
+
+    server_signer_created = False
+    if not existing_server_privkey:
+        secrets_data["nostr_server_privkey"] = _generate_nostr_private_key_hex()
+        server_signer_created = True
+
+    secrets_data["nostr_notify_nsec"] = nsec
+    save_secrets(secrets_data)
+    return server_signer_created
 
 
 
@@ -7443,6 +8265,9 @@ def save_secrets(data: dict) -> None:
 async def api_admin_nostr_notify_key(request: StarletteRequest):
     if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
+    if _is_pay_ui_enabled():
+        _require_csrf(request)
+
     data = await request.json()
     nsec = str(data.get("notify_nsec") or "").strip()
 
@@ -7454,21 +8279,46 @@ async def api_admin_nostr_notify_key(request: StarletteRequest):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid nsec")
 
-    secrets = load_secrets()
-    secrets["nostr_notify_nsec"] = nsec
-    save_secrets(secrets)
-    return {"ok": True, "status": _get_nostr_admin_status()}
+    if NOSTR_SECRET_STORE_KEY is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Waiting for LND to unlock encrypted Nostr keys",
+        )
+
+    server_signer_created = _initialize_nostr_notification_keys(nsec)
+    return {
+        "ok": True,
+        "server_signer_created": server_signer_created,
+        "status": _get_nostr_admin_status(),
+    }
 
 
 @app.post("/api/admin/nostr-server-key/generate")
 async def api_admin_nostr_server_key_generate(request: StarletteRequest):
     if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
+    if _is_pay_ui_enabled():
+        _require_csrf(request)
+
+    if str(os.getenv("NOSTR_SERVER_PRIVKEY") or "").strip():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The app signer is managed by NOSTR_SERVER_PRIVKEY and cannot "
+                "be regenerated in the UI"
+            ),
+        )
+
+    if NOSTR_SECRET_STORE_KEY is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Waiting for LND to unlock encrypted Nostr keys",
+        )
 
     privkey_hex = _generate_nostr_private_key_hex()
-    cfg = load_config()
-    cfg["nostr_server_privkey"] = privkey_hex
-    save_config(cfg)
+    secrets_data = load_secrets()
+    secrets_data["nostr_server_privkey"] = privkey_hex
+    save_secrets(secrets_data)
 
     return {"ok": True, "status": _get_nostr_admin_status()}
 

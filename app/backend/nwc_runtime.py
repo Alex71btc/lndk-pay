@@ -82,11 +82,10 @@ def _find_matching_connection(event_pubkey: str, wallet_service_pubkey: str) -> 
 
 
 def _get_server_privkey() -> str:
-    from .app import _get_secret, _get_setting
+    from .app import _get_secret
 
     return (
         _get_secret("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
-        or _get_setting("NOSTR_SERVER_PRIVKEY", "nostr_server_privkey", default="")
         or ""
     ).strip().lower()
 

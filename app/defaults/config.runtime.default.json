@@ -14,8 +14,6 @@
   "aliases": {},
   "identity_map": {},
   "pending_zaps": {},
-  "nostr_server_privkey": "",
-  "nostr_notify_nsec": "",
   "nostr": {
     "default_relays": [
       "wss://relay.primal.net",
