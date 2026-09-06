@@ -71,9 +71,43 @@ LND v0.21 and newer already include Onion Messaging. No manual LND configuration
 
 When Cloudflare automation asks for the **Zone Domain**, enter the root domain, for example `yourdomain.com` — not `pay.yourdomain.com`.
 
-## Trust UmbrelOS 2.0 HTTPS
+## Cloudflare Tunnel on UmbrelOS 2.0
 
-UmbrelOS 2.0 uses a private **Umbrel Local HTTPS CA** for local addresses. Export that CA from Umbrel and install the CA certificate on every computer that should open BOLT12 Pay. Install the CA certificate, never a private key.
+Use Umbrel's HTTPS origin and keep certificate verification enabled. The Umbrel CA certificate only needs to be available to the **Cloudflare Tunnel app** for this setup. You do not need to install it on every device that opens your public domain or an Alias page; visitors receive the normal public Cloudflare certificate.
+
+Before configuring the public hostname:
+
+1. Download the **Umbrel Local HTTPS CA** certificate in Umbrel: **Settings → Advanced settings → Network → How to use HTTPS → Advanced certificate settings → Download certificate**.
+2. Open the **Files** app in Umbrel.
+3. Navigate to **Apps → cloudflared → data**.
+4. Select **Upload** and place the certificate there with the exact filename `umbrel-local-ca.crt`. Confirm that it appears next to the existing `token` file.
+5. Restart the Cloudflare Tunnel app. Inside its connector container, the certificate is now available as `/data/umbrel-local-ca.crt`.
+6. Configure the public hostname with the settings below.
+
+![Download the Umbrel Local HTTPS CA certificate](docs/images/umbrel-download-local-ca.png)
+
+![Umbrel Files path for the Cloudflare Tunnel CA certificate](docs/images/umbrel-cloudflare-data.png)
+
+| Cloudflare setting | Value |
+| --- | --- |
+| Service | `https://umbrel.local:8367` |
+| Origin Server Name | `umbrel.local` |
+| Certificate Authority Pool | `/data/umbrel-local-ca.crt` |
+| HTTP2 connection | On |
+| No TLS Verify | **Off** |
+| Match SNI to Host | Off |
+
+![Cloudflare Tunnel settings for UmbrelOS 2.0](docs/images/umbrel-cloudflare-tunnel.png)
+
+In BOLT12 Pay, enter your public Tunnel address — for example `https://pay.yourdomain.com` — as the **LNURL Base URL**. Wallets need this public address to find your Lightning Address and complete payments.
+
+Cloudflare Access is optional. If you use it, protect only the private admin area. Do not put a Cloudflare login in front of the entire public domain, because wallets cannot click through a login page and payments would fail.
+
+### Trust UmbrelOS 2.0 HTTPS for local `/pay`, `/app` and QR scanner access
+
+This is a separate, general UmbrelOS step. It is needed on any device that should directly access local pages such as `/pay` and `/app` (the console) at `https://umbrel.local:8367`. Trusting the local CA removes browser certificate warnings and allows secure camera access for BOLT12 QR scanning. It is not required for visitors opening BOLT12 Pay or an Alias page through your public Cloudflare domain.
+
+UmbrelOS 2.0 uses a private **Umbrel Local HTTPS CA** for local addresses. Download it from **Settings → Advanced settings → Network → How to use HTTPS → Advanced certificate settings → Download certificate**, then install the CA certificate on every device that should open BOLT12 Pay locally. Install the CA certificate, never a private key.
 
 On Debian or Ubuntu, assuming the downloaded certificate is named `umbrel-local-ca.crt`:
 
@@ -87,42 +121,17 @@ Completely restart the browser afterwards. The local addresses are:
 ```text
 Umbrel:       https://umbrel.local
 BOLT12 Pay:   https://umbrel.local:8367
-Admin:        https://umbrel.local:8367/pay
+Pay page:     https://umbrel.local:8367/pay
+Console:      https://umbrel.local:8367/app
 ```
 
-A redirect from `/pay` to an Umbrel login page is normal and does not indicate a certificate error.
+A redirect to an Umbrel login page is normal and does not indicate a certificate error.
 
 - Firefox: if the CA is still not trusted, import it in Firefox certificate settings or enable `security.enterprise_roots.enabled` in `about:config`.
 - Chromium: inspect certificate handling at `chrome://settings/certificates`.
 - Camera access is stored separately for `https://umbrel.local` and `https://umbrel.local:8367`. Allow it for the address including port `8367`.
 
 `about:...` and `chrome://...` belong in the browser address bar, not in a terminal. If the camera works in a private window but not in the normal profile, reset the camera permission and stored site data for `https://umbrel.local:8367`.
-
-## Cloudflare Tunnel on UmbrelOS 2.0
-
-Use Umbrel's HTTPS origin and keep certificate verification enabled. Before configuring the public hostname:
-
-1. Export the **Umbrel Local HTTPS CA** certificate from Umbrel.
-2. Open the Cloudflare Tunnel app's persistent `data` directory in Umbrel Files and copy the certificate there as `umbrel-local-ca.crt`.
-3. Restart the Cloudflare Tunnel app. Inside its connector container, the certificate is now available as `/data/umbrel-local-ca.crt`.
-4. Configure the public hostname with the settings below.
-
-| Cloudflare setting | Value |
-| --- | --- |
-| Service | `https://umbrel.local:8367` |
-| Origin Server Name | `umbrel.local` |
-| Certificate Authority Pool | `/data/umbrel-local-ca.crt` |
-| HTTP2 connection | On |
-| No TLS Verify | **Off** |
-| Match SNI to Host | Off |
-
-![Cloudflare Tunnel settings for UmbrelOS 2.0](docs/images/umbrel-cloudflare-tunnel.png)
-
-Do not use `/etc/cloudflared/umbrel-local-ca.crt`: that location is not mounted into the Umbrel Cloudflare Tunnel connector. If the file cannot be read, cloudflared rejects the ingress configuration and the affected hostname returns an error. **No TLS Verify** can help diagnose this condition, but it should not remain enabled. Copying the CA into `/data` keeps origin certificate verification active.
-
-In BOLT12 Pay, enter your public Tunnel address — for example `https://pay.yourdomain.com` — as the **LNURL Base URL**. Wallets need this public address to find your Lightning Address and complete payments.
-
-Cloudflare Access is optional. If you use it, protect only the private admin area. Do not put a Cloudflare login in front of the entire public domain, because wallets cannot click through a login page and payments would fail.
 
 <details>
 <summary>Legacy LND v0.20.1 beta</summary>
