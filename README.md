@@ -100,18 +100,25 @@ A redirect from `/pay` to an Umbrel login page is normal and does not indicate a
 
 ## Cloudflare Tunnel on UmbrelOS 2.0
 
-Use Umbrel's HTTPS origin and keep certificate verification enabled:
+Use Umbrel's HTTPS origin and keep certificate verification enabled. Before configuring the public hostname:
+
+1. Export the **Umbrel Local HTTPS CA** certificate from Umbrel.
+2. Open the Cloudflare Tunnel app's persistent `data` directory in Umbrel Files and copy the certificate there as `umbrel-local-ca.crt`.
+3. Restart the Cloudflare Tunnel app. Inside its connector container, the certificate is now available as `/data/umbrel-local-ca.crt`.
+4. Configure the public hostname with the settings below.
 
 | Cloudflare setting | Value |
 | --- | --- |
 | Service | `https://umbrel.local:8367` |
 | Origin Server Name | `umbrel.local` |
-| Certificate Authority Pool | `/etc/cloudflared/umbrel-local-ca.crt` |
+| Certificate Authority Pool | `/data/umbrel-local-ca.crt` |
 | HTTP2 connection | On |
 | No TLS Verify | **Off** |
 | Match SNI to Host | Off |
 
 ![Cloudflare Tunnel settings for UmbrelOS 2.0](docs/images/umbrel-cloudflare-tunnel.png)
+
+Do not use `/etc/cloudflared/umbrel-local-ca.crt`: that location is not mounted into the Umbrel Cloudflare Tunnel connector. If the file cannot be read, cloudflared rejects the ingress configuration and the affected hostname returns an error. **No TLS Verify** can help diagnose this condition, but it should not remain enabled. Copying the CA into `/data` keeps origin certificate verification active.
 
 In BOLT12 Pay, enter your public Tunnel address — for example `https://pay.yourdomain.com` — as the **LNURL Base URL**. Wallets need this public address to find your Lightning Address and complete payments.
 
