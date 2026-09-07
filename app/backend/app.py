@@ -12,7 +12,7 @@ import time
 import hmac
 import struct
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import parse_qs, urlparse, quote
 
 import dns.exception
@@ -1340,6 +1340,15 @@ class PayAddressRequest(BaseModel):
     )
     amount_sat: int = Field(ge=1, description="Amount to pay in sats")
     payer_note: Optional[str] = Field(default=None, max_length=300)
+    payment_method: Literal["auto", "bolt12", "lnurl"] = "auto"
+
+
+class ResolvePayAddressRequest(BaseModel):
+    target: str = Field(
+        min_length=3,
+        description="Lightning Address or BIP353 human-readable address",
+    )
+
 
 class PayOfferResponse(BaseModel):
     resolved_offer: str
@@ -4054,6 +4063,126 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
 
     return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 
+
+def _payment_resolution_error(exc: Exception) -> str:
+    if isinstance(exc, HTTPException):
+        return str(exc.detail)
+    return str(exc) or type(exc).__name__
+
+
+async def _resolve_pay_address_methods(target: str) -> dict[str, Any]:
+    """Probe BIP353 and LNURL without creating an invoice or paying either path."""
+    clean_target = target.strip()
+
+    async def probe_bolt12() -> dict[str, Any]:
+        try:
+            offer = await asyncio.to_thread(_resolve_bip353_address, clean_target)
+            return {
+                "available": True,
+                "resolved_offer": offer,
+                "error": "",
+            }
+        except Exception as exc:
+            return {
+                "available": False,
+                "resolved_offer": "",
+                "error": _payment_resolution_error(exc),
+            }
+
+    async def probe_lnurl() -> dict[str, Any]:
+        try:
+            lnurlp_url = _lightning_address_to_lnurlp_url(clean_target)
+            meta = await _fetch_lnurl_metadata_from_url(lnurlp_url)
+
+            if not isinstance(meta, dict):
+                raise HTTPException(status_code=502, detail="LNURL metadata must be an object")
+            if str(meta.get("status") or "").upper() == "ERROR":
+                raise HTTPException(
+                    status_code=400,
+                    detail=meta.get("reason") or "LNURL returned an error",
+                )
+            if not meta.get("callback"):
+                raise HTTPException(status_code=502, detail="LNURL metadata missing callback")
+
+            meta_info = _extract_lnurl_metadata_info(meta.get("metadata"))
+            return {
+                "available": True,
+                "lnurlp_url": lnurlp_url,
+                "description": meta_info["text_plain"] or meta.get("description", ""),
+                "image_data_url": meta_info["image_data_url"],
+                "min_sat": int(meta.get("minSendable") or 0) // 1000,
+                "max_sat": int(meta.get("maxSendable") or 0) // 1000,
+                "comment_allowed": int(meta.get("commentAllowed") or 0),
+                "error": "",
+            }
+        except Exception as exc:
+            return {
+                "available": False,
+                "lnurlp_url": "",
+                "description": "",
+                "image_data_url": "",
+                "min_sat": 0,
+                "max_sat": 0,
+                "comment_allowed": 0,
+                "error": _payment_resolution_error(exc),
+            }
+
+    bolt12, lnurl = await asyncio.gather(probe_bolt12(), probe_lnurl())
+    available_methods = [
+        method
+        for method, result in (("bolt12", bolt12), ("lnurl", lnurl))
+        if result["available"]
+    ]
+
+    return {
+        "target": clean_target,
+        "available_methods": available_methods,
+        "bolt12": bolt12,
+        "lnurl": lnurl,
+    }
+
+
+@app.post("/api/resolve-pay-address")
+async def resolve_pay_address(
+    payload: ResolvePayAddressRequest,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    return await _resolve_pay_address_methods(payload.target)
+
+
+async def _pay_address_via_lnurl(payload: PayAddressRequest) -> PayOfferResponse:
+    target = payload.target.strip()
+    lnurl_result = await _resolve_lnurl_invoice(
+        target=target,
+        amount_sat=payload.amount_sat,
+        payer_note=payload.payer_note,
+    )
+
+    pay_result = await _pay_bolt11_invoice(
+        payment_request=lnurl_result["payment_request"],
+        method="lightning_address",
+        counterparty=target,
+        memo=payload.payer_note or "",
+    )
+    raw_output = json.dumps(
+        {
+            "mode": "lnurl",
+            "target": target,
+            "payment_request": lnurl_result["payment_request"],
+            "lnurlp_url": lnurl_result["lnurlp_url"],
+            "payment_result": pay_result,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return PayOfferResponse(
+        resolved_offer=target,
+        raw_output=raw_output,
+    )
+
+
 @app.post("/api/pay-address", response_model=PayOfferResponse)
 async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> PayOfferResponse:
     require_pay_auth(request)
@@ -4061,6 +4190,9 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
     target = payload.target.strip()
     if not target:
         raise HTTPException(status_code=400, detail="target required")
+
+    if payload.payment_method == "lnurl":
+        return await _pay_address_via_lnurl(payload)
 
     try:
         normalized_offer = _normalize_offer_or_hrn(target)
@@ -4105,41 +4237,18 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
         return PayOfferResponse(resolved_offer=normalized_offer, raw_output=raw_output)
 
     except HTTPException as exc:
+        if payload.payment_method == "bolt12":
+            raise
+
         # A Lightning Address is indistinguishable from a BIP353 address here, so
         # fall through to LNURL whenever the offer lookup found nothing to pay --
         # whether the record was absent (404) or the lookup never completed
         # (502/504). Anything else is the caller's error and still propagates.
         if exc.status_code not in BIP353_LNURL_FALLBACK_STATUSES:
             raise
+        return await _pay_address_via_lnurl(payload)
 
-        lnurl_result = await _resolve_lnurl_invoice(
-            target=target,
-            amount_sat=payload.amount_sat,
-            payer_note=payload.payer_note,
-        )
 
-        pay_result = await _pay_bolt11_invoice(
-            payment_request=lnurl_result["payment_request"],
-            method="lightning_address",
-            counterparty=target,
-            memo=payload.payer_note or "",
-        )
-        raw_output = json.dumps(
-            {
-                "mode": "lnurl",
-                "target": target,
-                "payment_request": lnurl_result["payment_request"],
-                "lnurlp_url": lnurl_result["lnurlp_url"],
-                "payment_result": pay_result,
-            },
-            indent=2,
-            ensure_ascii=False,
-        )
-
-        return PayOfferResponse(
-            resolved_offer=target,
-            raw_output=raw_output,
-        )
 @app.post("/api/pay-bolt11", response_model=PayOfferResponse)
 async def pay_bolt11(payload: PayBolt11Request, request: StarletteRequest) -> PayOfferResponse:
     require_pay_auth(request)
@@ -5206,17 +5315,30 @@ def _pay_login_html() -> str:
   <link rel="icon" type="image/png" href="/assets/icon.png" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <style>
+    html {{
+      min-height: 100%;
+      background: #0b1220;
+    }}
+    *, *::before, *::after {{
+      box-sizing: border-box;
+    }}
     body {{
       margin: 0;
       min-height: 100vh;
+      min-height: 100dvh;
+      width: 100%;
       display: grid;
       place-items: center;
+      place-items: safe center;
       background: #0b1220;
       color: #eef2ff;
       font-family: Inter, system-ui, sans-serif;
+      padding: 16px;
+      overflow-x: hidden;
     }}
     .card {{
-      width: min(420px, calc(100vw - 32px));
+      width: min(420px, 100%);
+      max-width: 100%;
       background: #111827;
       border: 1px solid #26324a;
       border-radius: 18px;
@@ -5246,6 +5368,11 @@ def _pay_login_html() -> str:
     }}
     .muted {{ opacity: .8; font-size: .95rem; margin-bottom: 16px; }}
     .error {{ color: #fca5a5; min-height: 24px; margin-top: 12px; white-space: pre-wrap; }}
+    @media (max-height: 520px) {{
+      body {{
+        align-items: start;
+      }}
+    }}
   </style>
 </head>
 <body>

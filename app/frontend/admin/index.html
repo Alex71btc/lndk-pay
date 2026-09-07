@@ -294,6 +294,33 @@
         flex: 1;
       }
 
+      .payPreviewBolt12Availability {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+
+      .payPreviewBolt12Badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 9px;
+        border: 1px solid rgba(247, 147, 26, 0.5);
+        border-radius: 999px;
+        background: rgba(247, 147, 26, 0.14);
+        color: #ffd9a3;
+        font-size: 0.78rem;
+        font-weight: 800;
+        line-height: 1.3;
+      }
+
+      .payPreviewBolt12Hint {
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.35;
+      }
+
       #contactPickerBtn {
           width: 52px;
           height: 52px;
@@ -653,9 +680,13 @@
       .scannerModal {
         position: fixed;
         inset: 0;
+        width: 100%;
+        height: 100vh;
+        height: 100dvh;
         background: rgba(3, 8, 20, 0.88);
         display: none;
         align-items: center;
+        align-items: safe center;
         justify-content: center;
         padding: 18px;
         z-index: 1000;
@@ -681,6 +712,34 @@
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-y;
+      }
+
+      .paymentMethodChoices {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .paymentMethodChoice {
+        width: 100%;
+        min-height: 104px;
+        padding: 16px;
+        text-align: left;
+      }
+
+      .paymentMethodChoiceTitle {
+        display: block;
+        font-size: 1rem;
+        margin-bottom: 7px;
+      }
+
+      .paymentMethodChoiceHint {
+        display: block;
+        font-size: 0.86rem;
+        font-weight: 500;
+        line-height: 1.4;
+        opacity: 0.82;
       }
 
       .scannerViewport {
@@ -843,6 +902,17 @@
       }
 
       @media (max-width: 560px) {
+        .scannerModal {
+          align-items: flex-start;
+          padding: 10px;
+        }
+
+        .scannerCard {
+          max-height: calc(100vh - 20px);
+          max-height: calc(100dvh - 20px);
+          margin: 0 auto;
+        }
+
         body {
           padding: 10px;
         }
@@ -910,6 +980,10 @@
         #contactsModal #contactsList {
           max-height: none !important;
           overflow: visible !important;
+        }
+
+        .paymentMethodChoices {
+          grid-template-columns: 1fr;
         }
 
         main.card .titleBlock {
@@ -1140,6 +1214,19 @@
                     word-break: break-word;
                   "
                 ></div>
+                <div
+                  id="payPreviewBolt12Availability"
+                  class="payPreviewBolt12Availability"
+                >
+                  <span
+                    class="payPreviewBolt12Badge"
+                    data-i18n="pay.preview.bolt12_available"
+                  >BOLT12 verfügbar</span>
+                  <span
+                    class="payPreviewBolt12Hint"
+                    data-i18n="pay.preview.bolt12_selectable"
+                  >Beim Bezahlen als Zahlungsweg auswählbar.</span>
+                </div>
                 <div
                   id="payPreviewMeta"
                   class="hint"
@@ -2466,6 +2553,78 @@
 
     <div
       class="scannerModal"
+      id="paymentMethodModal"
+      aria-hidden="true"
+      style="z-index: 4000"
+    >
+      <div
+        class="scannerCard"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="paymentMethodTitle"
+        aria-describedby="paymentMethodHint"
+        style="width: min(560px, 100%)"
+      >
+        <h2 id="paymentMethodTitle" data-i18n="pay.method.title">
+          Zahlungsweg auswählen
+        </h2>
+        <p
+          id="paymentMethodHint"
+          class="scannerHint"
+          data-i18n="pay.method.hint"
+        >
+          Diese Adresse unterstützt BOLT12 und LNURL. Wähle den Zahlungsweg.
+        </p>
+        <div
+          id="paymentMethodAddress"
+          class="mono"
+          style="margin-top:14px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--panel2);word-break:break-all"
+        ></div>
+        <div class="paymentMethodChoices">
+          <button
+            id="chooseBolt12MethodBtn"
+            class="paymentMethodChoice"
+            type="button"
+          >
+            <span
+              class="paymentMethodChoiceTitle"
+              data-i18n="pay.method.bolt12"
+            >BOLT12</span>
+            <span
+              class="paymentMethodChoiceHint"
+              data-i18n="pay.method.bolt12_hint"
+            >BIP353-Offer direkt bezahlen</span>
+          </button>
+          <button
+            id="chooseLnurlMethodBtn"
+            class="paymentMethodChoice secondary"
+            type="button"
+          >
+            <span
+              class="paymentMethodChoiceTitle"
+              data-i18n="pay.method.lnurl"
+            >LNURL</span>
+            <span
+              class="paymentMethodChoiceHint"
+              data-i18n="pay.method.lnurl_hint"
+            >BOLT11-Invoice über LNURL anfordern</span>
+          </button>
+        </div>
+        <div class="row" style="margin-top: 14px">
+          <button
+            id="cancelPaymentMethodBtn"
+            class="secondary"
+            type="button"
+            data-i18n="contacts.cancel"
+          >
+            Abbrechen
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="scannerModal"
       id="publicBip353RepairModal"
       aria-hidden="true"
       style="z-index: 4000"
@@ -2645,6 +2804,9 @@
       const payPreviewImage = document.getElementById("payPreviewImage");
       const payPreviewTitle = document.getElementById("payPreviewTitle");
       const payPreviewDesc = document.getElementById("payPreviewDesc");
+      const payPreviewBolt12Availability = document.getElementById(
+        "payPreviewBolt12Availability",
+      );
       const payPreviewMeta = document.getElementById("payPreviewMeta");
 
       const decodeInput = document.getElementById("decodeInput");
@@ -2846,6 +3008,21 @@
       const cfResultOutput = document.getElementById("cfResultOutput");
 
       const scannerModal = document.getElementById("scannerModal");
+      const paymentMethodModal = document.getElementById(
+        "paymentMethodModal",
+      );
+      const paymentMethodAddress = document.getElementById(
+        "paymentMethodAddress",
+      );
+      const chooseBolt12MethodBtn = document.getElementById(
+        "chooseBolt12MethodBtn",
+      );
+      const chooseLnurlMethodBtn = document.getElementById(
+        "chooseLnurlMethodBtn",
+      );
+      const cancelPaymentMethodBtn = document.getElementById(
+        "cancelPaymentMethodBtn",
+      );
       const scannerVideo = document.getElementById("scannerVideo");
       const scannerReader = document.getElementById("scannerReader");
       const scannerViewport = document.getElementById("scannerViewport");
@@ -6401,6 +6578,7 @@
       }
 
       let payPreviewTimer = null;
+      let payPreviewRequestId = 0;
 
       let loadedContacts = [];
       let contactSearchQuery = "";
@@ -6425,6 +6603,9 @@
         }
         if (payPreviewTitle) payPreviewTitle.textContent = "";
         if (payPreviewDesc) payPreviewDesc.textContent = "";
+        if (payPreviewBolt12Availability) {
+          payPreviewBolt12Availability.style.display = "none";
+        }
         if (payPreviewMeta) payPreviewMeta.textContent = "";
       }
 
@@ -6437,6 +6618,12 @@
         const desc = data?.description || "";
         payPreviewTitle.textContent = title;
         payPreviewDesc.textContent = desc;
+
+        if (payPreviewBolt12Availability) {
+          payPreviewBolt12Availability.style.display = data?.show_bolt12_badge
+            ? "flex"
+            : "none";
+        }
 
         const metaParts = [];
         if (data?.kind) {
@@ -6471,6 +6658,11 @@
       async function loadPayPreview() {
         const rawInput = payOfferInput.value.trim();
         const kind = detectPaymentType(rawInput);
+        const requestId = ++payPreviewRequestId;
+
+        const inputIsCurrent = () =>
+          requestId === payPreviewRequestId &&
+          payOfferInput.value.trim() === rawInput;
 
         resetPayUiState();
 
@@ -6503,12 +6695,49 @@
             });
 
             const data = await readJsonOrThrow(response);
-            renderPayPreview(data);
+            if (inputIsCurrent()) renderPayPreview(data);
           } catch {}
           return;
         }
 
-        if (kind === "ambiguous_address" || kind === "lnurl") {
+        if (kind === "ambiguous_address") {
+          try {
+            const response = await fetch("/api/resolve-pay-address", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ target: rawInput }),
+            });
+
+            const resolution = await readJsonOrThrow(response);
+            if (!inputIsCurrent()) return;
+            const bolt12Available = Boolean(resolution?.bolt12?.available);
+            const lnurl = resolution?.lnurl || {};
+
+            if (lnurl.available) {
+              renderPayPreview({
+                kind: "lightning_address",
+                title: "Lightning Address",
+                description: lnurl.description || "",
+                image_data_url: lnurl.image_data_url || "",
+                comment_allowed: lnurl.comment_allowed || 0,
+                min_sat: lnurl.min_sat || 0,
+                max_sat: lnurl.max_sat || 0,
+                show_bolt12_badge: bolt12Available,
+              });
+            } else if (bolt12Available) {
+              renderPayPreview({
+                kind: "bolt12",
+                title: window.__t("pay.preview.bolt12_address"),
+                description: "",
+                image_data_url: "",
+                show_bolt12_badge: false,
+              });
+            }
+          } catch {}
+          return;
+        }
+
+        if (kind === "lnurl") {
           try {
             const response = await fetch("/api/preview-pay-target", {
               method: "POST",
@@ -6517,7 +6746,7 @@
             });
 
             const data = await readJsonOrThrow(response);
-            renderPayPreview(data);
+            if (inputIsCurrent()) renderPayPreview(data);
           } catch {}
           return;
         }
@@ -7855,6 +8084,92 @@
         .getElementById("payOfferBtn")
         .addEventListener("click", startSmartPayment);
 
+      let paymentMethodChoiceResolve = null;
+      let paymentMethodPreviousFocus = null;
+
+      function closePaymentMethodModal(method = "") {
+        if (!paymentMethodModal) return;
+
+        paymentMethodModal.classList.remove("show");
+        paymentMethodModal.setAttribute("aria-hidden", "true");
+
+        const resolve = paymentMethodChoiceResolve;
+        paymentMethodChoiceResolve = null;
+        resolve?.(method);
+
+        paymentMethodPreviousFocus?.focus?.();
+        paymentMethodPreviousFocus = null;
+      }
+
+      function choosePaymentMethod(target) {
+        if (!paymentMethodModal) return Promise.resolve("bolt12");
+
+        if (paymentMethodChoiceResolve) {
+          closePaymentMethodModal("");
+        }
+
+        paymentMethodPreviousFocus = document.activeElement;
+        paymentMethodAddress.textContent = target;
+        paymentMethodModal.classList.add("show");
+        paymentMethodModal.setAttribute("aria-hidden", "false");
+
+        requestAnimationFrame(() => chooseBolt12MethodBtn?.focus());
+
+        return new Promise((resolve) => {
+          paymentMethodChoiceResolve = resolve;
+        });
+      }
+
+      async function resolveAddressPaymentMethod(target) {
+        const response = await fetch("/api/resolve-pay-address", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target }),
+        });
+        const data = await readJsonOrThrow(response);
+        const availableMethods = Array.isArray(data?.available_methods)
+          ? data.available_methods
+          : [];
+
+        if (
+          availableMethods.includes("bolt12") &&
+          availableMethods.includes("lnurl")
+        ) {
+          setStatus(window.__t("pay.method.choose"), "warn");
+          return choosePaymentMethod(target);
+        }
+        if (availableMethods.includes("bolt12")) return "bolt12";
+        if (availableMethods.includes("lnurl")) return "lnurl";
+
+        const errors = [data?.bolt12?.error, data?.lnurl?.error].filter(Boolean);
+        throw new Error(
+          errors.join(" | ") || window.__t("pay.method.unavailable"),
+        );
+      }
+
+      chooseBolt12MethodBtn?.addEventListener("click", () => {
+        closePaymentMethodModal("bolt12");
+      });
+      chooseLnurlMethodBtn?.addEventListener("click", () => {
+        closePaymentMethodModal("lnurl");
+      });
+      cancelPaymentMethodBtn?.addEventListener("click", () => {
+        closePaymentMethodModal("");
+      });
+      paymentMethodModal?.addEventListener("click", (event) => {
+        if (event.target === paymentMethodModal) {
+          closePaymentMethodModal("");
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (
+          event.key === "Escape" &&
+          paymentMethodModal?.classList.contains("show")
+        ) {
+          closePaymentMethodModal("");
+        }
+      });
+
       async function payAddressFlow() {
         const target = normalizePaymentInput(payOfferInput.value);
         const amountSat = payAmountInput.value.trim();
@@ -7880,6 +8195,13 @@
         );
 
         try {
+          const paymentMethod = await resolveAddressPaymentMethod(target);
+          if (!paymentMethod) {
+            setStatus(window.__t("pay.method.cancelled"), "warn");
+            return;
+          }
+
+          btn.textContent = window.__t("pay.method.paying");
           const response = await fetch("/api/pay-address", {
             method: "POST",
             headers: {
@@ -7890,6 +8212,7 @@
               target,
               amount_sat: Number(amountSat),
               payer_note: payerNote || null,
+              payment_method: paymentMethod,
             }),
           });
           const data = await readJsonOrThrow(response);
@@ -8367,6 +8690,24 @@
             "label.desc": "Beschreibung / Label",
             "label.target": "Offer, Invoice oder Lightning Address",
             "label.payer_note": "Payer Note (optional)",
+            "pay.method.title": "Zahlungsweg auswählen",
+            "pay.method.hint":
+              "Diese Adresse unterstützt BOLT12 und LNURL. Wähle den Zahlungsweg.",
+            "pay.method.bolt12": "BOLT12",
+            "pay.method.bolt12_hint": "BIP353-Offer direkt bezahlen",
+            "pay.method.lnurl": "LNURL",
+            "pay.method.lnurl_hint":
+              "BOLT11-Invoice über LNURL anfordern",
+            "pay.method.choose":
+              "BOLT12 und LNURL sind verfügbar. Bitte Zahlungsweg auswählen.",
+            "pay.method.unavailable":
+              "Die Adresse konnte weder als BOLT12 noch als LNURL aufgelöst werden.",
+            "pay.method.cancelled": "Zahlung abgebrochen.",
+            "pay.method.paying": "Bezahle...",
+            "pay.preview.bolt12_available": "BOLT12 verfügbar",
+            "pay.preview.bolt12_selectable":
+              "Beim Bezahlen als Zahlungsweg auswählbar.",
+            "pay.preview.bolt12_address": "BOLT12-Adresse",
             "btn.use_current_offer": "Aktuelles Offer übernehmen",
             "hint.top":
               "Hauptfokus: BOLT12 Offer Pay. Automatische Erkennung für BOLT12, BOLT11 und LNURL / Lightning Address.",
@@ -8837,6 +9178,24 @@
             "label.desc": "Description / Label",
             "label.target": "Offer, invoice or Lightning Address",
             "label.payer_note": "Payer Note (optional)",
+            "pay.method.title": "Choose payment method",
+            "pay.method.hint":
+              "This address supports both BOLT12 and LNURL. Choose the payment method.",
+            "pay.method.bolt12": "BOLT12",
+            "pay.method.bolt12_hint": "Pay the BIP353 offer directly",
+            "pay.method.lnurl": "LNURL",
+            "pay.method.lnurl_hint":
+              "Request a BOLT11 invoice through LNURL",
+            "pay.method.choose":
+              "BOLT12 and LNURL are available. Choose a payment method.",
+            "pay.method.unavailable":
+              "The address could not be resolved through BOLT12 or LNURL.",
+            "pay.method.cancelled": "Payment cancelled.",
+            "pay.method.paying": "Paying...",
+            "pay.preview.bolt12_available": "BOLT12 available",
+            "pay.preview.bolt12_selectable":
+              "Selectable as the payment method when paying.",
+            "pay.preview.bolt12_address": "BOLT12 address",
             "btn.use_current_offer": "Use current offer",
             "hint.top":
               "Main focus: BOLT12 offer payments. Automatic detection for BOLT12, BOLT11 and LNURL / Lightning Address.",

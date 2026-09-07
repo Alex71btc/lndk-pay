@@ -7,18 +7,30 @@
   <meta http-equiv="Cache-Control" content="no-store" />
   <link rel="icon" type="image/png" href="/assets/icon.png" />
   <style>
+    html {
+      min-height: 100%;
+      background: #0b1220;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       min-height: 100vh;
+      min-height: 100dvh;
+      width: 100%;
       display: grid;
       place-items: center;
+      place-items: safe center;
       background: #0b1220;
       color: #eef2ff;
       font-family: system-ui, sans-serif;
       padding: 16px;
+      overflow-x: hidden;
     }
     .card {
-      width: min(420px, calc(100vw - 32px));
+      width: min(420px, 100%);
+      max-width: 100%;
       background: #111827;
       border: 1px solid #26324a;
       border-radius: 18px;
@@ -54,6 +66,11 @@
     }
     .muted { opacity: .82; font-size: .95rem; margin-bottom: 16px; }
     .error { color: #fca5a5; min-height: 24px; margin-top: 12px; white-space: pre-wrap; }
+    @media (max-height: 520px) {
+      body {
+        align-items: start;
+      }
+    }
   </style>
 </head>
 <body>

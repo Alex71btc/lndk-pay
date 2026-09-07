@@ -218,6 +218,11 @@ Many setup issues are caused by confusion between:
 
 BOLT12 Pay can serve both BIP353 and LNURL from the same domain.
 
+When an address entered in the Pay console resolves through both BIP353/BOLT12
+and LNURL, its preview marks BOLT12 as available and the console asks which
+payment method to use before starting the payment. Addresses with only one
+available method continue automatically.
+
 For most users this is the recommended configuration:
 
 ```text
