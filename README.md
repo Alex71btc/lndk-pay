@@ -96,8 +96,15 @@ Before configuring the public hostname:
 | HTTP2 connection | On |
 | No TLS Verify | **Off** |
 | Match SNI to Host | Off |
+| HTTP Host Header | `umbrel.local` |
 
 ![Cloudflare Tunnel settings for UmbrelOS 2.0](docs/images/umbrel-cloudflare-tunnel.png)
+
+Under **Origin request and connection settings → HTTP Settings**, set **HTTP Host Header** to `umbrel.local` as well. This is a separate setting from **Origin Server Name** under TLS. It makes Cloudflare send requests to Umbrel with the host name Umbrel expects; without it, the public domain may fail to open the landing page, `/pay`, and `/app` (including the setup screen at `/app?setup=1`).
+
+![Cloudflare Tunnel HTTP Host Header set to umbrel.local](docs/images/umbrel-cloudflare-http-host-header.png)
+
+If your device can reach Umbrel through Tailscale, you can open the public domain and follow Umbrel's login redirect when prompted. After signing in, you can use the full BOLT12 Pay app through the domain without entering Umbrel's LAN IP manually.
 
 In BOLT12 Pay, enter your public Tunnel address — for example `https://pay.yourdomain.com` — as the **LNURL Base URL**. Wallets need this public address to find your Lightning Address and complete payments.
 
