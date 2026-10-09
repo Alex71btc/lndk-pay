@@ -606,6 +606,16 @@
         font-size: 13px;
       }
 
+      .txTimestamp {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+      }
+
       .txMemo {
         margin-top: 4px;
         font-size: 13px;
@@ -5623,6 +5633,68 @@
       let txHistoryHasMore = true;
       let txHistorySearchQuery = "";
 
+      function parseTxTimestamp(value) {
+        if (value === null || value === undefined) return null;
+
+        const rawValue = String(value).trim();
+        if (!rawValue) return null;
+
+        let date;
+
+        if (/^\d+(?:\.\d+)?$/.test(rawValue)) {
+          const numericValue = Number(rawValue);
+          if (!Number.isFinite(numericValue) || numericValue <= 0) {
+            return null;
+          }
+
+          let milliseconds = numericValue * 1000;
+          if (numericValue >= 1e17) {
+            milliseconds = numericValue / 1e6;
+          } else if (numericValue >= 1e14) {
+            milliseconds = numericValue / 1e3;
+          } else if (numericValue >= 1e11) {
+            milliseconds = numericValue;
+          }
+
+          date = new Date(milliseconds);
+        } else {
+          date = new Date(rawValue);
+        }
+
+        return Number.isNaN(date.getTime()) ? null : date;
+      }
+
+      function formatTxTimestamp(item) {
+        const date =
+          parseTxTimestamp(item.created_at) ||
+          parseTxTimestamp(item.settled_at);
+
+        if (!date) {
+          return {
+            text: window.__t("history.timestamp_unavailable"),
+            iso: "",
+          };
+        }
+
+        const language =
+          document.documentElement.lang === "de" ? "de-DE" : "en-US";
+
+        try {
+          return {
+            text: new Intl.DateTimeFormat(language, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(date),
+            iso: date.toISOString(),
+          };
+        } catch {
+          return {
+            text: date.toLocaleString(language),
+            iso: date.toISOString(),
+          };
+        }
+      }
+
       async function fetchTxHistoryPage(offset = 0) {
         console.time("GET /api/tx-history");
 
@@ -5770,6 +5842,10 @@
           const isIncoming = item.direction === "incoming";
           const arrow = isIncoming ? "↓" : "↑";
           const arrowClass = isIncoming ? "txIncoming" : "txOutgoing";
+          const timestamp = formatTxTimestamp(item);
+          const timestampHtml = timestamp.iso
+            ? `<time class="txTimestamp" datetime="${timestamp.iso}">🕒 ${timestamp.text}</time>`
+            : `<span class="txTimestamp">🕒 ${timestamp.text}</span>`;
           const fee = item.fee_sat
             ? ` • ${window.__t("history.fee")} ${item.fee_sat} sat`
             : "";
@@ -5921,6 +5997,8 @@
                 <div class="txMeta">
                     ${methodLabel}${typeLabel}${originLabel} • ${statusLabel}${fee}
                 </div>
+
+                ${timestampHtml}
 
                 ${walletLine}
 
@@ -8940,6 +9018,8 @@
             "history.settled": "Abgeschlossen",
             "history.pending": "Ausstehend",
             "history.failed": "Fehlgeschlagen",
+            "history.timestamp_unavailable":
+              "Datum und Uhrzeit nicht verfügbar",
             "history.load_more": "Ältere laden",
             "history.search_placeholder":
               "Transaktionen, Kontakte, Adressen oder Payment Hash durchsuchen...",
@@ -9423,6 +9503,8 @@
             "history.settled": "Settled",
             "history.pending": "Pending",
             "history.failed": "Failed",
+            "history.timestamp_unavailable":
+              "Date and time unavailable",
             "title.offer_history": "Generated Offers",
             "title.notification_keys": "Zap Notifications",
             "title.nwc_wallet": "NWC / Zap Wallet",
