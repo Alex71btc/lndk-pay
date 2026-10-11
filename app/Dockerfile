@@ -1,4 +1,4 @@
-FROM alex71btc/lndk:v0.3.0-memo@sha256:460fba9927e96cf24d5b96122638afc0b11f433cb8e74d1735fe4570fb005b4e AS lndkstage
+FROM alex71btc/lndk:bolt12-pay-89a06db@sha256:c3f12f3fc58c94e2d6284b107d25e1370b63ed711b5bce0294e146e642610cff AS lndkstage
 
 FROM python:3.12-slim
 
