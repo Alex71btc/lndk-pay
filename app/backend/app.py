@@ -76,7 +76,17 @@ LNDK_GRPC_HOST = os.environ.get("LNDK_GRPC_HOST", "").strip()
 LNDK_GRPC_PORT = os.environ.get("LNDK_GRPC_PORT", "7000").strip()
 LNDK_CERT_PATH = os.environ.get("LNDK_CERT_PATH", str(Path.home() / "lndk-tls-cert.pem"))
 LNDK_MACAROON_PATH = os.environ.get("LNDK_MACAROON_PATH", str(Path.home() / "admin.macaroon"))
-REQUEST_TIMEOUT = float(os.environ.get("LNDK_TIMEOUT_SECONDS", "30"))
+LNDK_INVOICE_TIMEOUT_SECONDS = max(
+    1,
+    int(os.environ.get("LNDK_INVOICE_TIMEOUT_SECONDS", "60")),
+)
+# Keep the process alive slightly longer than LNDK waits for the BOLT12 invoice.
+# This prevents the wrapper from killing lndk-cli before it can return its own
+# useful INVOICE_TIMEOUT error.
+REQUEST_TIMEOUT = max(
+    float(os.environ.get("LNDK_TIMEOUT_SECONDS", "75")),
+    float(LNDK_INVOICE_TIMEOUT_SECONDS + 5),
+)
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 ALLOW_PAY_OFFER = os.environ.get("ALLOW_PAY_OFFER", "false").lower() in {"1", "true", "yes", "on"}
 
@@ -679,8 +689,6 @@ def list_tx_history(
 
         params.extend([pattern] * 6)
 
-    params.extend([safe_limit, safe_offset])
-
     with _db_conn() as conn:
         rows = conn.execute(
             f"""
@@ -688,7 +696,6 @@ def list_tx_history(
             FROM tx_history
             {where_sql}
             ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
             """,
             params,
         ).fetchall()
@@ -703,7 +710,105 @@ def list_tx_history(
 
         items.append(item)
 
-    return items
+    items = _collapse_bolt12_outgoing_history(items)
+
+    return items[safe_offset : safe_offset + safe_limit]
+
+
+BOLT12_OUTGOING_MATCH_WINDOW_SECONDS = 30
+
+
+def _history_timestamp_seconds(value: Any) -> int | None:
+    try:
+        return int(float(str(value or "").strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_synthetic_bolt12_outgoing(item: dict[str, Any]) -> bool:
+    payment_hash = str(item.get("payment_hash") or "")
+    return (
+        item.get("direction") == "outgoing"
+        and item.get("method") == "bolt12"
+        and (
+            payment_hash.startswith("bolt12-outgoing-")
+            or payment_hash.startswith("bip353-outgoing-")
+        )
+    )
+
+
+def _collapse_bolt12_outgoing_history(
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Fold LND's payment row into Bolt12 Pay's semantic BOLT12 row.
+
+    LNDK's PayOffer response confirms success but does not expose the payment
+    hash. Bolt12 Pay therefore records the BOLT12 context with a synthetic ID,
+    while the LND history sync later sees the same payment under its real hash.
+    Pair the closest same-amount records so Lightning Activity renders one
+    BOLT12 payment without hiding unrelated standalone BOLT11 payments.
+    """
+
+    lnd_payments = [
+        item
+        for item in items
+        if item.get("direction") == "outgoing"
+        and item.get("method") == "bolt11"
+        and item.get("type") == "payment"
+        and not _is_synthetic_bolt12_outgoing(item)
+    ]
+    matched_payment_hashes: set[str] = set()
+    collapsed: list[dict[str, Any]] = []
+
+    for original in items:
+        if not _is_synthetic_bolt12_outgoing(original):
+            collapsed.append(original)
+            continue
+
+        bolt12_time = _history_timestamp_seconds(original.get("created_at"))
+        if bolt12_time is None:
+            collapsed.append(original)
+            continue
+
+        candidates = []
+        for payment in lnd_payments:
+            payment_hash = str(payment.get("payment_hash") or "")
+            if not payment_hash or payment_hash in matched_payment_hashes:
+                continue
+            if payment.get("amount_sat") != original.get("amount_sat"):
+                continue
+            if payment.get("status") != original.get("status"):
+                continue
+
+            payment_time = _history_timestamp_seconds(payment.get("created_at"))
+            if payment_time is None:
+                continue
+
+            distance = abs(payment_time - bolt12_time)
+            if distance <= BOLT12_OUTGOING_MATCH_WINDOW_SECONDS:
+                candidates.append((distance, payment_time, payment))
+
+        if not candidates:
+            collapsed.append(original)
+            continue
+
+        _, _, payment = min(candidates, key=lambda candidate: candidate[:2])
+        matched_payment_hashes.add(str(payment.get("payment_hash") or ""))
+
+        merged = dict(original)
+        merged["fee_sat"] = payment.get("fee_sat")
+        merged["settled_at"] = payment.get("settled_at") or merged.get("settled_at")
+        merged_raw = dict(merged.get("raw_json") or {})
+        merged_raw["lnd_payment_hash"] = payment.get("payment_hash")
+        merged_raw["lnd_payment"] = payment.get("raw_json") or {}
+        merged["raw_json"] = merged_raw
+        collapsed.append(merged)
+
+    return [
+        item
+        for item in collapsed
+        if str(item.get("payment_hash") or "") not in matched_payment_hashes
+    ]
 
 def update_tx_history_metadata(
     payment_hash: str,
@@ -4027,6 +4132,27 @@ def decode_offer(payload: DecodeRequest) -> DecodeResponse:
     return DecodeResponse(raw_output=raw_output)
 
 
+def _pay_offer_command(
+    normalized_offer: str,
+    amount_sat: int,
+    payer_note: str | None = None,
+) -> list[str]:
+    args = _base_command() + [
+        "pay-offer",
+        normalized_offer,
+        str(amount_sat * 1000),
+    ]
+
+    if payer_note:
+        args.append(payer_note)
+
+    args.extend([
+        "--response-invoice-timeout",
+        str(LNDK_INVOICE_TIMEOUT_SECONDS),
+    ])
+    return args
+
+
 @app.post("/api/pay-offer", response_model=PayOfferResponse)
 def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferResponse:
     require_pay_auth(request)
@@ -4035,10 +4161,11 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
         raise HTTPException(status_code=403, detail="pay-offer endpoint is disabled")
 
     normalized_offer = _normalize_offer_or_hrn(payload.offer)
-    args = _base_command() + ["pay-offer", normalized_offer, str(payload.amount_sat * 1000)]
-
-    if payload.payer_note:
-        args.append(payload.payer_note)
+    args = _pay_offer_command(
+        normalized_offer,
+        payload.amount_sat,
+        payload.payer_note,
+    )
 
     raw_output = _run_command(args)
 
@@ -4196,10 +4323,11 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
 
     try:
         normalized_offer = _normalize_offer_or_hrn(target)
-        args = _base_command() + ["pay-offer", normalized_offer, str(payload.amount_sat * 1000)]
-
-        if payload.payer_note:
-            args.append(payload.payer_note)
+        args = _pay_offer_command(
+            normalized_offer,
+            payload.amount_sat,
+            payload.payer_note,
+        )
 
         raw_cli_output = _run_command(args)
 
