@@ -1,4 +1,4 @@
-FROM alex71btc/lndk:bolt12-pay-89a06db@sha256:c3f12f3fc58c94e2d6284b107d25e1370b63ed711b5bce0294e146e642610cff AS lndkstage
+FROM alex71btc/lndk:bolt12-pay-89a06db-multiarch@sha256:8c695fb18d593294e6f9a60ed9328bd7f6fc4c0b6ac9fae0dd3466cd3b9b0c97 AS lndkstage
 
 FROM python:3.12-slim
 
