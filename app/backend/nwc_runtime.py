@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import os
+import random
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 import websockets
@@ -12,6 +16,27 @@ from .nwc import load_connections, update_nwc_connection_usage
 
 _nwc_tasks: dict[str, asyncio.Task] = {}
 _nwc_runtime_lock = asyncio.Lock()
+_nwc_request_lock = asyncio.Lock()
+_nwc_requests_in_flight: set[str] = set()
+_nwc_requests_seen: dict[str, float] = {}
+_nwc_requests_seen_loaded = False
+
+NWC_RECONNECT_BASE_SECONDS = 5.0
+NWC_RECONNECT_MAX_SECONDS = 300.0
+NWC_STABLE_CONNECTION_SECONDS = 30.0
+NWC_INITIAL_LOOKBACK_SECONDS = 30
+NWC_REQUEST_DEDUP_TTL_SECONDS = 24 * 60 * 60
+NWC_REQUEST_DEDUP_MAX_ITEMS = 5000
+NWC_REQUEST_DEDUP_PATH = Path(
+    os.getenv(
+        "NWC_REQUEST_DEDUP_PATH",
+        str(
+            Path(os.getenv("APP_DATA_DIR", "/data"))
+            / "config"
+            / "nwc_processed_requests.json"
+        ),
+    )
+)
 
 
 def _log(message: str) -> None:
@@ -49,6 +74,11 @@ def _safe_log_text(value: Any, limit: int = 240) -> str:
 
 def _build_subscription_id(conn: dict[str, Any]) -> str:
     return f"nwc_{conn.get('id', 'unknown')}"
+
+
+def _build_relay_subscription_id(relay: str) -> str:
+    digest = hashlib.sha256(relay.encode("utf-8")).hexdigest()[:12]
+    return f"nwc_relay_{digest}"
 
 
 def _build_info_event() -> dict[str, Any]:
@@ -110,7 +140,10 @@ def _current_budget_period_key(period: str) -> str:
     return ""
 
 
-def _check_and_update_budget(conn: dict[str, Any], amount_sat: int) -> tuple[bool, str | None]:
+def _check_budget(
+    conn: dict[str, Any],
+    amount_sat: int,
+) -> tuple[bool, str | None, tuple[str, int] | None]:
     limits = conn.get("limits") or {}
     period = str(limits.get("budget_period") or "none").strip().lower()
     budget_amount_sat = int(limits.get("budget_amount_sat") or 0)
@@ -121,7 +154,7 @@ def _check_and_update_budget(conn: dict[str, Any], amount_sat: int) -> tuple[boo
     )
 
     if period == "none" or budget_amount_sat <= 0:
-        return True, None
+        return True, None, None
 
     period_key = _current_budget_period_key(period)
     usage = conn.get("usage") or {}
@@ -135,17 +168,29 @@ def _check_and_update_budget(conn: dict[str, Any], amount_sat: int) -> tuple[boo
     new_total = spent_sat + int(amount_sat)
 
     if new_total > budget_amount_sat:
-        return False, f"Budget exceeded: {new_total} sats > {budget_amount_sat} sats per {period}"
+        return (
+            False,
+            f"Budget exceeded: {new_total} sats > {budget_amount_sat} sats per {period}",
+            None,
+        )
 
+    return True, None, (period_key, new_total)
+
+
+def _commit_budget_usage(
+    conn: dict[str, Any],
+    reservation: tuple[str, int] | None,
+) -> None:
+    if reservation is None:
+        return
+    period_key, new_total = reservation
     update_nwc_connection_usage(
         str(conn.get("id") or ""),
         period_key,
         new_total,
     )
-
     _log(f"budget updated: conn={conn.get('name')} spent_sat={new_total}")
 
-    return True, None
 
 
 # ---------------------------------------------------------------------------
@@ -269,11 +314,46 @@ async def _send_nwc_subscription(ws, conn: dict[str, Any]) -> None:
     )
 
 
+async def _send_nwc_relay_subscription(
+    ws,
+    relay: str,
+    connections: list[dict[str, Any]],
+    *,
+    since: int,
+) -> None:
+    wallet_service_pubkeys = sorted({
+        str(conn.get("wallet_service_pubkey") or "").strip().lower()
+        for conn in connections
+        if str(conn.get("wallet_service_pubkey") or "").strip()
+    })
+    if not wallet_service_pubkeys:
+        raise ValueError("No wallet service pubkey configured")
+
+    sub_id = _build_relay_subscription_id(relay)
+    await ws.send(json.dumps([
+        "REQ",
+        sub_id,
+        {
+            "kinds": [23194],
+            "#p": wallet_service_pubkeys,
+            "since": max(0, int(since)),
+        },
+    ]))
+    _log(
+        f"relay subscription active: relay={relay} sub_id={sub_id} "
+        f"connections={len(connections)} wallet_keys={len(wallet_service_pubkeys)}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Request handling
 # ---------------------------------------------------------------------------
 
-async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any]) -> None:
+async def _handle_request_event_once(
+    ws,
+    conn: dict[str, Any],
+    event: dict[str, Any],
+) -> None:
     event_id = str(event.get("id") or "")
     event_pubkey = str(event.get("pubkey") or "").strip().lower()
     tags = event.get("tags") or []
@@ -345,6 +425,83 @@ async def _handle_request_event(ws, conn: dict[str, Any], event: dict[str, Any])
         return
 
     await _send_nwc_error(ws, event, "NOT_IMPLEMENTED", f"Unsupported method: {method}")
+
+
+def _prune_seen_nwc_requests(now: float) -> None:
+    cutoff = now - NWC_REQUEST_DEDUP_TTL_SECONDS
+    for event_id, seen_at in list(_nwc_requests_seen.items()):
+        if seen_at < cutoff:
+            _nwc_requests_seen.pop(event_id, None)
+
+    overflow = len(_nwc_requests_seen) - NWC_REQUEST_DEDUP_MAX_ITEMS
+    if overflow > 0:
+        oldest = sorted(_nwc_requests_seen.items(), key=lambda item: item[1])
+        for event_id, _ in oldest[:overflow]:
+            _nwc_requests_seen.pop(event_id, None)
+
+
+def _load_seen_nwc_requests() -> None:
+    global _nwc_requests_seen_loaded
+    if _nwc_requests_seen_loaded:
+        return
+    _nwc_requests_seen_loaded = True
+
+    try:
+        raw = json.loads(NWC_REQUEST_DEDUP_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return
+
+    if not isinstance(raw, dict):
+        return
+    for event_id, seen_at in raw.items():
+        try:
+            _nwc_requests_seen[str(event_id)] = float(seen_at)
+        except (TypeError, ValueError):
+            continue
+    _prune_seen_nwc_requests(time.time())
+
+
+def _persist_seen_nwc_requests() -> None:
+    try:
+        NWC_REQUEST_DEDUP_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = NWC_REQUEST_DEDUP_PATH.with_suffix(".tmp")
+        temp_path.write_text(
+            json.dumps(_nwc_requests_seen, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        temp_path.replace(NWC_REQUEST_DEDUP_PATH)
+    except OSError as exc:
+        _log(f"request dedup cache write failed: {_safe_log_text(exc)}")
+
+
+async def _handle_request_event(
+    ws,
+    conn: dict[str, Any],
+    event: dict[str, Any],
+) -> None:
+    """Execute every NIP-47 request event at most once per app runtime."""
+    event_id = str(event.get("id") or "").strip()
+    if not event_id:
+        await _handle_request_event_once(ws, conn, event)
+        return
+
+    now = time.time()
+    async with _nwc_request_lock:
+        _load_seen_nwc_requests()
+        _prune_seen_nwc_requests(now)
+        if event_id in _nwc_requests_seen or event_id in _nwc_requests_in_flight:
+            _log(f"duplicate request ignored: event_id={_short_identifier(event_id)}")
+            return
+        _nwc_requests_in_flight.add(event_id)
+
+    try:
+        await _handle_request_event_once(ws, conn, event)
+    finally:
+        async with _nwc_request_lock:
+            _nwc_requests_in_flight.discard(event_id)
+            _nwc_requests_seen[event_id] = time.time()
+            _prune_seen_nwc_requests(time.time())
+            _persist_seen_nwc_requests()
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +628,7 @@ async def _handle_pay_invoice_request(
         await _send_nwc_error(ws, event, "RESTRICTED", msg)
         return
 
-    ok, err = _check_and_update_budget(matched, invoice_sat)
+    ok, err, budget_reservation = _check_budget(matched, invoice_sat)
     if not ok:
         _log(
             f"request {_short_identifier(event_id)} payment rejected: "
@@ -499,6 +656,13 @@ async def _handle_pay_invoice_request(
         return
 
     result = _build_pay_invoice_result(pay_result)
+    try:
+        _commit_budget_usage(matched, budget_reservation)
+    except Exception as exc:
+        _log(
+            f"request {_short_identifier(event_id)} budget update failed after "
+            f"successful payment: {type(exc).__name__}: {_safe_log_text(exc)}"
+        )
 
     _log(
         f"request {_short_identifier(event_id)} payment succeeded: "
@@ -836,6 +1000,123 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
     _handle_unhandled_message(conn, data)
 
 
+def _connection_for_relay_event(
+    connections: list[dict[str, Any]],
+    event: dict[str, Any],
+) -> dict[str, Any] | None:
+    event_pubkey = str(event.get("pubkey") or "").strip().lower()
+    wallet_service_pubkey = _extract_first_p_tag(event.get("tags") or [])
+
+    for conn in connections:
+        if (
+            str(conn.get("client_pubkey") or "").strip().lower()
+            != event_pubkey
+        ):
+            continue
+        if (
+            str(conn.get("wallet_service_pubkey") or "").strip().lower()
+            == wallet_service_pubkey
+        ):
+            return conn
+
+    return None
+
+
+async def handle_nwc_relay_message(
+    ws,
+    relay: str,
+    connections: list[dict[str, Any]],
+    msg: str,
+) -> int | None:
+    try:
+        data = json.loads(msg)
+    except Exception:
+        _log(f"non-JSON message on {relay}: {_safe_log_text(msg, limit=120)}")
+        return None
+
+    if not isinstance(data, list) or not data:
+        _log(f"unexpected message format on {relay}: type={type(data).__name__}")
+        return None
+
+    msg_type = str(data[0])
+    if msg_type == "EVENT":
+        if len(data) < 3 or not isinstance(data[2], dict):
+            _log(f"malformed EVENT on {relay} ignored: items={len(data)}")
+            return None
+
+        event = data[2]
+        matched = _connection_for_relay_event(connections, event)
+        if matched is None:
+            _log(
+                f"EVENT on {relay} ignored: no configured client match "
+                f"event_id={_short_identifier(event.get('id'))} "
+                f"client={_short_identifier(event.get('pubkey'))}"
+            )
+            return None
+
+        _log(
+            f"EVENT on {relay} accepted: conn={matched.get('name')} "
+            f"event_id={_short_identifier(event.get('id'))}"
+        )
+        await _handle_request_event(ws, matched, event)
+        try:
+            return int(event.get("created_at") or 0) or None
+        except (TypeError, ValueError):
+            return None
+
+    label = {
+        "name": f"relay {relay}",
+    }
+    if msg_type == "EOSE":
+        _handle_eose_message(label, data)
+        return None
+    if msg_type == "NOTICE":
+        _handle_notice_message(label, data)
+        return None
+    if msg_type == "OK":
+        _handle_ok_message(label, data)
+        return None
+    _handle_unhandled_message(label, data)
+    return None
+
+
+def _retry_after_seconds(exc: Exception) -> float | None:
+    headers = getattr(exc, "headers", None)
+    if headers is None:
+        response = getattr(exc, "response", None)
+        headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+
+    try:
+        raw_value = headers.get("Retry-After")
+        if raw_value is None:
+            raw_value = headers.get("retry-after")
+        value = float(raw_value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return max(0.0, value)
+
+
+def _nwc_reconnect_delay(
+    failure_count: int,
+    exc: Exception,
+    *,
+    jitter: float | None = None,
+) -> float:
+    exponent = max(0, min(int(failure_count) - 1, 16))
+    delay = min(
+        NWC_RECONNECT_BASE_SECONDS * (2 ** exponent),
+        NWC_RECONNECT_MAX_SECONDS,
+    )
+    retry_after = _retry_after_seconds(exc)
+    if retry_after is not None:
+        delay = max(delay, min(retry_after, NWC_RECONNECT_MAX_SECONDS))
+
+    jitter_value = random.uniform(0.85, 1.15) if jitter is None else jitter
+    return min(delay * max(0.0, jitter_value), NWC_RECONNECT_MAX_SECONDS)
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -844,31 +1125,75 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
 
 async def nwc_connection_loop(conn: dict[str, Any]) -> None:
     relay = str(conn.get("relay_url") or "").strip()
-    name = str(conn.get("name") or "NWC Connection").strip()
-
     if not relay:
+        name = str(conn.get("name") or "NWC Connection").strip()
         _log(f"skipping {name}: no relay URL configured")
         return
 
-    while True:
-        try:
-            _log(f"connecting: {name} -> {relay}")
-            async with websockets.connect(relay, ping_interval=20, ping_timeout=20) as ws:
-                _log(f"connected: {name} -> {relay}")
+    await nwc_relay_loop(relay, [conn])
 
-                await _publish_nwc_info_event(ws, conn)
-                await _send_nwc_subscription(ws, conn)
+
+async def nwc_relay_loop(
+    relay: str,
+    connections: list[dict[str, Any]],
+) -> None:
+    names = ", ".join(
+        str(conn.get("name") or "NWC Connection").strip()
+        for conn in connections
+    )
+    failure_count = 0
+    subscription_since = int(time.time()) - NWC_INITIAL_LOOKBACK_SECONDS
+
+    while True:
+        connected_at: float | None = None
+        try:
+            _log(
+                f"connecting relay: {relay} "
+                f"connections={len(connections)} names={names}"
+            )
+            async with websockets.connect(relay, ping_interval=20, ping_timeout=20) as ws:
+                connected_at = time.monotonic()
+                _log(
+                    f"connected relay: {relay} connections={len(connections)}"
+                )
+
+                await _publish_nwc_info_event(ws, connections[0])
+                await _send_nwc_relay_subscription(
+                    ws,
+                    relay,
+                    connections,
+                    since=subscription_since,
+                )
 
                 while True:
                     msg = await ws.recv()
-                    await handle_nwc_message(ws, conn, msg)
+                    event_created_at = await handle_nwc_relay_message(
+                        ws,
+                        relay,
+                        connections,
+                        msg,
+                    )
+                    if event_created_at:
+                        subscription_since = max(
+                            subscription_since,
+                            event_created_at - 5,
+                        )
 
         except Exception as exc:
+            if (
+                connected_at is not None
+                and time.monotonic() - connected_at >= NWC_STABLE_CONNECTION_SECONDS
+            ):
+                failure_count = 0
+            failure_count += 1
+            retry_delay = _nwc_reconnect_delay(failure_count, exc)
             _log(
-                f"reconnecting {name} ({relay}) after error: "
+                f"relay reconnect scheduled: {relay} "
+                f"connections={len(connections)} failures={failure_count} "
+                f"retry_in={retry_delay:.1f}s after "
                 f"{type(exc).__name__}: {_safe_log_text(exc)}"
             )
-            await asyncio.sleep(5)
+            await asyncio.sleep(retry_delay)
 
 
 # ---------------------------------------------------------------------------
@@ -923,17 +1248,32 @@ async def _stop_all_nwc_tasks() -> None:
 async def _start_nwc_tasks() -> None:
     global _nwc_tasks
 
+    if not _get_server_privkey():
+        _log("server key locked, relay connections waiting for unlock")
+        return
+
     enabled = _get_enabled_connections()
     if not enabled:
         _log("no enabled connections, runtime idle")
         return
 
+    connections_by_relay: dict[str, list[dict[str, Any]]] = {}
     for conn in enabled:
-        conn_id = str(conn.get("id") or "")
+        relay = str(conn.get("relay_url") or "").strip()
+        if not relay:
+            _log(f"skipping {conn.get('name')}: no relay URL configured")
+            continue
         _log_scheduled_connection(conn)
-        task = asyncio.create_task(nwc_connection_loop(conn))
-        if conn_id:
-            _nwc_tasks[conn_id] = task
+        connections_by_relay.setdefault(relay, []).append(conn)
+
+    for relay, relay_connections in connections_by_relay.items():
+        _log(
+            f"scheduling shared relay connection: relay={relay} "
+            f"logical_connections={len(relay_connections)}"
+        )
+        _nwc_tasks[relay] = asyncio.create_task(
+            nwc_relay_loop(relay, relay_connections)
+        )
 
 
 async def _restart_nwc_tasks() -> None:

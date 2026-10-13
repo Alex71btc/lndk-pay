@@ -423,6 +423,20 @@ LNURL_ALIAS_MAP_RAW = os.environ.get("LNURL_ALIAS_MAP", "").strip()
 LND_TLS_CERT_PATH = os.environ.get("LND_TLS_CERT_PATH", "/secrets/tls.cert").strip()
 LND_MACAROON_PATH = os.environ.get("LND_MACAROON_PATH", "/secrets/admin.macaroon").strip()
 LND_REST_TIMEOUT = float(os.environ.get("LND_REST_TIMEOUT_SECONDS", "30"))
+TX_HISTORY_SYNC_INTERVAL = max(
+    5.0,
+    float(os.environ.get("TX_HISTORY_SYNC_INTERVAL_SECONDS", "10")),
+)
+TX_HISTORY_SYNC_MIN_INTERVAL = max(
+    0.0,
+    float(os.environ.get("TX_HISTORY_SYNC_MIN_INTERVAL_SECONDS", "5")),
+)
+TX_HISTORY_SYNC_MAX_BACKOFF = max(
+    TX_HISTORY_SYNC_INTERVAL,
+    float(os.environ.get("TX_HISTORY_SYNC_MAX_BACKOFF_SECONDS", "120")),
+)
+TX_HISTORY_SYNC_LOCK = asyncio.Lock()
+TX_HISTORY_LAST_COMPLETED_MONOTONIC = 0.0
 # --- Nostr / Zap Config ----------------------------------------------
 
 # === CONFIG SYSTEM (file + env fallback) ===
@@ -1372,7 +1386,77 @@ def _migrate_default_nostr_relays() -> None:
 _migrate_default_nostr_relays()
 
 
-NOSTR_ZAP_POLL_INTERVAL = int(_get_setting("NOSTR_ZAP_POLL_INTERVAL", "nostr", "zap_poll_interval", default=15) or 15)
+def _migrate_legacy_nostr_zap_poll_interval() -> None:
+    """Replace the old 15 second default without overriding an env setting."""
+    if os.getenv("NOSTR_ZAP_POLL_INTERVAL") not in (None, ""):
+        return
+
+    try:
+        cfg = _load_json_file(CONFIG_JSON_PATH)
+        nostr_cfg = cfg.get("nostr") or {}
+        if not isinstance(nostr_cfg, dict):
+            return
+
+        current = nostr_cfg.get("zap_poll_interval")
+        if current is None or float(current) != 15.0:
+            return
+
+        nostr_cfg["zap_poll_interval"] = 1
+        cfg["nostr"] = nostr_cfg
+        CONFIG_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_JSON_PATH.write_text(
+            json.dumps(cfg, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print("[Zap] migrated polling interval from 15s to 1s", flush=True)
+    except Exception as exc:
+        print(f"[Zap] polling interval migration skipped: {exc}", flush=True)
+
+
+_migrate_legacy_nostr_zap_poll_interval()
+
+NOSTR_ZAP_POLL_INTERVAL = max(
+    0.1,
+    float(
+        _get_setting(
+            "NOSTR_ZAP_POLL_INTERVAL",
+            "nostr",
+            "zap_poll_interval",
+            default=1,
+        )
+        or 1
+    ),
+)
+NOSTR_RELAY_OPEN_TIMEOUT = max(
+    0.1,
+    float(os.getenv("NOSTR_RELAY_OPEN_TIMEOUT_SECONDS", "5")),
+)
+NOSTR_RELAY_ACK_TIMEOUT = max(
+    0.1,
+    float(os.getenv("NOSTR_RELAY_ACK_TIMEOUT_SECONDS", "3")),
+)
+NOSTR_ZAP_RETRY_BASE_SECONDS = max(
+    1.0,
+    float(os.getenv("NOSTR_ZAP_RETRY_BASE_SECONDS", "2")),
+)
+NOSTR_ZAP_RETRY_MAX_SECONDS = max(
+    NOSTR_ZAP_RETRY_BASE_SECONDS,
+    float(os.getenv("NOSTR_ZAP_RETRY_MAX_SECONDS", "60")),
+)
+NOSTR_ZAP_INVOICE_EXPIRY_SECONDS = max(
+    60,
+    int(os.getenv("NOSTR_ZAP_INVOICE_EXPIRY_SECONDS", "3600")),
+)
+NOSTR_ZAP_EXPIRY_GRACE_SECONDS = max(
+    0,
+    int(os.getenv("NOSTR_ZAP_EXPIRY_GRACE_SECONDS", "300")),
+)
+NOSTR_ZAP_NOT_FOUND_GRACE_SECONDS = max(
+    0,
+    int(os.getenv("NOSTR_ZAP_NOT_FOUND_GRACE_SECONDS", "120")),
+)
+NOSTR_ZAP_WAKE_EVENT = asyncio.Event()
+NOSTR_ZAP_NEXT_ATTEMPT_MONOTONIC: dict[str, float] = {}
 
 # Extract the lno... offer string from lndk-cli output like:
 # Offer: CreateOfferResponse { offer: "lno1..." }.
@@ -1608,13 +1692,52 @@ def _parse_zap_request(nostr_raw: str, expected_pubkey_hex: str, amount_msat: in
     if event.get("kind") != 9734:
         raise HTTPException(status_code=400, detail="Invalid zap request kind")
 
+    event_id = str(event.get("id") or "").strip().lower()
+    pubkey = str(event.get("pubkey") or "").strip().lower()
+    signature = str(event.get("sig") or "").strip().lower()
+    try:
+        if len(event_id) != 64 or len(pubkey) != 64 or len(signature) != 128:
+            raise ValueError("invalid signed event fields")
+        if _nostr_event_id_hex(event) != event_id:
+            raise ValueError("event id mismatch")
+        if not coincurve.PublicKeyXOnly(bytes.fromhex(pubkey)).verify(
+            bytes.fromhex(signature),
+            bytes.fromhex(event_id),
+        ):
+            raise ValueError("signature verification failed")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid zap request signature",
+        ) from exc
+
     tags = event.get("tags") or []
     if not isinstance(tags, list):
         raise HTTPException(status_code=400, detail="Invalid zap request tags")
 
     p_tags = [t for t in tags if isinstance(t, list) and len(t) >= 2 and t[0] == "p"]
-    if not p_tags:
-        raise HTTPException(status_code=400, detail="Zap request missing p tag")
+    if len(p_tags) != 1:
+        raise HTTPException(status_code=400, detail="Zap request must contain exactly one p tag")
+
+    for tag_name in ("e", "a", "P"):
+        matching_tags = [
+            tag
+            for tag in tags
+            if isinstance(tag, list) and len(tag) >= 2 and tag[0] == tag_name
+        ]
+        if len(matching_tags) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Zap request contains multiple {tag_name} tags",
+            )
+
+    relay_tags = [
+        tag
+        for tag in tags
+        if isinstance(tag, list) and len(tag) >= 2 and tag[0] == "relays"
+    ]
+    if not relay_tags:
+        raise HTTPException(status_code=400, detail="Zap request missing relays tag")
 
     p_value = str(p_tags[0][1]).strip().lower()
     if expected_pubkey_hex and p_value != expected_pubkey_hex.lower():
@@ -2217,7 +2340,7 @@ except RuntimeError as exc:
 def _lnurl_identifier(username: str) -> str:
     return f"{username}@{get_lnurl_base_domain()}"
 
-ASSETS_DIR = Path("/app/assets")
+ASSETS_DIR = PROJECT_ROOT / "assets"
 LNURL_LOGO_PATH = ASSETS_DIR / "lnurl-logo.png"
 APP_ICON_PATH = ASSETS_DIR / "icon.png"
 
@@ -3773,14 +3896,15 @@ def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
         min_sendable = fixed_msat
         max_sendable = fixed_msat
 
+    receipt_signer_pubkey = _nostr_server_pubkey_hex()
     return LnurlPayMetadataResponse(
         callback=_lnurl_callback_url(alias["username"]),
         minSendable=min_sendable,
         maxSendable=max_sendable,
         metadata=_lnurl_metadata_json(alias["identifier"], alias["description"]),
         commentAllowed=max(0, LNURL_COMMENT_ALLOWED),
-        allowsNostr=True,
-        nostrPubkey=_get_nostr_pubkey_hex_for_name(alias["username"]),
+        allowsNostr=bool(receipt_signer_pubkey),
+        nostrPubkey=receipt_signer_pubkey,
     )
 
 
@@ -3827,6 +3951,11 @@ async def lnurl_callback(
     recipient_nostr_hex = _get_nostr_pubkey_hex_for_name(username)
 
     if nostr:
+        if not _nostr_server_pubkey_hex():
+            raise HTTPException(
+                status_code=503,
+                detail="Nostr zap receipt signer is not available",
+            )
         zap_request_event = _parse_zap_request(
             nostr_raw=nostr,
             expected_pubkey_hex=recipient_nostr_hex,
@@ -3866,8 +3995,10 @@ async def lnurl_callback(
 
             pending = _get_pending_zaps()
 
+            queued_at = int(time.time())
             pending[payment_hash] = {
-                "created_at": int(time.time()),
+                "created_at": queued_at,
+                "expires_at": queued_at + NOSTR_ZAP_INVOICE_EXPIRY_SECONDS,
                 "identity_alias": username,
                 "recipient_pubkey_hex": recipient_nostr_hex,
                 "payer_pubkey_hex": zap_request.get("pubkey"),
@@ -3875,6 +4006,7 @@ async def lnurl_callback(
                 "payment_request": payment_request,
                 "relays": relays,
                 "zap_request_event": zap_request,
+                "zap_request_raw": nostr,
                 "comment": comment or "",
                 "is_zap": bool(zap_request_event),
                 "identifier": alias["identifier"],
@@ -3882,7 +4014,11 @@ async def lnurl_callback(
             }
 
             _save_pending_zaps(pending)
-            print("zap queued:", payment_hash)
+            NOSTR_ZAP_WAKE_EVENT.set()
+            print(
+                f"[Zap] queued hash={payment_hash[-12:]} relays={len(relays)}",
+                flush=True,
+            )
 
         except Exception as e:
             print("zap queue error:", e)
@@ -3893,6 +4029,7 @@ async def lnurl_callback(
     if zap_request_event:
         success_message = f"Zap invoice for {alias['identifier']}"
 
+    receipt_signer_pubkey = _nostr_server_pubkey_hex()
     return {
         "pr": payment_request,
         "routes": [],
@@ -3901,8 +4038,8 @@ async def lnurl_callback(
             "message": success_message,
         },
         "disposable": False,
-        "allowsNostr": True,
-        "nostrPubkey": _get_nostr_pubkey_hex_for_name(username),
+        "allowsNostr": bool(receipt_signer_pubkey),
+        "nostrPubkey": receipt_signer_pubkey,
     }
 
 @app.get("/api/setup/status")
@@ -3987,7 +4124,7 @@ async def verify_published_bip353_records(
 
 from fastapi.staticfiles import StaticFiles
 
-app.mount("/assets", StaticFiles(directory="/app/assets"), name="assets")
+app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 @app.post("/api/setup/config")
 async def set_setup_config(payload: dict, request: StarletteRequest):
@@ -6763,7 +6900,7 @@ def _nostr_event_id_hex(event):
         event["tags"],
         event["content"],
     ]
-    raw = json.dumps(payload, separators=(",", ":"))
+    raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode()).hexdigest()
 
 def _normalize_nostr_private_key(raw: str) -> str:
@@ -6960,12 +7097,76 @@ def _build_zap_dm_message(item: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 async def _publish_nostr_event_to_relay(relay_url, event):
+    started_at = time.monotonic()
+    event_id = str(event.get("id") or "")
+    notice = ""
+
     try:
-        async with websockets.connect(relay_url) as ws:
+        async with websockets.connect(
+            relay_url,
+            open_timeout=NOSTR_RELAY_OPEN_TIMEOUT,
+            close_timeout=1,
+        ) as ws:
             await ws.send(json.dumps(["EVENT", event]))
-            return {"relay": relay_url, "ok": True}
+
+            deadline = time.monotonic() + NOSTR_RELAY_ACK_TIMEOUT
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError
+
+                raw_message = await asyncio.wait_for(ws.recv(), timeout=remaining)
+                if isinstance(raw_message, bytes):
+                    raw_message = raw_message.decode("utf-8", errors="replace")
+
+                try:
+                    message = json.loads(raw_message)
+                except Exception:
+                    continue
+
+                if not isinstance(message, list) or not message:
+                    continue
+
+                if message[0] == "NOTICE" and len(message) >= 2:
+                    notice = str(message[1])
+                    continue
+
+                if (
+                    message[0] == "OK"
+                    and len(message) >= 3
+                    and str(message[1]) == event_id
+                ):
+                    accepted = message[2] is True
+                    relay_message = str(message[3]) if len(message) >= 4 else ""
+                    return {
+                        "relay": relay_url,
+                        "ok": accepted,
+                        "accepted": accepted,
+                        "message": relay_message,
+                        "duration_ms": round(
+                            (time.monotonic() - started_at) * 1000,
+                            1,
+                        ),
+                    }
+    except asyncio.TimeoutError:
+        detail = "relay acknowledgement timeout"
+        if notice:
+            detail = f"{detail}; notice: {notice}"
+        return {
+            "relay": relay_url,
+            "ok": False,
+            "accepted": False,
+            "error": detail,
+            "duration_ms": round((time.monotonic() - started_at) * 1000, 1),
+        }
     except Exception as e:
-        return {"relay": relay_url, "ok": False, "error": str(e)}
+        return {
+            "relay": relay_url,
+            "ok": False,
+            "accepted": False,
+            "error": str(e),
+            "duration_ms": round((time.monotonic() - started_at) * 1000, 1),
+        }
 
 async def _publish_nostr_event(relays, event):
     return await asyncio.gather(*[
@@ -7054,42 +7255,61 @@ def _save_pending_zaps(data):
     cfg["pending_zaps"] = data
     save_config(cfg)
 
+
+def _merge_pending_zap_updates(updates: dict[str, dict[str, Any]]) -> None:
+    """Merge processed items into the latest queue without dropping new zaps."""
+    if not updates:
+        return
+
+    cfg = load_config()
+    current = cfg.get("pending_zaps", {}) or {}
+    if not isinstance(current, dict):
+        current = {}
+
+    for payment_hash, update in updates.items():
+        existing = current.get(payment_hash)
+        if isinstance(existing, dict):
+            merged = dict(existing)
+            merged.update(update)
+            current[payment_hash] = merged
+        else:
+            current[payment_hash] = update
+
+    cfg["pending_zaps"] = current
+    save_config(cfg)
+
 import base64
 
 
 async def _lookup_invoice(payment_hash):
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
     headers = {"Grpc-Metadata-macaroon": macaroon_hex}
+    payment_hash_hex = _normalize_payment_hash(payment_hash)
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
 
-    # --- FIX: Base64 → HEX ---
-    try:
-        raw = base64.b64decode(payment_hash)
-        payment_hash_hex = raw.hex()
-    except Exception:
-        payment_hash_hex = payment_hash  # fallback (alte Einträge)
-    # -------------------------
-
-    async with httpx.AsyncClient(timeout=10, verify=False) as client:
+    async with httpx.AsyncClient(timeout=10, verify=verify) as client:
         r = await client.get(
             f"{LND_REST_URL}/v1/invoice/{payment_hash_hex}",
             headers=headers
         )
+        r.raise_for_status()
         return r.json()
 
 async def _list_invoices():
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
     headers = {"Grpc-Metadata-macaroon": macaroon_hex}
 
-    async with httpx.AsyncClient(timeout=10, verify=False) as client:
+    async with httpx.AsyncClient(
+        timeout=LND_REST_TIMEOUT,
+        verify=_lnd_rest_verify_setting(),
+    ) as client:
         r = await client.get(
             f"{LND_REST_URL}/v1/invoices?reversed=true&num_max_invoices=100",
             headers=headers,
         )
+    r.raise_for_status()
     data = r.json()
-
-    return data
-
-    return r.json()
+    return data if isinstance(data, dict) else {}
 
 async def _list_payments() -> dict[str, Any]:
     macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
@@ -7321,92 +7541,100 @@ async def _payment_to_tx_history(payment: dict, existing: dict | None = None):
         "raw_json": payment,
     }
 
-async def sync_tx_history():
+
+def _upsert_invoice_history(inv: dict[str, Any]) -> bool:
+    """Store one invoice while preserving the richer app-side classification."""
+    item = _invoice_to_tx_history(inv)
+    payment_hash = item["payment_hash"]
+
+    existing = None
+    with _db_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM tx_history WHERE payment_hash = ?",
+            (payment_hash,),
+        ).fetchone()
+        if row:
+            existing = dict(row)
+            if existing.get("raw_json"):
+                try:
+                    existing["raw_json"] = json.loads(existing["raw_json"])
+                except Exception:
+                    existing["raw_json"] = {}
+
+    if existing:
+        if item.get("method") == "bolt11" and existing.get("method") in {
+            "lnurl",
+            "lightning_address",
+            "bolt11_alias_fallback",
+            "zap",
+            "nwc",
+        }:
+            item["method"] = existing.get("method")
+            item["counterparty"] = existing.get("counterparty") or ""
+            item["identifier"] = existing.get("identifier") or item["identifier"]
+            item["origin"] = existing.get("origin") or "web"
+
+        comparable = {
+            "direction": item["direction"],
+            "type": item["type"],
+            "method": item.get("method"),
+            "counterparty": item.get("counterparty", ""),
+            "amount_sat": item["amount_sat"],
+            "fee_sat": item["fee_sat"],
+            "status": item["status"],
+            "memo": item["memo"],
+            "identifier": item["identifier"],
+            "created_at": item["created_at"],
+            "settled_at": item["settled_at"],
+            "raw_json": item["raw_json"],
+        }
+        existing_comparable = {
+            "direction": existing.get("direction"),
+            "type": existing.get("type"),
+            "method": existing.get("method"),
+            "counterparty": existing.get("counterparty") or "",
+            "amount_sat": existing.get("amount_sat"),
+            "fee_sat": existing.get("fee_sat"),
+            "status": existing.get("status"),
+            "memo": existing.get("memo"),
+            "identifier": existing.get("identifier"),
+            "created_at": existing.get("created_at"),
+            "settled_at": existing.get("settled_at"),
+            "raw_json": existing.get("raw_json") or {},
+        }
+        if json.dumps(comparable, sort_keys=True, default=str) == json.dumps(
+            existing_comparable,
+            sort_keys=True,
+            default=str,
+        ):
+            return False
+
+    _log_tx(
+        payment_hash=item["payment_hash"],
+        direction=item["direction"],
+        tx_type=item["type"],
+        amount_sat=item["amount_sat"],
+        fee_sat=item["fee_sat"],
+        status=item["status"],
+        memo=item["memo"],
+        identifier=item["identifier"],
+        created_at=item["created_at"],
+        settled_at=item["settled_at"],
+        raw_json=item["raw_json"],
+        method=item.get("method", "unknown"),
+        counterparty=item.get("counterparty", ""),
+        origin=item.get("origin", "web"),
+    )
+    return True
+
+
+async def _sync_tx_history_once():
     invoices = await _list_invoices()
     count = 0
 
     for inv in invoices.get("invoices", []):
-        item = _invoice_to_tx_history(inv)
-        payment_hash = item["payment_hash"]
-
-        existing = None
-        with _db_conn() as conn:
-            row = conn.execute(
-                "SELECT * FROM tx_history WHERE payment_hash = ?",
-                (payment_hash,),
-            ).fetchone()
-            if row:
-                existing = dict(row)
-                if existing.get("raw_json"):
-                    try:
-                        existing["raw_json"] = json.loads(existing["raw_json"])
-                    except Exception:
-                        existing["raw_json"] = {}
-
-        if existing:
-            # Preserve richer app-side classification. LND invoices only know BOLT11.
-            if item.get("method") == "bolt11" and existing.get("method") in {
-                "lnurl",
-                "lightning_address",
-                "bolt11_alias_fallback",
-                "zap",
-                "nwc",
-            }:
-                item["method"] = existing.get("method")
-                item["counterparty"] = existing.get("counterparty") or ""
-                item["identifier"] = existing.get("identifier") or item["identifier"]
-                item["origin"] = existing.get("origin") or "web"
-
-            comparable = {
-                "direction": item["direction"],
-                "type": item["type"],
-                "method": item.get("method"),
-                "counterparty": item.get("counterparty", ""),
-                "amount_sat": item["amount_sat"],
-                "fee_sat": item["fee_sat"],
-                "status": item["status"],
-                "memo": item["memo"],
-                "identifier": item["identifier"],
-                "created_at": item["created_at"],
-                "settled_at": item["settled_at"],
-                "raw_json": item["raw_json"],
-            }
-
-            existing_comparable = {
-                "direction": existing.get("direction"),
-                "type": existing.get("type"),
-                "method": existing.get("method"),
-                "counterparty": existing.get("counterparty") or "",
-                "amount_sat": existing.get("amount_sat"),
-                "fee_sat": existing.get("fee_sat"),
-                "status": existing.get("status"),
-                "memo": existing.get("memo"),
-                "identifier": existing.get("identifier"),
-                "created_at": existing.get("created_at"),
-                "settled_at": existing.get("settled_at"),
-                "raw_json": existing.get("raw_json") or {},
-            }
-
-            if json.dumps(comparable, sort_keys=True, default=str) == json.dumps(existing_comparable, sort_keys=True, default=str):
-                continue
-
-        _log_tx(
-            payment_hash=item["payment_hash"],
-            direction=item["direction"],
-            tx_type=item["type"],
-            amount_sat=item["amount_sat"],
-            fee_sat=item["fee_sat"],
-            status=item["status"],
-            memo=item["memo"],
-            identifier=item["identifier"],
-            created_at=item["created_at"],
-            settled_at=item["settled_at"],
-            raw_json=item["raw_json"],
-            method=item.get("method", "unknown"),
-            counterparty=item.get("counterparty", ""),
-        )
-
-        count += 1
+        if _upsert_invoice_history(inv):
+            count += 1
 
     payments = await _list_payments()
 
@@ -7521,14 +7749,43 @@ async def sync_tx_history():
 
     return count
 
+
+async def sync_tx_history(*, force: bool = False):
+    """Coalesce expensive LND history scans across background, UI, and NWC."""
+    global TX_HISTORY_LAST_COMPLETED_MONOTONIC
+
+    async with TX_HISTORY_SYNC_LOCK:
+        elapsed = time.monotonic() - TX_HISTORY_LAST_COMPLETED_MONOTONIC
+        if (
+            not force
+            and TX_HISTORY_LAST_COMPLETED_MONOTONIC > 0
+            and elapsed < TX_HISTORY_SYNC_MIN_INTERVAL
+        ):
+            return 0
+
+        count = await _sync_tx_history_once()
+        TX_HISTORY_LAST_COMPLETED_MONOTONIC = time.monotonic()
+        return count
+
+
 async def _tx_history_sync_loop():
+    retry_delay = TX_HISTORY_SYNC_INTERVAL
     while True:
         try:
             await sync_tx_history()
+            retry_delay = TX_HISTORY_SYNC_INTERVAL
         except Exception as exc:
-            print(f"tx history sync error: {exc}", flush=True)
+            retry_delay = min(
+                max(TX_HISTORY_SYNC_INTERVAL, retry_delay * 2),
+                TX_HISTORY_SYNC_MAX_BACKOFF,
+            )
+            detail = str(exc) or type(exc).__name__
+            print(
+                f"tx history sync error: {detail}; retry_in={retry_delay:.1f}s",
+                flush=True,
+            )
 
-        await asyncio.sleep(5)
+        await asyncio.sleep(retry_delay)
 
 
 def _notification_relays_for_pending_zap(item: dict[str, Any]) -> list[str]:
@@ -7546,117 +7803,363 @@ def _notification_relays_for_pending_zap(item: dict[str, Any]) -> list[str]:
     return _normalize_relays(_effective_default_nostr_relays())
 
 
+def _build_zap_receipt_event(
+    item: dict[str, Any],
+    settled_invoice: dict[str, Any],
+) -> dict[str, Any]:
+    existing = item.get("receipt_event")
+    if isinstance(existing, dict) and existing.get("id") and existing.get("sig"):
+        return existing
+
+    zap_request = item.get("zap_request_event") or {}
+    zap_request_raw = str(item.get("zap_request_raw") or "")
+    if not zap_request_raw:
+        zap_request_raw = json.dumps(
+            zap_request,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+    tags = [
+        ["p", item["recipient_pubkey_hex"]],
+        ["bolt11", item["payment_request"]],
+        ["description", zap_request_raw],
+    ]
+
+    payer_pubkey = item.get("payer_pubkey_hex")
+    if payer_pubkey:
+        tags.append(["P", payer_pubkey])
+
+    for tag in zap_request.get("tags", []):
+        if isinstance(tag, list) and len(tag) >= 2 and tag[0] in {"e", "a", "k"}:
+            tags.append(tag)
+
+    if item.get("amount_msat"):
+        tags.append(["amount", str(item["amount_msat"])])
+
+    preimage = (
+        settled_invoice.get("r_preimage")
+        or settled_invoice.get("payment_preimage")
+        or ""
+    )
+    if preimage:
+        tags.append(["preimage", preimage])
+
+    try:
+        paid_at = int(settled_invoice.get("settle_date") or 0)
+    except (TypeError, ValueError):
+        paid_at = 0
+
+    return _sign_nostr_event(
+        {
+            "kind": 9735,
+            "created_at": paid_at or int(time.time()),
+            "tags": tags,
+            "content": "",
+        }
+    )
+
+
+def _zap_unsettled_poll_delay(item: dict[str, Any]) -> float:
+    try:
+        queue_age = max(0, int(time.time()) - int(item.get("created_at") or 0))
+    except (TypeError, ValueError):
+        queue_age = 0
+
+    if queue_age < 60:
+        return NOSTR_ZAP_POLL_INTERVAL
+    if queue_age < 300:
+        return max(NOSTR_ZAP_POLL_INTERVAL, 3.0)
+    return max(NOSTR_ZAP_POLL_INTERVAL, 15.0)
+
+
+def _zap_retry_delay(payment_hash: str, failure_count: int) -> float:
+    exponent = max(0, min(int(failure_count) - 1, 16))
+    delay = min(
+        NOSTR_ZAP_RETRY_BASE_SECONDS * (2 ** exponent),
+        NOSTR_ZAP_RETRY_MAX_SECONDS,
+    )
+    digest = hashlib.sha256(payment_hash.encode("utf-8")).digest()
+    jitter = 0.9 + (digest[0] / 255.0) * 0.2
+    return min(delay * jitter, NOSTR_ZAP_RETRY_MAX_SECONDS)
+
+
+def _zap_item_age_seconds(item: dict[str, Any]) -> int:
+    try:
+        return max(0, int(time.time()) - int(item.get("created_at") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _zap_item_expired(item: dict[str, Any]) -> bool:
+    try:
+        expires_at = int(item.get("expires_at") or 0)
+    except (TypeError, ValueError):
+        expires_at = 0
+    if expires_at <= 0:
+        try:
+            expires_at = (
+                int(item.get("created_at") or 0)
+                + NOSTR_ZAP_INVOICE_EXPIRY_SECONDS
+            )
+        except (TypeError, ValueError):
+            return False
+    return int(time.time()) > expires_at + NOSTR_ZAP_EXPIRY_GRACE_SECONDS
+
+
+def _finish_pending_zap(
+    payment_hash: str,
+    item: dict[str, Any],
+    reason: str,
+) -> dict[str, Any]:
+    finished = dict(item)
+    finished["processing_finished"] = True
+    finished["terminal_reason"] = reason
+    finished["finished_at"] = int(time.time())
+    finished.pop("last_error", None)
+    finished.pop("last_error_at", None)
+    finished.pop("retry_count", None)
+    NOSTR_ZAP_NEXT_ATTEMPT_MONOTONIC.pop(payment_hash, None)
+    print(
+        f"[Zap] stopped hash={payment_hash[-12:]} reason={reason}",
+        flush=True,
+    )
+    return finished
+
+
+def _schedule_zap_retry(
+    payment_hash: str,
+    item: dict[str, Any],
+    *,
+    error: str | None = None,
+) -> float:
+    failure_count = int(item.get("retry_count") or 0) + 1
+    delay = _zap_retry_delay(payment_hash, failure_count)
+    item["retry_count"] = failure_count
+    item["last_attempt_at"] = int(time.time())
+    if error:
+        item["last_error"] = error
+        item["last_error_at"] = int(time.time())
+    NOSTR_ZAP_NEXT_ATTEMPT_MONOTONIC[payment_hash] = time.monotonic() + delay
+    return delay
+
+
+async def _process_pending_zap_item(
+    payment_hash: str,
+    item: dict[str, Any],
+) -> dict[str, Any] | None:
+    if _zap_item_expired(item):
+        return _finish_pending_zap(payment_hash, item, "invoice expired unpaid")
+
+    try:
+        inv = await _lookup_invoice(payment_hash)
+    except httpx.HTTPStatusError as exc:
+        status_code = getattr(exc.response, "status_code", 0)
+        if (
+            status_code == 404
+            and _zap_item_age_seconds(item) >= NOSTR_ZAP_NOT_FOUND_GRACE_SECONDS
+        ):
+            return _finish_pending_zap(
+                payment_hash,
+                item,
+                "invoice not found in LND",
+            )
+        raise
+
+    invoice_state = str(inv.get("state") or "").strip().upper()
+    if invoice_state in {"CANCELED", "CANCELLED"}:
+        return _finish_pending_zap(payment_hash, item, "invoice canceled unpaid")
+    if not inv.get("settled"):
+        return None
+
+    item = dict(item)
+    now = int(time.time())
+    if not item.get("settlement_detected_at"):
+        item["settlement_detected_at"] = now
+        queued_at = int(item.get("created_at") or now)
+        try:
+            settled_at = int(inv.get("settle_date") or now)
+        except (TypeError, ValueError):
+            settled_at = now
+        print(
+            "[Zap] settlement detected "
+            f"hash={payment_hash[-12:]} "
+            f"queue_age_ms={max(0, now - queued_at) * 1000} "
+            f"detection_lag_ms={max(0, now - settled_at) * 1000}",
+            flush=True,
+        )
+        try:
+            _upsert_invoice_history(inv)
+        except Exception as exc:
+            print(
+                f"[Zap] activity update failed hash={payment_hash[-12:]}: "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
+            )
+
+    if not item.get("receipt_published"):
+        signed = _build_zap_receipt_event(item, inv)
+        item["receipt_event"] = signed
+        receipt_relays = _normalize_relays(
+            item.get("relays") or NOSTR_DEFAULT_RELAYS
+        )
+
+        stored_results = item.get("receipt_relay_results")
+        relay_results = dict(stored_results) if isinstance(stored_results, dict) else {}
+        relays_to_publish = [
+            relay
+            for relay in receipt_relays
+            if not bool((relay_results.get(relay) or {}).get("ok"))
+        ]
+
+        if relays_to_publish:
+            attempt_results = await _publish_nostr_event(relays_to_publish, signed)
+            for result in attempt_results:
+                if isinstance(result, dict) and result.get("relay"):
+                    relay_results[str(result["relay"])] = result
+
+        item["receipt_relay_results"] = relay_results
+        item["result"] = [
+            relay_results.get(
+                relay,
+                {"relay": relay, "ok": False, "error": "not attempted"},
+            )
+            for relay in receipt_relays
+        ]
+        accepted_count = sum(
+            bool((relay_results.get(relay) or {}).get("ok"))
+            for relay in receipt_relays
+        )
+        # A Nostr event is published once any requested relay has accepted it.
+        # Requiring every relay to accept causes permanent retries when one
+        # relay rejects the event (for example with a policy-level "blocked"
+        # response), even though clients can already receive the receipt from
+        # the relays that stored it.
+        item["receipt_published"] = accepted_count > 0
+        print(
+            f"[Zap] receipt hash={payment_hash[-12:]} "
+            f"accepted={accepted_count}"
+            f"/{len(receipt_relays)} results={item['result']}",
+            flush=True,
+        )
+
+    if not item.get("notification_published"):
+        try:
+            dm_message = _build_zap_dm_message(item)
+            notify_privkey_hex = _notification_signing_privkey_hex()
+            if not notify_privkey_hex:
+                raise ValueError("No notification signing key configured")
+
+            encrypted_dm = _nip04_encrypt(
+                notify_privkey_hex,
+                item["recipient_pubkey_hex"],
+                dm_message,
+            )
+            dm_event = _build_dm_event(item["recipient_pubkey_hex"], encrypted_dm)
+            signed_dm = _sign_nostr_event_with_privkey(dm_event, notify_privkey_hex)
+            notification_relays = _notification_relays_for_pending_zap(item)
+            dm_result = await _publish_nostr_event(notification_relays, signed_dm)
+            item["dm_event"] = signed_dm
+            item["dm_result"] = dm_result
+            item["notification_published"] = any(
+                bool(entry.get("ok"))
+                for entry in dm_result
+                if isinstance(entry, dict)
+            )
+            if item["notification_published"]:
+                item.pop("dm_error", None)
+            else:
+                item["dm_error"] = (
+                    "No saved Identity relay accepted the notification DM"
+                )
+            print("✉️ Zap notification DM relays:", dm_result, flush=True)
+        except Exception as exc:
+            item["notification_published"] = False
+            item["dm_error"] = str(exc)
+            print(f"[Nostr notify] DM failed: {exc}", flush=True)
+
+    item["published"] = bool(
+        item.get("receipt_published") and item.get("notification_published")
+    )
+    if item["published"]:
+        item.pop("last_error", None)
+        item.pop("last_error_at", None)
+        item.pop("retry_count", None)
+    return item
+
+
 async def _process_pending_zaps_once():
     pending = _get_pending_zaps()
+    updates: dict[str, dict[str, Any]] = {}
+    now_monotonic = time.monotonic()
 
-    for k, item in list(pending.items()):
-        if item.get("published"):
+    for payment_hash, original_item in list(pending.items()):
+        if original_item.get("published") or original_item.get("processing_finished"):
+            NOSTR_ZAP_NEXT_ATTEMPT_MONOTONIC.pop(payment_hash, None)
             continue
 
-        inv = await _lookup_invoice(k)
-        if not inv.get("settled"):
+        if (
+            NOSTR_ZAP_NEXT_ATTEMPT_MONOTONIC.get(payment_hash, 0)
+            > now_monotonic
+        ):
             continue
 
-        if not item.get("receipt_published"):
-            zap_request = item.get("zap_request_event") or {}
-
-            tags = [
-                ["p", item["recipient_pubkey_hex"]],
-                ["bolt11", item["payment_request"]],
-                ["description", json.dumps(zap_request, separators=(",", ":"), ensure_ascii=False)],
-            ]
-
-            payer_pubkey = item.get("payer_pubkey_hex")
-            if payer_pubkey:
-                tags.append(["P", payer_pubkey])
-
-            for t in zap_request.get("tags", []):
-                if isinstance(t, list) and len(t) >= 2 and t[0] in {"e", "a"}:
-                    tags.append(t)
-
-            if item.get("amount_msat"):
-                tags.append(["amount", str(item["amount_msat"])])
-
-            preimage = inv.get("r_preimage") or inv.get("payment_preimage") or ""
-            if preimage:
-                tags.append(["preimage", preimage])
-
-            event = {
-                "kind": 9735,
-                "created_at": int(time.time()),
-                "tags": tags,
-                "content": "",
-            }
-
-            signed = _sign_nostr_event(event)
-            receipt_relays = _normalize_relays(
-                item.get("relays") or NOSTR_DEFAULT_RELAYS
-            )
-            result = await _publish_nostr_event(receipt_relays, signed)
-            item["result"] = result
-            item["receipt_published"] = any(
-                bool(entry.get("ok")) for entry in result if isinstance(entry, dict)
-            )
-            print("⚡ Zap receipt relays:", result, flush=True)
-
-        if not item.get("notification_published"):
-            try:
-                dm_message = _build_zap_dm_message(item)
-                notify_privkey_hex = _notification_signing_privkey_hex()
-                if not notify_privkey_hex:
-                    raise ValueError("No notification signing key configured")
-
-                encrypted_dm = _nip04_encrypt(
-                    notify_privkey_hex,
-                    item["recipient_pubkey_hex"],
-                    dm_message,
+        try:
+            item = await _process_pending_zap_item(payment_hash, original_item)
+            if item is None:
+                NOSTR_ZAP_NEXT_ATTEMPT_MONOTONIC[payment_hash] = (
+                    time.monotonic() + _zap_unsettled_poll_delay(original_item)
                 )
-                dm_event = _build_dm_event(item["recipient_pubkey_hex"], encrypted_dm)
-                signed_dm = _sign_nostr_event_with_privkey(dm_event, notify_privkey_hex)
-                notification_relays = _notification_relays_for_pending_zap(item)
-                dm_result = await _publish_nostr_event(notification_relays, signed_dm)
-                item["dm_event"] = signed_dm
-                item["dm_result"] = dm_result
-                item["notification_published"] = any(
-                    bool(entry.get("ok"))
-                    for entry in dm_result
-                    if isinstance(entry, dict)
-                )
-                if item["notification_published"]:
-                    item.pop("dm_error", None)
-                else:
-                    item["dm_error"] = "No saved Identity relay accepted the notification DM"
-                print("✉️ Zap notification DM relays:", dm_result, flush=True)
-            except Exception as exc:
-                item["notification_published"] = False
-                item["dm_error"] = str(exc)
-                print(f"[Nostr notify] DM failed: {exc}", flush=True)
+                continue
 
-        item["published"] = bool(
-            item.get("receipt_published") and item.get("notification_published")
-        )
-        pending[k] = item
-    _save_pending_zaps(pending)
+            if item.get("published") or item.get("processing_finished"):
+                NOSTR_ZAP_NEXT_ATTEMPT_MONOTONIC.pop(payment_hash, None)
+            else:
+                retry_delay = _schedule_zap_retry(payment_hash, item)
+                print(
+                    f"[Zap] incomplete hash={payment_hash[-12:]} "
+                    f"retry_in={retry_delay:.1f}s",
+                    flush=True,
+                )
+            updates[payment_hash] = item
+        except Exception as exc:
+            failed_item = dict(original_item)
+            detail = str(exc) or type(exc).__name__
+            retry_delay = _schedule_zap_retry(
+                payment_hash,
+                failed_item,
+                error=detail,
+            )
+            updates[payment_hash] = failed_item
+            print(
+                f"[Zap] processing failed hash={payment_hash[-12:]}: "
+                f"{detail}; retry_in={retry_delay:.1f}s",
+                flush=True,
+            )
+
+    _merge_pending_zap_updates(updates)
+
 
 async def _zap_publisher_loop():
     while True:
+        NOSTR_ZAP_WAKE_EVENT.clear()
         try:
             await _process_pending_zaps_once()
-        except Exception as e:
-            print("zap loop error", e, flush=True)
-        await asyncio.sleep(NOSTR_ZAP_POLL_INTERVAL)
+        except Exception as exc:
+            print("zap loop error", exc, flush=True)
+
+        try:
+            await asyncio.wait_for(
+                NOSTR_ZAP_WAKE_EVENT.wait(),
+                timeout=NOSTR_ZAP_POLL_INTERVAL,
+            )
+        except asyncio.TimeoutError:
+            pass
 
 @app.on_event("startup")
 async def startup_background_tasks():
     init_db()
-
-    try:
-        await sync_tx_history()
-    except Exception as exc:
-        # LND can still be starting after an Umbrel or StartOS reboot. The
-        # background loop retries without preventing the web app from loading.
-        print(f"tx history initial sync waiting for LND: {exc}", flush=True)
-
+    # LND may still be starting after a host reboot. Do not delay the web app;
+    # the background loop performs an immediate first sync and then retries.
     app.state.tx_sync_task = asyncio.create_task(_tx_history_sync_loop())
     app.state.nostr_secret_store_task = asyncio.create_task(
         _nostr_secret_store_unlock_loop()

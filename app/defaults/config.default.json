@@ -7,7 +7,7 @@
       "wss://relay.getalby.com/v1",
       "wss://offchain.pub"
     ],
-    "zap_poll_interval": 15,
+    "zap_poll_interval": 1,
     "name_map": {}
   }
 }

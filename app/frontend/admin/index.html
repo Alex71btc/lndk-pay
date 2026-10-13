@@ -6225,11 +6225,11 @@
 
         txHistoryRefreshTimer = setInterval(async () => {
             try {
-                await syncTxHistory();
+                await window.renderTxHistory();
             } catch (e) {
                 console.error(e);
             }
-        }, 10000);
+        }, 5000);
       }
 
       function stopTxHistoryAutoRefresh() {
@@ -8562,11 +8562,8 @@
               console.warn("Failed to load contacts", err);
           }
 
-              await syncTxHistory();
-
-              console.log("after sync", Date.now());
-
-              lastTxSync = Date.now();
+              await window.renderTxHistory();
+              void syncTxHistory();
 
               startTxHistoryAutoRefresh();
 

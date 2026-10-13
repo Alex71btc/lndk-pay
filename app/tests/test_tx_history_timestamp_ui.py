@@ -43,6 +43,18 @@ class TxHistoryTimestampUiTests(unittest.TestCase):
         self.assertIn("overflow-wrap: anywhere", self.html)
         self.assertIn("font-variant-numeric: tabular-nums", self.html)
 
+    def test_auto_refresh_reads_local_history_without_forcing_lnd_sync(self):
+        refresh_start = self.html.index("function startTxHistoryAutoRefresh()")
+        refresh_end = self.html.index(
+            "function stopTxHistoryAutoRefresh()",
+            refresh_start,
+        )
+        refresh_body = self.html[refresh_start:refresh_end]
+
+        self.assertIn("await window.renderTxHistory()", refresh_body)
+        self.assertNotIn("syncTxHistory()", refresh_body)
+        self.assertIn("}, 5000);", refresh_body)
+
 
 if __name__ == "__main__":
     unittest.main()
