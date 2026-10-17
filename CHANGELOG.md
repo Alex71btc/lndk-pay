@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.9] - 2026-10-17
+
+### Added
+
+- Add the BOLT12 Pay Android Companion 1.0.0 for safe handoff of BOLT11 invoices,
+  BOLT12 offers, Lightning addresses, and Amethyst BIP321 links to the web payment form.
+- Offer the signed Companion APK from the mobile web app on Android devices.
+- Add German and English Companion interfaces and Android intent validation.
+
+### Changed
+
+- Preserve the configured BOLT12 Pay server across normal Companion app updates.
+- Improve Android launcher, installer, and payment chooser icon sizing.
+- Keep every handoff review-only: the Companion pre-fills the web form but never starts
+  a payment automatically.
+
+### Fixed
+
+- Resolve Lightning addresses through the existing amount-entry flow before payment.
+- Keep the local LNDK Compose overlay compatible with BOLT12 payments.
+
 ## [0.3.0] - 2025-09-27
 
 ### Bug Fixes

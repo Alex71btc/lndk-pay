@@ -27,3 +27,25 @@ payment form; the user must still review and explicitly start every payment.
 
 Select **BOLT12 Pay** in the Android chooser. The browser should open `/pay`, with the
 target pre-filled and no payment started.
+
+## Build the signed release APK
+
+Release builds must use the same private signing key for every published version. Keep
+the key and its properties file outside this repository and back them up securely.
+
+Set `BOLT12_PAY_SIGNING_PROPERTIES` to an absolute Java-properties file containing:
+
+```properties
+storeFile=/absolute/path/to/bolt12-pay-release.jks
+storePassword=...
+keyAlias=bolt12-pay
+keyPassword=...
+```
+
+Then build and verify the production artifact:
+
+```text
+BOLT12_PAY_SIGNING_PROPERTIES=/absolute/path/to/signing.properties ./gradlew clean testReleaseUnitTest lintRelease assembleRelease
+```
+
+The signed APK is written to `app/build/outputs/apk/release/app-release.apk`.
