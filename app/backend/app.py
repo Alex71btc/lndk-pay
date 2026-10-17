@@ -5882,7 +5882,11 @@ def public_manifest() -> FileResponse:
     file = PUBLIC_DIR / "public.webmanifest"
     if not file.exists():
         raise HTTPException(status_code=404, detail="public.webmanifest not found")
-    return FileResponse(file, media_type="application/manifest+json")
+    return FileResponse(
+        file,
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @app.get("/pay.webmanifest")
@@ -5890,7 +5894,11 @@ def pay_manifest() -> FileResponse:
     file = ADMIN_DIR / "pay.webmanifest"
     if not file.exists():
         raise HTTPException(status_code=404, detail="pay.webmanifest not found")
-    return FileResponse(file, media_type="application/manifest+json")
+    return FileResponse(
+        file,
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @app.get("/admin.webmanifest")
@@ -5906,6 +5914,40 @@ def service_worker() -> FileResponse:
     resp = FileResponse(file, media_type="application/javascript")
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
+
+
+@app.get("/pwa-install.js")
+def pwa_install_script() -> FileResponse:
+    file = ADMIN_DIR / "pwa-install.js"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="pwa-install.js not found")
+    return FileResponse(
+        file,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+    )
+
+
+@app.get("/pay-intent")
+def pay_intent_page() -> FileResponse:
+    file = ADMIN_DIR / "pay-intent.html"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="pay-intent.html not found")
+    return FileResponse(
+        file,
+        media_type="text/html",
+        headers=_no_store_headers(
+            {
+                "Content-Security-Policy": (
+                    "default-src 'none'; script-src 'unsafe-inline'; "
+                    "style-src 'unsafe-inline'; base-uri 'none'; "
+                    "frame-ancestors 'none'; form-action 'none'"
+                ),
+                "Referrer-Policy": "no-referrer",
+                "X-Content-Type-Options": "nosniff",
+            }
+        ),
+    )
 
 
 from fastapi.responses import FileResponse
@@ -5928,6 +5970,8 @@ async def public_alias_page(alias_name: str):
         "api",
         "favicon.ico",
         "service-worker.js",
+        "pwa-install.js",
+        "pay-intent",
         "public.webmanifest",
         "pay.webmanifest",
         "admin.webmanifest",
@@ -6758,6 +6802,8 @@ async def legacy_alias_redirect(alias_name: str):
         "api",
         "favicon.ico",
         "service-worker.js",
+        "pwa-install.js",
+        "pay-intent",
         "public.webmanifest",
         "pay.webmanifest",
         "admin.webmanifest",

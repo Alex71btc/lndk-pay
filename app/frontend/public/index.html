@@ -6,6 +6,14 @@
   <title>BOLT12 Pay</title>
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="/public.webmanifest" />
+  <script
+    src="/pwa-install.js"
+    data-manifest="/public.webmanifest"
+    data-label-ready="console.btn.install"
+    data-label-checking="console.btn.install_checking"
+    data-label-help="console.btn.install_help"
+    data-label-manual="console.install_manual"
+  ></script>
   <link rel="icon" href="/assets/icon.png" sizes="32x32" />
   <link rel="icon" href="/assets/icon.png" sizes="192x192" />
   <link rel="icon" href="/assets/icon.png" sizes="512x512" />
@@ -1303,7 +1311,6 @@ function getCookie(name) {
     const aliasDnsVerificationResult = document.getElementById('aliasDnsVerificationResult');
     const aliasList = document.getElementById('aliasList');
 
-    let deferredPrompt = null;
     let statusTimer = null;
     let currentAddress = '';
     let fallbackAddress = 'lnurl@yourdomain.com';
@@ -2800,39 +2807,6 @@ logoutBtn?.addEventListener('click', async () => {
       window.location.href = `${window.location.pathname}?setup=1`;
     });
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      await navigator.serviceWorker.register('/service-worker.js');
-      console.log('Service Worker registered for /app');
-    } catch (err) {
-      console.error('Service Worker registration failed', err);
-    }
-  });
-}
-
-window.addEventListener('beforeinstallprompt', (event) => {
-  event.preventDefault();
-  deferredPrompt = event;
-  installBtn.hidden = false;
-  console.log('beforeinstallprompt fired for /app');
-});
-
-installBtn.addEventListener('click', async () => {
-  if (!deferredPrompt) {
-    alert('Install-Prompt nicht verfügbar. Bitte /app einmal neu laden oder Browser-Menü nutzen.');
-    return;
-  }
-
-  deferredPrompt.prompt();
-
-  try {
-    await deferredPrompt.userChoice;
-  } catch {}
-
-  deferredPrompt = null;
-  installBtn.hidden = true;
-});
     (async () => {
       try {
         const forceSetup = new URLSearchParams(window.location.search).get('setup') === '1';
@@ -3131,6 +3105,9 @@ installBtn.addEventListener('click', async () => {
       "console.badge.qr_bolt12_address": "QR: BOLT12 Adresse",
       "console.loading_qr": "Lade QR...",
       "console.btn.install": "App installieren",
+      "console.btn.install_checking": "Installation wird geprüft…",
+      "console.btn.install_help": "Installationshilfe",
+      "console.install_manual": "Chrome bietet den Direktdialog gerade nicht an. Lade die Seite nach einer Deinstallation einmal neu. Falls der Button danach nicht erscheint, öffne in Chrome ⋮ und wähle ‘App installieren’ oder ‘Zum Startbildschirm hinzufügen’. Mit OK wird die Seite jetzt neu geladen.",
       "console.btn.copy_content": "Inhalt kopieren",
       "console.btn.wallet_open": "Wallet / WebLN",
       "console.btn.go_pay": "Zu Pay",
@@ -3238,6 +3215,9 @@ installBtn.addEventListener('click', async () => {
       "console.badge.qr_bolt12_address": "QR: BOLT12 address",
       "console.loading_qr": "Loading QR...",
       "console.btn.install": "Install app",
+      "console.btn.install_checking": "Checking installation…",
+      "console.btn.install_help": "Installation help",
+      "console.install_manual": "Chrome is not offering the direct install dialog right now. Reload the page once after uninstalling. If the button still does not appear, open Chrome’s ⋮ menu and choose ‘Install app’ or ‘Add to Home screen’. Press OK to reload now.",
       "console.btn.copy_content": "Copy content",
       "console.btn.wallet_open": "Wallet / WebLN",
       "console.btn.go_pay": "Go to Pay",

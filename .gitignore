@@ -38,3 +38,9 @@ patch_*.py
 # Editor / misc
 cookies.txt
 target/
+
+# Android companion local build state
+android-companion/.gradle/
+android-companion/.idea/
+android-companion/local.properties
+android-companion/**/build/

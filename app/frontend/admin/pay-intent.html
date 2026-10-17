@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Open in BOLT12 Pay</title>
+    <style>
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+        color: #eef2ff;
+        background: #0b1220;
+        font-family: system-ui, sans-serif;
+        text-align: center;
+      }
+      main {
+        max-width: 36rem;
+      }
+      a {
+        color: #f7931a;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>BOLT12 Pay</h1>
+      <p id="status">Opening the payment form…</p>
+      <p><a href="/pay">Open payment form</a></p>
+    </main>
+    <script>
+      (() => {
+        "use strict";
+
+        const STORAGE_KEY = "bolt12pay.incoming-lightning";
+        const MAX_TARGET_LENGTH = 8192;
+
+        function normalizeLightningTarget(raw) {
+          let value = String(raw || "").trim();
+          value = value.replace(/^lightning:\/\/?/i, "");
+          if (!value || value.length > MAX_TARGET_LENGTH) return "";
+          if (!/^[a-zA-Z0-9]+$/.test(value)) return "";
+
+          const lower = value.toLowerCase();
+          const isBolt12 = lower.startsWith("lno1");
+          const isBolt11 = /^(lnbc|lntb|lnbcrt)\d*[munp]?1/.test(lower);
+          return isBolt12 || isBolt11 ? value : "";
+        }
+
+        const params = new URLSearchParams(window.location.hash.slice(1));
+        const target = normalizeLightningTarget(params.get("lightning"));
+        history.replaceState(null, "", window.location.pathname);
+
+        try {
+          sessionStorage.removeItem(STORAGE_KEY);
+        } catch {}
+
+        if (!target) {
+          document.getElementById("status").textContent =
+            "Unsupported or invalid Lightning payment link.";
+          return;
+        }
+
+        try {
+          sessionStorage.setItem(STORAGE_KEY, target);
+          window.location.replace("/pay");
+        } catch {
+          document.getElementById("status").textContent =
+            "The payment link could not be handed to BOLT12 Pay.";
+        }
+      })();
+    </script>
+  </body>
+</html>

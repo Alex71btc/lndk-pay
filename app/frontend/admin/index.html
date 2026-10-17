@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f172a" />
     <link rel="manifest" href="/pay.webmanifest" />
+    <script
+      src="/pwa-install.js"
+      data-manifest="/pay.webmanifest"
+      data-label-ready="nav.install"
+      data-label-checking="nav.install_checking"
+      data-label-help="nav.install_help"
+      data-label-manual="nav.install_manual"
+    ></script>
 
     <link rel="icon" href="/assets/icon.png" sizes="32x32" />
     <link rel="icon" href="/assets/icon.png" sizes="192x192" />
@@ -1129,7 +1137,7 @@
         >
       </div>
       <div class="topActions">
-        <button class="secondary" id="installBtn" type="button">
+        <button class="secondary" id="installBtn" type="button" hidden>
           <span data-i18n="nav.install">Pay-App installieren</span>
         </button>
         <button
@@ -3308,7 +3316,6 @@
       });
 
       let statusTimer = null;
-      let deferredPrompt = null;
       let html5Qr = null;
       let scanTarget = "decode";
       let scannerZoomFeature = null;
@@ -5518,6 +5525,50 @@
 
       function normalizePaymentInput(raw) {
         return normalizeScannedText(raw);
+      }
+
+      const INCOMING_LIGHTNING_STORAGE_KEY =
+        "bolt12pay.incoming-lightning";
+
+      function consumeIncomingLightningIntent() {
+        let incoming = "";
+
+        try {
+          incoming = String(
+            sessionStorage.getItem(INCOMING_LIGHTNING_STORAGE_KEY) || "",
+          ).trim();
+          sessionStorage.removeItem(INCOMING_LIGHTNING_STORAGE_KEY);
+        } catch {}
+
+        if (!incoming && window.location.hash.startsWith("#lightning=")) {
+          try {
+            incoming = new URLSearchParams(
+              window.location.hash.slice(1),
+            ).get("lightning") || "";
+          } catch {}
+        }
+
+        if (window.location.hash) {
+          history.replaceState(null, "", window.location.pathname);
+        }
+
+        const normalized = normalizePaymentInput(incoming);
+        const kind = detectPaymentType(normalized);
+
+        if (!normalized) return;
+        if (kind !== "bolt11" && kind !== "bolt12") {
+          setStatus(window.__t("intent.unsupported"), "error", true);
+          return;
+        }
+
+        payOfferInput.value = normalized;
+        payAmountInput.value = "";
+        payerNoteInput.value = "";
+        updatePayUiForInput();
+        payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
+        payOfferInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        payOfferInput.focus();
+        setStatus(window.__t("intent.review"), "warn", true);
       }
 
       function getDefaultAddressDomain() {
@@ -7744,32 +7795,6 @@
         }
       }
 
-      window.addEventListener("beforeinstallprompt", (event) => {
-        event.preventDefault();
-        deferredPrompt = event;
-        const installBtn = document.getElementById("installBtn");
-        installBtn.hidden = false;
-      });
-
-      document
-        .getElementById("installBtn")
-        .addEventListener("click", async () => {
-          if (!deferredPrompt) {
-            alert(
-              "Install-Prompt nicht verfügbar (Service Worker / Browser prüfen)",
-            );
-            return;
-          }
-
-          deferredPrompt.prompt();
-
-          try {
-            await deferredPrompt.userChoice;
-          } catch {}
-
-          deferredPrompt = null;
-        });
-
       document
         .getElementById("createOfferBtn")
         .addEventListener("click", async () => {
@@ -8682,11 +8707,9 @@
 
       document.addEventListener("DOMContentLoaded", async () => {
         initAdminPageUi();
+        consumeIncomingLightningIntent();
         await initAdminPageData();
       });
-
-      if ("serviceWorker" in navigator) {
-      }
     </script>
 
     <script>
@@ -8808,6 +8831,10 @@
             "ph.comment_not_for_bolt11": "Kommentar nicht für BOLT11",
             "ph.comment_from_invoice": "Kommentar kommt aus Invoice",
             "nav.install": "Pay-App installieren",
+            "nav.install_checking": "Installation wird geprüft…",
+            "nav.install_help": "Installationshilfe",
+            "nav.install_manual":
+              "Chrome bietet den Direktdialog gerade nicht an. Lade die Seite nach einer Deinstallation einmal neu. Falls der Button danach nicht erscheint, öffne in Chrome ⋮ und wähle ‘App installieren’ oder ‘Zum Startbildschirm hinzufügen’. Mit OK wird die Seite jetzt neu geladen.",
             "nav.console": "Zur Console",
             "nav.qr_decode": "QR → Decode",
             "nav.qr_pay": "QR → Pay",
@@ -9243,6 +9270,10 @@
             "pay.summary.invoice_amount_from_invoice":
               "⚡ Betrag aus Invoice übernommen",
             "pay.summary.comment": "📝 Kommentar:",
+            "intent.review":
+              "Zahlungslink übernommen. Bitte Ziel und Betrag prüfen und die Zahlung ausdrücklich starten.",
+            "intent.unsupported":
+              "Der übergebene Link ist keine unterstützte BOLT11- oder BOLT12-Zahlung.",
           },
           en: {
             "title.pay": "Pay offer",
@@ -9298,6 +9329,10 @@
             "ph.comment_not_for_bolt11": "Comment not available for BOLT11",
             "ph.comment_from_invoice": "Comment comes from invoice",
             "nav.install": "Install Pay App",
+            "nav.install_checking": "Checking installation…",
+            "nav.install_help": "Installation help",
+            "nav.install_manual":
+              "Chrome is not offering the direct install dialog right now. Reload the page once after uninstalling. If the button still does not appear, open Chrome’s ⋮ menu and choose ‘Install app’ or ‘Add to Home screen’. Press OK to reload now.",
             "nav.console": "Open Console",
             "nav.qr_decode": "QR → Decode",
             "nav.qr_pay": "QR → Pay",
@@ -9721,6 +9756,10 @@
             "pay.summary.invoice_amount_from_invoice":
               "⚡ Amount taken from invoice",
             "pay.summary.comment": "📝 Comment:",
+            "intent.review":
+              "Payment link loaded. Review the destination and amount, then explicitly start the payment.",
+            "intent.unsupported":
+              "The incoming link is not a supported BOLT11 or BOLT12 payment.",
           },
         };
         function t(key) {

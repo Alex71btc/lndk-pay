@@ -1,12 +1,20 @@
 {
   "name": "BOLT12 Console",
   "short_name": "BOLT12 App",
+  "id": "/app",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0f172a",
   "description": "BOLT12 Offer and Alias Console",
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "/public.webmanifest"
+    }
+  ],
   "icons": [
     {
       "src": "/assets/icon.png",
