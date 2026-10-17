@@ -19,9 +19,17 @@ class PwaInstallAssetsTest(unittest.TestCase):
         self.assertEqual("/app", console["id"])
         self.assertNotEqual(pay["id"], console["id"])
         self.assertEqual("/pay.webmanifest", pay["related_applications"][0]["url"])
+        self.assertEqual("/pay", pay["related_applications"][0]["id"])
         self.assertEqual(
             "/public.webmanifest", console["related_applications"][0]["url"]
         )
+        self.assertEqual("/app", console["related_applications"][0]["id"])
+
+    def test_service_worker_has_effective_network_only_fetch_handler(self):
+        service_worker = (PUBLIC / "service-worker.js").read_text()
+
+        self.assertIn('self.addEventListener("fetch"', service_worker)
+        self.assertIn("event.respondWith(fetch(event.request))", service_worker)
 
     def test_both_install_buttons_use_the_shared_state_controller(self):
         pay_html = (ADMIN / "index.html").read_text()
@@ -32,6 +40,9 @@ class PwaInstallAssetsTest(unittest.TestCase):
         self.assertIn('src="/pwa-install.js"', pay_html)
         self.assertIn('src="/pwa-install.js"', console_html)
         self.assertIn('navigator.serviceWorker.register(', controller)
+        self.assertIn("await registration.update()", controller)
+        self.assertIn("if (!window.isSecureContext)", controller)
+        self.assertIn('setButtonState("insecure")', controller)
         self.assertIn('window.addEventListener("beforeinstallprompt"', controller)
         self.assertIn('window.addEventListener("appinstalled"', controller)
         self.assertIn("navigator.getInstalledRelatedApps", controller)

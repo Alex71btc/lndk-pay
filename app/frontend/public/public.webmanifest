@@ -12,7 +12,8 @@
   "related_applications": [
     {
       "platform": "webapp",
-      "url": "/public.webmanifest"
+      "url": "/public.webmanifest",
+      "id": "/app"
     }
   ],
   "icons": [

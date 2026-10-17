@@ -12,7 +12,8 @@
   "related_applications": [
     {
       "platform": "webapp",
-      "url": "/pay.webmanifest"
+      "url": "/pay.webmanifest",
+      "id": "/pay"
     }
   ],
   "icons": [

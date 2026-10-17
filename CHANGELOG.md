@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.10] - 2026-10-17
+
+### Fixed
+
+- Restore Chrome's direct PWA installation prompt after uninstalling either web
+  app by using an effective network-only service worker fetch handler.
+- Declare each PWA's own manifest ID for reliable installed-state detection on
+  current desktop Chromium releases.
+- Explain that installation must use the configured HTTPS origin instead of an
+  insecure direct server port.
+
 ## [0.3.9] - 2026-10-17
 
 ### Added

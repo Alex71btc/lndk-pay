@@ -10,6 +10,10 @@
     checking: scriptOptions.labelChecking || "nav.install_checking",
     help: scriptOptions.labelHelp || "nav.install_help",
     manual: scriptOptions.labelManual || "nav.install_manual",
+    insecure:
+      scriptOptions.labelInsecure || "nav.install_https_required",
+    insecureHelp:
+      scriptOptions.labelInsecureHelp || "nav.install_https_help",
   };
   const RELOAD_MARKER = "bolt12pay.pwa-reinstall-reload";
   const promptWaiters = new Set();
@@ -92,6 +96,7 @@
       ready: [LABEL_KEYS.ready, "Install app"],
       checking: [LABEL_KEYS.checking, "Checking installation…"],
       help: [LABEL_KEYS.help, "Installation help"],
+      insecure: [LABEL_KEYS.insecure, "Open HTTPS to install"],
     };
     const [key, fallback] = labels[state] || labels.help;
     label.dataset.i18n = key;
@@ -177,6 +182,7 @@
         updateViaCache: "none",
       },
     );
+    await registration.update();
     await navigator.serviceWorker.ready;
     return registration;
   }
@@ -205,6 +211,16 @@
   }
 
   async function handleInstallClick() {
+    if (!window.isSecureContext) {
+      window.alert(
+        translated(
+          LABEL_KEYS.insecureHelp,
+          "This address does not use HTTPS. Open BOLT12 Pay through your configured HTTPS address before installing the PWA in Chrome. Chrome treats the HTTP and HTTPS addresses as separate apps.",
+        ),
+      );
+      return;
+    }
+
     if (deferredPrompt) {
       await showInstallPrompt();
       return;
@@ -218,7 +234,7 @@
       console.warn("Service Worker refresh failed", error);
     }
 
-    if (await waitForPrompt(1500)) {
+    if (await waitForPrompt(4000)) {
       await showInstallPrompt();
       return;
     }
@@ -257,6 +273,12 @@
 
     setupAndroidCompanionDownload();
     button.addEventListener("click", handleInstallClick);
+
+    if (!window.isSecureContext) {
+      setButtonState("insecure");
+      return;
+    }
+
     setButtonState("checking");
 
     try {

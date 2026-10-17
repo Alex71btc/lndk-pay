@@ -7,5 +7,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // no caching for dynamic landing / alias data
+  // Keep requests network-only. Chrome's programmatic PWA install prompt still
+  // requires an effective fetch handler and ignores an empty listener.
+  event.respondWith(fetch(event.request));
 });
