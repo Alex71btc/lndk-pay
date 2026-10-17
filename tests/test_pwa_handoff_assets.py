@@ -65,6 +65,9 @@ class AndroidCompanionAssetsTest(unittest.TestCase):
         self.assertTrue(
             (ANDROID / "res" / "mipmap-anydpi-v26" / "ic_launcher.xml").exists()
         )
+        self.assertTrue(
+            (ANDROID / "res" / "drawable-nodpi" / "bolt12_pay_maskable.png").exists()
+        )
 
 
 if __name__ == "__main__":
