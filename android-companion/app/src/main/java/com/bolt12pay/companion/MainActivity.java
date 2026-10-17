@@ -3,7 +3,6 @@ package com.bolt12pay.companion;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -21,16 +20,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 public final class MainActivity extends Activity {
-    private static final String PREFS_NAME = "bolt12_pay_companion";
-    private static final String PREF_SERVER_URL = "server_url";
-
-    private SharedPreferences preferences;
+    private ServerSettings serverSettings;
     private String pendingTarget;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        serverSettings = new ServerSettings(this);
         handleIntent(getIntent());
     }
 
@@ -55,7 +51,7 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        String serverUrl = ServerUrl.normalize(preferences.getString(PREF_SERVER_URL, ""));
+        String serverUrl = serverSettings.load();
         if (pendingTarget != null && serverUrl != null) {
             openPaymentForm(serverUrl, pendingTarget);
             return;
@@ -140,7 +136,10 @@ public final class MainActivity extends Activity {
                         return;
                     }
 
-                    preferences.edit().putString(PREF_SERVER_URL, normalized).apply();
+                    if (!serverSettings.save(normalized)) {
+                        serverInput.setError(getString(R.string.server_save_error));
+                        return;
+                    }
                     if (pendingTarget != null) {
                         openPaymentForm(normalized, pendingTarget);
                     } else {

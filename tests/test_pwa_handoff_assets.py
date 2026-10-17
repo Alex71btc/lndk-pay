@@ -79,6 +79,20 @@ class AndroidCompanionAssetsTest(unittest.TestCase):
         self.assertIn('android:width="58dp"', foreground)
         self.assertIn('@drawable/bolt12_pay_logo', foreground)
 
+    def test_server_origin_is_stored_redundantly_and_synchronously(self):
+        settings = (
+            ANDROID
+            / "java"
+            / "com"
+            / "bolt12pay"
+            / "companion"
+            / "ServerSettings.java"
+        ).read_text()
+
+        self.assertIn("AtomicFile", settings)
+        self.assertIn(".commit()", settings)
+        self.assertIn("server-url-v1", settings)
+
 
 if __name__ == "__main__":
     unittest.main()

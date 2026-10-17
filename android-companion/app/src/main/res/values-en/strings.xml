@@ -6,6 +6,7 @@
     <string name="server_url_hint">https://pay.example.com</string>
     <string name="server_url_help">Use the exact HTTPS base address where your current BOLT12 Pay app and /pay-intent are available.</string>
     <string name="server_url_error">Enter an HTTPS address without a path, credentials, query, or fragment.</string>
+    <string name="server_save_error">The server address could not be saved permanently.</string>
     <string name="save_server">Save server</string>
     <string name="save_and_continue">Save and open payment form</string>
     <string name="server_saved">Server address saved</string>

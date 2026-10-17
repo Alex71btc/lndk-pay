@@ -6,6 +6,7 @@
     <string name="server_url_hint">https://pay.example.com</string>
     <string name="server_url_help">Verwende genau die HTTPS-Basisadresse, unter der deine aktuelle BOLT12-Pay-App und /pay-intent erreichbar sind.</string>
     <string name="server_url_error">Bitte eine HTTPS-Adresse ohne Pfad, Login-Daten, Query oder Fragment eingeben.</string>
+    <string name="server_save_error">Die Server-Adresse konnte nicht dauerhaft gespeichert werden.</string>
     <string name="save_server">Server speichern</string>
     <string name="save_and_continue">Speichern und Zahlungsmaske öffnen</string>
     <string name="server_saved">Server-Adresse gespeichert</string>
