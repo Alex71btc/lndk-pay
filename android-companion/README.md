@@ -6,10 +6,11 @@ BIP321 `bitcoin:?lno=...` handoff. It passes only a validated BOLT11/BOLT12 targ
 the existing BOLT12 Pay web payment form. Bitcoin-only, Lightning Address, and LNURL
 inputs are rejected.
 
-The configured server must be a clean HTTPS origin. Payment data is placed in a URL
-fragment and moved into same-tab `sessionStorage` by `/pay-intent`, so it is not sent in
-HTTP requests or login redirect parameters. The web UI only pre-fills the payment form;
-the user must still review and explicitly start every payment.
+The configured server must be the exact clean HTTPS origin where this version of the
+BOLT12 Pay web app and its `/pay-intent` route are available. Payment data is placed in
+a URL fragment and moved into same-tab `sessionStorage` by `/pay-intent`, so it is not
+sent in HTTP requests or login redirect parameters. The web UI only pre-fills the
+payment form; the user must still review and explicitly start every payment.
 
 ## Test from Android Studio
 

@@ -4,6 +4,7 @@
     <string name="setup_title">Connect BOLT12 Pay</string>
     <string name="setup_explanation">Enter the public HTTPS address of your existing BOLT12 Pay web app. The companion receives BOLT11/BOLT12 links and Amethyst\'s BIP321 handoff and opens them there for review.</string>
     <string name="server_url_hint">https://pay.example.com</string>
+    <string name="server_url_help">Use the exact HTTPS base address where your current BOLT12 Pay app and /pay-intent are available.</string>
     <string name="server_url_error">Enter an HTTPS address without a path, credentials, query, or fragment.</string>
     <string name="save_server">Save server</string>
     <string name="save_and_continue">Save and open payment form</string>

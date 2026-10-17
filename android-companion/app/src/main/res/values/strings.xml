@@ -4,6 +4,7 @@
     <string name="setup_title">BOLT12 Pay verbinden</string>
     <string name="setup_explanation">Trage die öffentliche HTTPS-Adresse deiner bestehenden BOLT12-Pay-Web-App ein. Die Companion-App empfängt BOLT11/BOLT12-Links und Amethysts BIP321-Übergabe und öffnet sie dort zur Prüfung.</string>
     <string name="server_url_hint">https://pay.example.com</string>
+    <string name="server_url_help">Verwende genau die HTTPS-Basisadresse, unter der deine aktuelle BOLT12-Pay-App und /pay-intent erreichbar sind.</string>
     <string name="server_url_error">Bitte eine HTTPS-Adresse ohne Pfad, Login-Daten, Query oder Fragment eingeben.</string>
     <string name="save_server">Server speichern</string>
     <string name="save_and_continue">Speichern und Zahlungsmaske öffnen</string>

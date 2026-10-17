@@ -113,6 +113,14 @@ public final class MainActivity extends Activity {
         serverInput.setMinHeight(dp(52));
         content.addView(serverInput);
 
+        TextView serverHelp =
+                text(
+                        getString(R.string.server_url_help),
+                        13,
+                        Color.rgb(170, 180, 198));
+        serverHelp.setPadding(dp(12), dp(8), dp(12), 0);
+        content.addView(serverHelp);
+
         Button saveButton = new Button(this);
         saveButton.setText(
                 pendingTarget == null ? R.string.save_server : R.string.save_and_continue);
