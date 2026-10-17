@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:width="108dp"
-        android:height="108dp"
+        android:width="58dp"
+        android:height="58dp"
         android:gravity="center">
         <bitmap
             android:gravity="fill"
-            android:src="@drawable/bolt12_pay_maskable" />
+            android:src="@drawable/bolt12_pay_logo" />
     </item>
 </layer-list>

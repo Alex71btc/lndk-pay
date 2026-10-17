@@ -65,9 +65,11 @@ class AndroidCompanionAssetsTest(unittest.TestCase):
         self.assertTrue(
             (ANDROID / "res" / "mipmap-anydpi-v26" / "ic_launcher.xml").exists()
         )
-        self.assertTrue(
-            (ANDROID / "res" / "drawable-nodpi" / "bolt12_pay_maskable.png").exists()
-        )
+        foreground = (
+            ANDROID / "res" / "drawable" / "ic_launcher_foreground.xml"
+        ).read_text()
+        self.assertIn('android:width="58dp"', foreground)
+        self.assertIn('@drawable/bolt12_pay_logo', foreground)
 
 
 if __name__ == "__main__":
