@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.11] - 2026-10-17
+
+### Fixed
+
+- Provide real 192x192 and 512x512 `any` icons whose pixel dimensions match
+  the PWA manifests so Chrome can complete its installability check.
+- Explain that Chromium does not offer PWA installation from Incognito or
+  Private browsing windows and that Firefox on Linux has no direct PWA prompt.
+
 ## [0.3.10] - 2026-10-17
 
 ### Fixed

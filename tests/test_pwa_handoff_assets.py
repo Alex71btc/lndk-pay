@@ -1,4 +1,5 @@
 import json
+import struct
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,13 @@ ADMIN = ROOT / "app" / "frontend" / "admin"
 PUBLIC = ROOT / "app" / "frontend" / "public"
 ANDROID = ROOT / "android-companion" / "app" / "src" / "main"
 BACKEND = ROOT / "app" / "backend" / "app.py"
+
+
+def png_size(path):
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise AssertionError(f"Not a PNG file: {path}")
+    return struct.unpack(">II", data[16:24])
 
 
 class PwaInstallAssetsTest(unittest.TestCase):
@@ -31,6 +39,23 @@ class PwaInstallAssetsTest(unittest.TestCase):
         self.assertIn('self.addEventListener("fetch"', service_worker)
         self.assertIn("event.respondWith(fetch(event.request))", service_worker)
 
+    def test_manifests_reference_icons_with_truthful_installable_sizes(self):
+        for manifest_path in (
+            ADMIN / "pay.webmanifest",
+            PUBLIC / "public.webmanifest",
+        ):
+            manifest = json.loads(manifest_path.read_text())
+            icons = {icon["sizes"]: icon for icon in manifest["icons"]}
+
+            self.assertEqual("/assets/icon-192.png", icons["192x192"]["src"])
+            self.assertEqual(
+                (192, 192), png_size(ROOT / "app" / icons["192x192"]["src"].lstrip("/"))
+            )
+            self.assertIn("any", icons["512x512"]["purpose"].split())
+            self.assertEqual(
+                (512, 512), png_size(ROOT / "app" / icons["512x512"]["src"].lstrip("/"))
+            )
+
     def test_both_install_buttons_use_the_shared_state_controller(self):
         pay_html = (ADMIN / "index.html").read_text()
         console_html = (PUBLIC / "index.html").read_text()
@@ -47,6 +72,13 @@ class PwaInstallAssetsTest(unittest.TestCase):
         self.assertIn('window.addEventListener("appinstalled"', controller)
         self.assertIn("navigator.getInstalledRelatedApps", controller)
         self.assertIn('(display-mode: standalone)', controller)
+
+    def test_install_help_explains_firefox_linux_limit(self):
+        pay_html = (ADMIN / "index.html").read_text()
+        console_html = (PUBLIC / "index.html").read_text()
+
+        self.assertIn("Firefox unter Linux", pay_html)
+        self.assertIn("Firefox unter Linux", console_html)
 
     def test_android_companion_download_is_android_only(self):
         pay_html = (ADMIN / "index.html").read_text()

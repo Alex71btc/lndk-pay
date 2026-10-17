@@ -247,7 +247,7 @@
         )
       : translated(
           LABEL_KEYS.manual,
-          "Chrome is not offering the direct install dialog right now. Reload once after uninstalling, or use Chrome’s menu and choose ‘Install app’ or ‘Add to Home screen’. Press OK to reload now.",
+          "This browser is not offering the direct install dialog right now. Firefox on Linux does not currently support this direct PWA installation; use Chromium or Chrome there. Incognito or Private mode is also unsupported. Open the page in a normal browser tab, interact with it once, and reload once after uninstalling. Alternatively, use the browser menu and choose ‘Install app’ or ‘Add to Home screen’. Press OK to reload now.",
         );
     if (window.confirm(message)) window.location.reload();
   }
