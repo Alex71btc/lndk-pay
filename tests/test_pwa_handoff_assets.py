@@ -58,7 +58,7 @@ class AndroidCompanionAssetsTest(unittest.TestCase):
 
         self.assertIn('android:scheme="lightning"', manifest)
         self.assertIn('android:scheme="bitcoin"', manifest)
-        self.assertIn('android:icon="@mipmap/ic_launcher"', manifest)
+        self.assertIn('android:icon="@mipmap/ic_app_info"', manifest)
         self.assertIn('android:name=".PaymentLinkReceiver"', manifest)
         self.assertIn('android:icon="@mipmap/ic_payment_handler"', manifest)
         self.assertTrue(
@@ -66,6 +66,9 @@ class AndroidCompanionAssetsTest(unittest.TestCase):
         )
         self.assertTrue(
             (ANDROID / "res" / "mipmap-nodpi" / "ic_payment_handler.png").exists()
+        )
+        self.assertTrue(
+            (ANDROID / "res" / "mipmap-nodpi" / "ic_app_info.png").exists()
         )
         self.assertTrue(
             (ANDROID / "res" / "mipmap-anydpi-v26" / "ic_launcher.xml").exists()
