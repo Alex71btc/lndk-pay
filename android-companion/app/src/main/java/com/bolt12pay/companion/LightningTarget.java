@@ -9,6 +9,10 @@ final class LightningTarget {
     static final int MAX_LENGTH = 8192;
 
     private static final Pattern ALPHANUMERIC = Pattern.compile("^[a-zA-Z0-9]+$");
+    private static final Pattern LIGHTNING_ADDRESS_LOCAL =
+            Pattern.compile("^[a-zA-Z0-9_+.-]+$");
+    private static final Pattern DOMAIN_LABEL =
+            Pattern.compile("^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$");
     private static final Pattern BOLT11_PREFIX =
             Pattern.compile("^(lnbc|lntb|lnbcrt)\\d*[munp]?1.*$");
 
@@ -20,6 +24,8 @@ final class LightningTarget {
         String value = unwrapPaymentUri(raw.trim());
         if (value == null) return null;
         if (value.isEmpty() || value.length() > MAX_LENGTH) return null;
+
+        if (isLightningAddress(value)) return value;
         if (!ALPHANUMERIC.matcher(value).matches()) return null;
 
         String lower = value.toLowerCase(Locale.ROOT);
@@ -34,7 +40,7 @@ final class LightningTarget {
 
     private static String unwrapPaymentUri(String raw) {
         if (raw.regionMatches(true, 0, "lightning:", 0, "lightning:".length())) {
-            return raw.replaceFirst("(?i)^lightning:(//)?", "");
+            return percentDecode(raw.replaceFirst("(?i)^lightning:(//)?", ""));
         }
 
         if (raw.regionMatches(true, 0, "bitcoin:?", 0, "bitcoin:?".length())) {
@@ -46,6 +52,37 @@ final class LightningTarget {
         }
 
         return raw;
+    }
+
+    private static boolean isLightningAddress(String value) {
+        if (value.length() > 320) return false;
+
+        int separator = value.indexOf('@');
+        if (separator <= 0 || separator != value.lastIndexOf('@')) return false;
+
+        String local = value.substring(0, separator);
+        String domain = value.substring(separator + 1);
+        if (local.length() > 64
+                || local.startsWith(".")
+                || local.endsWith(".")
+                || local.contains("..")
+                || !LIGHTNING_ADDRESS_LOCAL.matcher(local).matches()) {
+            return false;
+        }
+        if (domain.isEmpty()
+                || domain.length() > 253
+                || domain.startsWith(".")
+                || domain.endsWith(".")
+                || domain.contains("..")) {
+            return false;
+        }
+
+        String[] labels = domain.split("\\.", -1);
+        if (labels.length < 2) return false;
+        for (String label : labels) {
+            if (!DOMAIN_LABEL.matcher(label).matches()) return false;
+        }
+        return true;
     }
 
     private static String extractBip321Target(String rawQuery) {

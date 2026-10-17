@@ -3,6 +3,8 @@
 
   const scriptOptions = document.currentScript?.dataset || {};
   const MANIFEST_PATH = scriptOptions.manifest || "/pay.webmanifest";
+  const ANDROID_APK_PATH =
+    scriptOptions.androidApk || "/bolt12-pay-companion.apk";
   const LABEL_KEYS = {
     ready: scriptOptions.labelReady || "nav.install",
     checking: scriptOptions.labelChecking || "nav.install_checking",
@@ -42,6 +44,31 @@
       window.matchMedia("(display-mode: fullscreen)").matches ||
       window.navigator.standalone === true
     );
+  }
+
+  function isAndroid() {
+    return (
+      navigator.userAgentData?.platform === "Android" ||
+      /Android/i.test(navigator.userAgent || "")
+    );
+  }
+
+  function isIos() {
+    return (
+      /iPad|iPhone|iPod/i.test(navigator.userAgent || "") ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+    );
+  }
+
+  function setupAndroidCompanionDownload() {
+    const button = document.getElementById("androidCompanionBtn");
+    if (!button) return;
+
+    button.hidden = !isAndroid();
+    if (button.hidden) return;
+    button.addEventListener("click", () => {
+      window.location.assign(ANDROID_APK_PATH);
+    });
   }
 
   function translated(key, fallback) {
@@ -197,10 +224,15 @@
     }
 
     setButtonState("help");
-    const message = translated(
-      LABEL_KEYS.manual,
-      "Chrome is not offering the direct install dialog right now. Reload once after uninstalling, or use Chrome’s menu and choose ‘Install app’ or ‘Add to Home screen’. Press OK to reload now.",
-    );
+    const message = isIos()
+      ? translated(
+          "nav.install_manual_ios",
+          "Open this page in Safari, tap Share, and choose ‘Add to Home Screen’. Press OK to reload now.",
+        )
+      : translated(
+          LABEL_KEYS.manual,
+          "Chrome is not offering the direct install dialog right now. Reload once after uninstalling, or use Chrome’s menu and choose ‘Install app’ or ‘Add to Home screen’. Press OK to reload now.",
+        );
     if (window.confirm(message)) window.location.reload();
   }
 
@@ -223,6 +255,7 @@
     const button = document.getElementById("installBtn");
     if (!button) return;
 
+    setupAndroidCompanionDownload();
     button.addEventListener("click", handleInstallClick);
     setButtonState("checking");
 
@@ -258,6 +291,8 @@
 
   window.Bolt12PwaInstall = {
     isStandalone,
+    isAndroid,
+    isIos,
     refresh: refreshInstallState,
   };
 })();

@@ -26,4 +26,15 @@ public final class ServerUrlTest {
                 "https://pay.example.com/pay-intent#lightning=lno1abcdef123", result);
         assertFalse(result.contains("?"));
     }
+
+    @Test
+    public void percentEncodesLightningAddressesInTheFragment() {
+        String result = ServerUrl.paymentHandoff(
+                "https://pay.example.com", "lightning:tips+nostr@pay.example.com");
+
+        assertEquals(
+                "https://pay.example.com/pay-intent#lightning=tips%2Bnostr%40pay.example.com",
+                result);
+        assertFalse(result.contains("@"));
+    }
 }

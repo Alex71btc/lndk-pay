@@ -13,6 +13,19 @@ public final class LightningTargetTest {
     }
 
     @Test
+    public void acceptsLightningAddressesFromLightningAndBip321Uris() {
+        assertEquals(
+                "satoshi@alex71btc.com",
+                LightningTarget.normalize("lightning:satoshi@alex71btc.com"));
+        assertEquals(
+                "satoshi@alex71btc.com",
+                LightningTarget.normalize("lightning://satoshi%40alex71btc.com"));
+        assertEquals(
+                "tips+nostr@pay.example.com",
+                LightningTarget.normalize("bitcoin:?lightning=tips%2Bnostr%40pay.example.com"));
+    }
+
+    @Test
     public void acceptsAmethystBip321Bolt12Uris() {
         assertEquals(
                 "lno1abcdef123",
@@ -31,6 +44,10 @@ public final class LightningTargetTest {
     @Test
     public void rejectsUnsupportedOrAmbiguousTargets() {
         assertNull(LightningTarget.normalize("lightning:lnurl1abcdef"));
+        assertNull(LightningTarget.normalize("lightning:satoshi@localhost"));
+        assertNull(LightningTarget.normalize("lightning:.satoshi@example.com"));
+        assertNull(LightningTarget.normalize("lightning:satoshi@example..com"));
+        assertNull(LightningTarget.normalize("lightning:satoshi@-example.com"));
         assertNull(LightningTarget.normalize("lightning:lno1abc?amount=1"));
         assertNull(LightningTarget.normalize("https://example.com"));
         assertNull(LightningTarget.normalize("lNo1MixedCase"));

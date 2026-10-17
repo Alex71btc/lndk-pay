@@ -1,10 +1,9 @@
 # BOLT12 Pay Android Companion
 
 This is a deliberately small Android intent receiver, not a wallet. It registers for
-`lightning:` links containing BOLT11 invoices or BOLT12 offers and for Amethyst's
-BIP321 `bitcoin:?lno=...` handoff. It passes only a validated BOLT11/BOLT12 target to
-the existing BOLT12 Pay web payment form. Bitcoin-only, Lightning Address, and LNURL
-inputs are rejected.
+`lightning:` links containing BOLT11 invoices, BOLT12 offers, or Lightning addresses
+and for Amethyst's BIP321 handoff. It passes only a validated Lightning target to the
+existing BOLT12 Pay web payment form. Bitcoin-only and raw LNURL inputs are rejected.
 
 The configured server must be the exact clean HTTPS origin where this version of the
 BOLT12 Pay web app and its `/pay-intent` route are available. Payment data is placed in
@@ -22,6 +21,7 @@ payment form; the user must still review and explicitly start every payment.
    ```text
    adb shell am start -a android.intent.action.VIEW -d 'lightning:lno1abcdef123'
    adb shell am start -a android.intent.action.VIEW -d 'lightning:lnbc10u1abcdef'
+   adb shell am start -a android.intent.action.VIEW -d 'lightning:satoshi@pay.example.com'
    adb shell am start -a android.intent.action.VIEW -d 'bitcoin:?lno=lno1abcdef123'
    ```
 

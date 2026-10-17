@@ -12,6 +12,7 @@
       data-label-checking="nav.install_checking"
       data-label-help="nav.install_help"
       data-label-manual="nav.install_manual"
+      data-android-apk="/bolt12-pay-companion.apk"
     ></script>
 
     <link rel="icon" href="/assets/icon.png" sizes="32x32" />
@@ -1137,6 +1138,16 @@
         >
       </div>
       <div class="topActions">
+        <button
+          class="secondary"
+          id="androidCompanionBtn"
+          type="button"
+          hidden
+        >
+          <span data-i18n="nav.android_companion"
+            >Android Companion herunterladen</span
+          >
+        </button>
         <button class="secondary" id="installBtn" type="button" hidden>
           <span data-i18n="nav.install">Pay-App installieren</span>
         </button>
@@ -5556,7 +5567,11 @@
         const kind = detectPaymentType(normalized);
 
         if (!normalized) return;
-        if (kind !== "bolt11" && kind !== "bolt12") {
+        if (
+          kind !== "bolt11" &&
+          kind !== "bolt12" &&
+          kind !== "ambiguous_address"
+        ) {
           setStatus(window.__t("intent.unsupported"), "error", true);
           return;
         }
@@ -8835,6 +8850,9 @@
             "nav.install_help": "Installationshilfe",
             "nav.install_manual":
               "Chrome bietet den Direktdialog gerade nicht an. Lade die Seite nach einer Deinstallation einmal neu. Falls der Button danach nicht erscheint, öffne in Chrome ⋮ und wähle ‘App installieren’ oder ‘Zum Startbildschirm hinzufügen’. Mit OK wird die Seite jetzt neu geladen.",
+            "nav.install_manual_ios":
+              "Öffne diese Seite in Safari, tippe auf ‘Teilen’ und wähle ‘Zum Home-Bildschirm’. Mit OK wird die Seite jetzt neu geladen.",
+            "nav.android_companion": "Android Companion herunterladen",
             "nav.console": "Zur Console",
             "nav.qr_decode": "QR → Decode",
             "nav.qr_pay": "QR → Pay",
@@ -9273,7 +9291,7 @@
             "intent.review":
               "Zahlungslink übernommen. Bitte Ziel und Betrag prüfen und die Zahlung ausdrücklich starten.",
             "intent.unsupported":
-              "Der übergebene Link ist keine unterstützte BOLT11- oder BOLT12-Zahlung.",
+              "Der übergebene Link ist keine unterstützte BOLT11-, BOLT12- oder Lightning-Address-Zahlung.",
           },
           en: {
             "title.pay": "Pay offer",
@@ -9333,6 +9351,9 @@
             "nav.install_help": "Installation help",
             "nav.install_manual":
               "Chrome is not offering the direct install dialog right now. Reload the page once after uninstalling. If the button still does not appear, open Chrome’s ⋮ menu and choose ‘Install app’ or ‘Add to Home screen’. Press OK to reload now.",
+            "nav.install_manual_ios":
+              "Open this page in Safari, tap Share, and choose ‘Add to Home Screen’. Press OK to reload now.",
+            "nav.android_companion": "Download Android Companion",
             "nav.console": "Open Console",
             "nav.qr_decode": "QR → Decode",
             "nav.qr_pay": "QR → Pay",
@@ -9759,7 +9780,7 @@
             "intent.review":
               "Payment link loaded. Review the destination and amount, then explicitly start the payment.",
             "intent.unsupported":
-              "The incoming link is not a supported BOLT11 or BOLT12 payment.",
+              "The incoming link is not a supported BOLT11, BOLT12, or Lightning Address payment.",
           },
         };
         function t(key) {

@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ADMIN = ROOT / "app" / "frontend" / "admin"
 PUBLIC = ROOT / "app" / "frontend" / "public"
 ANDROID = ROOT / "android-companion" / "app" / "src" / "main"
+BACKEND = ROOT / "app" / "backend" / "app.py"
 
 
 class PwaInstallAssetsTest(unittest.TestCase):
@@ -36,6 +37,23 @@ class PwaInstallAssetsTest(unittest.TestCase):
         self.assertIn("navigator.getInstalledRelatedApps", controller)
         self.assertIn('(display-mode: standalone)', controller)
 
+    def test_android_companion_download_is_android_only(self):
+        pay_html = (ADMIN / "index.html").read_text()
+        controller = (ADMIN / "pwa-install.js").read_text()
+        backend = BACKEND.read_text()
+        apk = ADMIN / "downloads" / "bolt12-pay-companion.apk"
+
+        self.assertIn('id="androidCompanionBtn"', pay_html)
+        self.assertIn('data-android-apk="/bolt12-pay-companion.apk"', pay_html)
+        self.assertIn("function isAndroid()", controller)
+        self.assertIn("button.hidden = !isAndroid()", controller)
+        self.assertIn("window.location.assign(ANDROID_APK_PATH)", controller)
+        self.assertIn("function isIos()", controller)
+        self.assertIn('@app.get("/bolt12-pay-companion.apk")', backend)
+        self.assertIn("application/vnd.android.package-archive", backend)
+        self.assertTrue(apk.exists())
+        self.assertTrue(apk.read_bytes().startswith(b"PK"))
+
 
 class PaymentIntentHandoffTest(unittest.TestCase):
     def test_handoff_uses_fragment_and_session_storage_only(self):
@@ -43,12 +61,14 @@ class PaymentIntentHandoffTest(unittest.TestCase):
         pay_html = (ADMIN / "index.html").read_text()
 
         self.assertIn("window.location.hash", bridge)
+        self.assertIn("function isLightningAddress(value)", bridge)
         self.assertIn("sessionStorage.setItem(STORAGE_KEY, target)", bridge)
         self.assertIn('window.location.replace("/pay")', bridge)
         self.assertNotIn("/api/pay-", bridge)
         self.assertNotIn("fetch(", bridge)
 
         self.assertIn("consumeIncomingLightningIntent();", pay_html)
+        self.assertIn('kind !== "ambiguous_address"', pay_html)
         self.assertIn('window.__t("intent.review")', pay_html)
 
 

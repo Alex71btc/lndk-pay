@@ -40,10 +40,52 @@
         const STORAGE_KEY = "bolt12pay.incoming-lightning";
         const MAX_TARGET_LENGTH = 8192;
 
+        function isLightningAddress(value) {
+          if (value.length > 320) return false;
+
+          const separator = value.indexOf("@");
+          if (separator <= 0 || separator !== value.lastIndexOf("@")) {
+            return false;
+          }
+
+          const local = value.slice(0, separator);
+          const domain = value.slice(separator + 1);
+          if (
+            local.length > 64 ||
+            local.startsWith(".") ||
+            local.endsWith(".") ||
+            local.includes("..") ||
+            !/^[a-zA-Z0-9_+.-]+$/.test(local)
+          ) {
+            return false;
+          }
+
+          if (
+            !domain ||
+            domain.length > 253 ||
+            domain.startsWith(".") ||
+            domain.endsWith(".") ||
+            domain.includes("..")
+          ) {
+            return false;
+          }
+
+          const labels = domain.split(".");
+          return (
+            labels.length >= 2 &&
+            labels.every((label) =>
+              /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(
+                label,
+              ),
+            )
+          );
+        }
+
         function normalizeLightningTarget(raw) {
           let value = String(raw || "").trim();
           value = value.replace(/^lightning:\/\/?/i, "");
           if (!value || value.length > MAX_TARGET_LENGTH) return "";
+          if (isLightningAddress(value)) return value;
           if (!/^[a-zA-Z0-9]+$/.test(value)) return "";
 
           const lower = value.toLowerCase();

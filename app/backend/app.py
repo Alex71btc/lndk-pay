@@ -5950,6 +5950,22 @@ def pay_intent_page() -> FileResponse:
     )
 
 
+@app.get("/bolt12-pay-companion.apk")
+def android_companion_apk() -> FileResponse:
+    file = ADMIN_DIR / "downloads" / "bolt12-pay-companion.apk"
+    if not file.exists():
+        raise HTTPException(status_code=404, detail="Android companion APK not found")
+    return FileResponse(
+        file,
+        media_type="application/vnd.android.package-archive",
+        filename="bolt12-pay-companion.apk",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 from fastapi.responses import FileResponse
 
 @app.get("/icon.svg")
@@ -5972,6 +5988,7 @@ async def public_alias_page(alias_name: str):
         "service-worker.js",
         "pwa-install.js",
         "pay-intent",
+        "bolt12-pay-companion.apk",
         "public.webmanifest",
         "pay.webmanifest",
         "admin.webmanifest",
@@ -6804,6 +6821,7 @@ async def legacy_alias_redirect(alias_name: str):
         "service-worker.js",
         "pwa-install.js",
         "pay-intent",
+        "bolt12-pay-companion.apk",
         "public.webmanifest",
         "pay.webmanifest",
         "admin.webmanifest",

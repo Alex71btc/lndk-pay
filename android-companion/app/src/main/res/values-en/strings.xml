@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">BOLT12 Pay</string>
     <string name="setup_title">Connect BOLT12 Pay</string>
-    <string name="setup_explanation">Enter the public HTTPS address of your existing BOLT12 Pay web app. The companion receives BOLT11/BOLT12 links and Amethyst\'s BIP321 handoff and opens them there for review.</string>
+    <string name="setup_explanation">Enter the public HTTPS address of your existing BOLT12 Pay web app. The companion receives BOLT11/BOLT12 links, Lightning addresses, and Amethyst\'s BIP321 handoff and opens them there for review.</string>
     <string name="server_url_hint">https://pay.example.com</string>
     <string name="server_url_help">Use the exact HTTPS base address where your current BOLT12 Pay app and /pay-intent are available.</string>
     <string name="server_url_error">Enter an HTTPS address without a path, credentials, query, or fragment.</string>
@@ -13,7 +13,7 @@
     <string name="pending_payment">A Lightning link is waiting. Saving will only open the payment form.</string>
     <string name="safety_note">Payments are never automatic. BOLT12 Pay first shows the destination and amount in the existing web payment form.</string>
     <string name="invalid_link_title">Unsupported link</string>
-    <string name="invalid_link_message">Accepted inputs are lightning: links containing a BOLT11 invoice or BOLT12 offer and Amethyst\'s bitcoin:?lno=… handoff. Lightning addresses, LNURL, and Bitcoin-only payments are not forwarded.</string>
+    <string name="invalid_link_message">Accepted inputs are lightning: links containing a BOLT11 invoice, BOLT12 offer, or Lightning address, plus Amethyst\'s BIP321 handoff. LNURL and Bitcoin-only payments are not forwarded.</string>
     <string name="no_browser_title">No browser available</string>
     <string name="no_browser_message">No browser was found for the secure handoff to the BOLT12 Pay web app.</string>
 </resources>
