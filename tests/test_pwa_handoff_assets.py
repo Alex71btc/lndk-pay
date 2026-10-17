@@ -51,15 +51,38 @@ class PwaInstallAssetsTest(unittest.TestCase):
             PUBLIC / "public.webmanifest",
         ):
             manifest = json.loads(manifest_path.read_text())
-            icons = {icon["sizes"]: icon for icon in manifest["icons"]}
-
-            self.assertEqual("/assets/icon-192.png", icons["192x192"]["src"])
-            self.assertEqual(
-                (192, 192), png_size(ROOT / "app" / icons["192x192"]["src"].lstrip("/"))
+            icons = manifest["icons"]
+            icon_192 = next(
+                icon
+                for icon in icons
+                if icon["sizes"] == "192x192"
+                and "any" in icon["purpose"].split()
             )
-            self.assertIn("any", icons["512x512"]["purpose"].split())
+            icon_512 = next(
+                icon
+                for icon in icons
+                if icon["sizes"] == "512x512"
+                and "any" in icon["purpose"].split()
+            )
+            maskable_512 = next(
+                icon
+                for icon in icons
+                if icon["sizes"] == "512x512"
+                and "maskable" in icon["purpose"].split()
+            )
+
+            self.assertEqual("/assets/icon-192.png", icon_192["src"])
             self.assertEqual(
-                (512, 512), png_size(ROOT / "app" / icons["512x512"]["src"].lstrip("/"))
+                (192, 192), png_size(ROOT / "app" / icon_192["src"].lstrip("/"))
+            )
+            self.assertEqual("/assets/icon-512.png", icon_512["src"])
+            self.assertEqual(
+                (512, 512), png_size(ROOT / "app" / icon_512["src"].lstrip("/"))
+            )
+            self.assertEqual("/assets/icon-maskable.png", maskable_512["src"])
+            self.assertEqual(
+                (512, 512),
+                png_size(ROOT / "app" / maskable_512["src"].lstrip("/")),
             )
 
     def test_both_install_buttons_use_the_shared_state_controller(self):

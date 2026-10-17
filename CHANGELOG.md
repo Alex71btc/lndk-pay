@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.13] - 2026-10-17
+
+### Fixed
+
+- Provide separate standard 192x192 and 512x512 launcher icons plus a
+  dedicated 512x512 maskable Android icon so browsers no longer have to reuse
+  the maskable artwork for desktop integration.
+- Keep the shared Pay/Console PWA identity introduced in 0.3.12 while making
+  the Android install manifest requirements explicit.
+
 ## [0.3.12] - 2026-10-17
 
 ### Fixed
