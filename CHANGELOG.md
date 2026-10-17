@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.12] - 2026-10-17
+
+### Fixed
+
+- Use one shared BOLT12 Pay PWA identity for the Pay and Console views so
+  Chromium does not have to resolve two overlapping applications on the same
+  server origin.
+- Keep navigation between Pay and Console inside the installed app while
+  retaining the existing routes and data.
+
 ## [0.3.11] - 2026-10-17
 
 ### Fixed

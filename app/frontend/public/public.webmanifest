@@ -1,19 +1,19 @@
 {
-  "name": "BOLT12 Console",
-  "short_name": "BOLT12 App",
-  "id": "/app",
-  "start_url": "/app",
+  "name": "BOLT12 Pay",
+  "short_name": "BOLT12 Pay",
+  "id": "/pay",
+  "start_url": "/pay",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0f172a",
-  "description": "BOLT12 Offer and Alias Console",
+  "description": "Review and pay BOLT11 invoices and BOLT12 offers with your own node.",
   "prefer_related_applications": false,
   "related_applications": [
     {
       "platform": "webapp",
-      "url": "/public.webmanifest",
-      "id": "/app"
+      "url": "/pay.webmanifest",
+      "id": "/pay"
     }
   ],
   "icons": [

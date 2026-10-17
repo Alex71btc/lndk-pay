@@ -19,19 +19,25 @@ def png_size(path):
 
 
 class PwaInstallAssetsTest(unittest.TestCase):
-    def test_manifests_have_stable_distinct_ids_and_self_relationships(self):
+    def test_pay_and_console_use_one_stable_pwa_identity(self):
         pay = json.loads((ADMIN / "pay.webmanifest").read_text())
         console = json.loads((PUBLIC / "public.webmanifest").read_text())
+        pay_html = (ADMIN / "index.html").read_text()
+        console_html = (PUBLIC / "index.html").read_text()
 
         self.assertEqual("/pay", pay["id"])
-        self.assertEqual("/app", console["id"])
-        self.assertNotEqual(pay["id"], console["id"])
+        self.assertEqual(pay["id"], console["id"])
+        self.assertEqual(pay["start_url"], console["start_url"])
+        self.assertEqual(pay["scope"], console["scope"])
         self.assertEqual("/pay.webmanifest", pay["related_applications"][0]["url"])
         self.assertEqual("/pay", pay["related_applications"][0]["id"])
         self.assertEqual(
-            "/public.webmanifest", console["related_applications"][0]["url"]
+            "/pay.webmanifest", console["related_applications"][0]["url"]
         )
-        self.assertEqual("/app", console["related_applications"][0]["id"])
+        self.assertEqual("/pay", console["related_applications"][0]["id"])
+        self.assertIn('<link rel="manifest" href="/pay.webmanifest"', pay_html)
+        self.assertIn('<link rel="manifest" href="/pay.webmanifest"', console_html)
+        self.assertNotIn('<link rel="manifest" href="/public.webmanifest"', console_html)
 
     def test_service_worker_has_effective_network_only_fetch_handler(self):
         service_worker = (PUBLIC / "service-worker.js").read_text()
