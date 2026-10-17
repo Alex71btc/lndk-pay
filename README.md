@@ -16,6 +16,7 @@ Self-hosted Lightning payment and identity server with next-generation BOLT12 su
 - 🧾 Optional BOLT11 fallback invoices, created only on request
 - 🧠 Nostr identity (NIP-05 + Zaps)
 - 📱 QR-based payments
+- 🤖 Android Companion for BOLT11, BOLT12, Lightning Addresses and Amethyst BIP321 links
 - ☁️ Optional Cloudflare DNS automation
 - 🌐 Automatic Cloudflare DNS provisioning for BIP353 and LNURL
 - 🟢 Available in the official Start9 Community Registry
@@ -56,6 +57,24 @@ BOLT12 Pay is officially available on:
 
 - Umbrel App Store
 - StartOS Community Registry / Marketplace
+
+## Android Companion
+
+The optional **BOLT12 Pay Companion** lets Android hand BOLT11 invoices,
+BOLT12 offers, Lightning Addresses and Amethyst BIP321 links to your existing
+self-hosted BOLT12 Pay instance. The Companion never starts a payment
+automatically: it opens the normal BOLT12 Pay payment screen, where the target
+and amount can be reviewed and the payment must be confirmed explicitly.
+
+On Android, the mobile BOLT12 Pay page offers the signed APK for download. The
+Companion is available in German and English and keeps the configured server
+address during normal app updates.
+
+Users of an earlier debug build must uninstall it once before installing the
+signed release because the signing certificate changed. Future signed updates
+can be installed normally and preserve the saved server address.
+
+[Download the latest Android Companion release](https://github.com/Alex71btc/lndk-pay/releases/latest/download/bolt12-pay-companion.apk)
 
 ---
 
