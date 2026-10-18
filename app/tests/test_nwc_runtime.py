@@ -1,7 +1,8 @@
+import asyncio
 import json
 import time
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import backend.nwc_runtime as nwc_runtime
 
@@ -12,6 +13,29 @@ class FakeWebSocket:
 
     async def send(self, message):
         self.sent.append(json.loads(message))
+
+
+class FakeReceiveWebSocket(FakeWebSocket):
+    def __init__(self, messages):
+        super().__init__()
+        self.messages = list(messages)
+
+    async def recv(self):
+        message = self.messages.pop(0)
+        if isinstance(message, BaseException):
+            raise message
+        return json.dumps(message)
+
+
+class FakeConnectionContext:
+    def __init__(self, websocket):
+        self.websocket = websocket
+
+    async def __aenter__(self):
+        return self.websocket
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        return False
 
 
 class NwcRuntimeTests(unittest.IsolatedAsyncioTestCase):
@@ -54,6 +78,36 @@ class NwcRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 [],
                 json.dumps(["CLOSED", sub_id, "rate-limited: slow down"]),
             )
+
+    async def test_relay_loop_reconnects_after_closed_subscription(self):
+        relay = "wss://relay.example"
+        connections = [{
+            "name": "test",
+            "client_pubkey": "11" * 32,
+            "wallet_service_pubkey": "22" * 32,
+        }]
+        first_ws = FakeReceiveWebSocket([[
+            "CLOSED",
+            nwc_runtime._build_relay_subscription_id(relay),
+            "rate-limited: slow down",
+        ]])
+        second_ws = FakeReceiveWebSocket([asyncio.CancelledError()])
+        connect = Mock(side_effect=[
+            FakeConnectionContext(first_ws),
+            FakeConnectionContext(second_ws),
+        ])
+        delay = AsyncMock()
+
+        with (
+            patch.object(nwc_runtime.websockets, "connect", new=connect),
+            patch.object(nwc_runtime, "_publish_nwc_info_event", new=AsyncMock()),
+            patch.object(nwc_runtime.asyncio, "sleep", new=delay),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                await nwc_runtime.nwc_relay_loop(relay, connections)
+
+        self.assertEqual(connect.call_count, 2)
+        delay.assert_awaited_once()
 
     async def test_rejected_response_forces_reconnect_and_stays_pending(self):
         request = {
@@ -133,6 +187,47 @@ class NwcRuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(ws.sent, [["EVENT", matching_response]])
+
+    async def test_relay_loop_retries_rate_limited_response_after_reconnect(self):
+        relay = "wss://relay.example"
+        request = {
+            "id": "request-id",
+            "pubkey": "11" * 32,
+            "tags": [["p", "22" * 32]],
+        }
+        response = {"id": "response-id", "kind": 23195}
+        connections = [{
+            "name": "test",
+            "client_pubkey": "11" * 32,
+            "wallet_service_pubkey": "22" * 32,
+        }]
+        nwc_runtime._register_pending_nwc_response(request, response)
+
+        first_ws = FakeReceiveWebSocket([[
+            "OK",
+            "response-id",
+            False,
+            "rate-limited: slow down",
+        ]])
+        second_ws = FakeReceiveWebSocket([asyncio.CancelledError()])
+        connect = Mock(side_effect=[
+            FakeConnectionContext(first_ws),
+            FakeConnectionContext(second_ws),
+        ])
+        delay = AsyncMock()
+
+        with (
+            patch.object(nwc_runtime.websockets, "connect", new=connect),
+            patch.object(nwc_runtime, "_publish_nwc_info_event", new=AsyncMock()),
+            patch.object(nwc_runtime, "_send_nwc_relay_subscription", new=AsyncMock()),
+            patch.object(nwc_runtime.asyncio, "sleep", new=delay),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                await nwc_runtime.nwc_relay_loop(relay, connections)
+
+        self.assertEqual(first_ws.sent, [["EVENT", response]])
+        self.assertEqual(second_ws.sent, [["EVENT", response]])
+        delay.assert_awaited_once()
 
     async def test_duplicate_request_retries_response_without_reexecuting(self):
         event = {
