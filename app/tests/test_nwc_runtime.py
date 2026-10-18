@@ -18,14 +18,16 @@ class NwcRuntimeTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         nwc_runtime._nwc_requests_in_flight.clear()
         nwc_runtime._nwc_requests_seen.clear()
+        nwc_runtime._nwc_pending_responses.clear()
+        nwc_runtime._nwc_response_ids_by_request.clear()
         nwc_runtime._nwc_requests_seen_loaded = True
 
     async def test_shared_subscription_contains_all_wallet_keys_and_cursor(self):
         ws = FakeWebSocket()
         connections = [
-            {"wallet_service_pubkey": "bb" * 32},
-            {"wallet_service_pubkey": "aa" * 32},
-            {"wallet_service_pubkey": "bb" * 32},
+            {"wallet_service_pubkey": "bb" * 32, "client_pubkey": "22" * 32},
+            {"wallet_service_pubkey": "aa" * 32, "client_pubkey": "11" * 32},
+            {"wallet_service_pubkey": "bb" * 32, "client_pubkey": "22" * 32},
         ]
 
         await nwc_runtime._send_nwc_relay_subscription(
@@ -37,8 +39,122 @@ class NwcRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         request = ws.sent[0]
         self.assertEqual(request[0], "REQ")
+        self.assertEqual(request[2]["authors"], ["11" * 32, "22" * 32])
         self.assertEqual(request[2]["#p"], ["aa" * 32, "bb" * 32])
         self.assertEqual(request[2]["since"], 1234)
+
+    async def test_closed_active_subscription_forces_reconnect(self):
+        relay = "wss://relay.example"
+        sub_id = nwc_runtime._build_relay_subscription_id(relay)
+
+        with self.assertRaises(nwc_runtime.NwcRelaySubscriptionClosed):
+            await nwc_runtime.handle_nwc_relay_message(
+                FakeWebSocket(),
+                relay,
+                [],
+                json.dumps(["CLOSED", sub_id, "rate-limited: slow down"]),
+            )
+
+    async def test_rejected_response_forces_reconnect_and_stays_pending(self):
+        request = {
+            "id": "request-id",
+            "pubkey": "11" * 32,
+            "tags": [["p", "22" * 32]],
+        }
+        signed_response = {"id": "response-id", "kind": 23195}
+        nwc_runtime._register_pending_nwc_response(request, signed_response)
+
+        with self.assertRaises(nwc_runtime.NwcRelayPublishRejected):
+            await nwc_runtime.handle_nwc_relay_message(
+                FakeWebSocket(),
+                "wss://relay.example",
+                [],
+                json.dumps(["OK", "response-id", False, "rate-limited: slow down"]),
+            )
+
+        self.assertIn("response-id", nwc_runtime._nwc_pending_responses)
+
+    async def test_accepted_response_is_removed_from_retry_queue(self):
+        request = {
+            "id": "request-id",
+            "pubkey": "11" * 32,
+            "tags": [["p", "22" * 32]],
+        }
+        signed_response = {"id": "response-id", "kind": 23195}
+        nwc_runtime._register_pending_nwc_response(request, signed_response)
+
+        await nwc_runtime.handle_nwc_relay_message(
+            FakeWebSocket(),
+            "wss://relay.example",
+            [],
+            json.dumps(["OK", "response-id", True, ""]),
+        )
+
+        self.assertNotIn("response-id", nwc_runtime._nwc_pending_responses)
+
+    async def test_permanently_rejected_response_is_not_retried(self):
+        request = {
+            "id": "request-id",
+            "pubkey": "11" * 32,
+            "tags": [["p", "22" * 32]],
+        }
+        signed_response = {"id": "response-id", "kind": 23195}
+        nwc_runtime._register_pending_nwc_response(request, signed_response)
+
+        await nwc_runtime.handle_nwc_relay_message(
+            FakeWebSocket(),
+            "wss://relay.example",
+            [],
+            json.dumps(["OK", "response-id", False, "invalid: bad event"]),
+        )
+
+        self.assertNotIn("response-id", nwc_runtime._nwc_pending_responses)
+
+    async def test_reconnect_retries_only_responses_for_that_relay(self):
+        matching_request = {
+            "id": "matching-request",
+            "pubkey": "11" * 32,
+            "tags": [["p", "22" * 32]],
+        }
+        other_request = {
+            "id": "other-request",
+            "pubkey": "33" * 32,
+            "tags": [["p", "44" * 32]],
+        }
+        matching_response = {"id": "matching-response", "kind": 23195}
+        other_response = {"id": "other-response", "kind": 23195}
+        nwc_runtime._register_pending_nwc_response(matching_request, matching_response)
+        nwc_runtime._register_pending_nwc_response(other_request, other_response)
+        ws = FakeWebSocket()
+
+        await nwc_runtime._resend_pending_nwc_responses(
+            ws,
+            [{"client_pubkey": "11" * 32, "wallet_service_pubkey": "22" * 32}],
+        )
+
+        self.assertEqual(ws.sent, [["EVENT", matching_response]])
+
+    async def test_duplicate_request_retries_response_without_reexecuting(self):
+        event = {
+            "id": "request-id",
+            "pubkey": "11" * 32,
+            "tags": [["p", "22" * 32]],
+        }
+        signed_response = {"id": "response-id", "kind": 23195}
+        nwc_runtime._register_pending_nwc_response(event, signed_response)
+        nwc_runtime._nwc_requests_seen[event["id"]] = time.time()
+        execute = AsyncMock()
+        ws = FakeWebSocket()
+
+        with patch.object(
+            nwc_runtime,
+            "_handle_request_event_once",
+            new=execute,
+        ):
+            await nwc_runtime._handle_request_event(ws, {}, event)
+
+        execute.assert_not_awaited()
+        self.assertEqual(ws.sent, [["EVENT", signed_response]])
 
     async def test_duplicate_event_is_executed_only_once(self):
         event = {
