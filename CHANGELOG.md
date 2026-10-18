@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
   original wallet operation twice.
 - Narrow shared NWC relay subscriptions by both client author and wallet
   service pubkey to reduce unrelated relay traffic.
+- Avoid republishing the replaceable NWC info event during rapid reconnects
+  and advertise the supported invoice/history read methods consistently.
 
 ## [0.3.13] - 2026-10-17
 

@@ -27,6 +27,7 @@ NWC_RECONNECT_BASE_SECONDS = 5.0
 NWC_RECONNECT_MAX_SECONDS = 300.0
 NWC_STABLE_CONNECTION_SECONDS = 30.0
 NWC_INITIAL_LOOKBACK_SECONDS = 30
+NWC_INFO_REPUBLISH_SECONDS = 60 * 60
 NWC_REQUEST_DEDUP_TTL_SECONDS = 24 * 60 * 60
 NWC_REQUEST_DEDUP_MAX_ITEMS = 5000
 NWC_PENDING_RESPONSE_TTL_SECONDS = 10 * 60
@@ -99,7 +100,10 @@ def _build_info_event() -> dict[str, Any]:
         "kind": 13194,
         "created_at": int(time.time()),
         "tags": [],
-        "content": "get_info get_balance pay_invoice make_invoice",
+        "content": (
+            "get_info get_balance pay_invoice make_invoice "
+            "lookup_invoice list_transactions"
+        ),
     }
 
 
@@ -1337,6 +1341,7 @@ async def nwc_relay_loop(
     )
     failure_count = 0
     subscription_since = int(time.time()) - NWC_INITIAL_LOOKBACK_SECONDS
+    info_event_published_at: float | None = None
 
     while True:
         connected_at: float | None = None
@@ -1352,7 +1357,13 @@ async def nwc_relay_loop(
                 )
 
                 await _resend_pending_nwc_responses(ws, connections)
-                await _publish_nwc_info_event(ws, connections[0])
+                if (
+                    info_event_published_at is None
+                    or time.monotonic() - info_event_published_at
+                    >= NWC_INFO_REPUBLISH_SECONDS
+                ):
+                    await _publish_nwc_info_event(ws, connections[0])
+                    info_event_published_at = time.monotonic()
                 await _send_nwc_relay_subscription(
                     ws,
                     relay,

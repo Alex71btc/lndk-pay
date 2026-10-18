@@ -67,6 +67,13 @@ class NwcRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request[2]["#p"], ["aa" * 32, "bb" * 32])
         self.assertEqual(request[2]["since"], 1234)
 
+    def test_info_event_advertises_all_supported_read_methods(self):
+        methods = set(nwc_runtime._build_info_event()["content"].split())
+
+        self.assertIn("get_balance", methods)
+        self.assertIn("lookup_invoice", methods)
+        self.assertIn("list_transactions", methods)
+
     async def test_closed_active_subscription_forces_reconnect(self):
         relay = "wss://relay.example"
         sub_id = nwc_runtime._build_relay_subscription_id(relay)
@@ -97,16 +104,18 @@ class NwcRuntimeTests(unittest.IsolatedAsyncioTestCase):
             FakeConnectionContext(second_ws),
         ])
         delay = AsyncMock()
+        publish_info = AsyncMock()
 
         with (
             patch.object(nwc_runtime.websockets, "connect", new=connect),
-            patch.object(nwc_runtime, "_publish_nwc_info_event", new=AsyncMock()),
+            patch.object(nwc_runtime, "_publish_nwc_info_event", new=publish_info),
             patch.object(nwc_runtime.asyncio, "sleep", new=delay),
         ):
             with self.assertRaises(asyncio.CancelledError):
                 await nwc_runtime.nwc_relay_loop(relay, connections)
 
         self.assertEqual(connect.call_count, 2)
+        publish_info.assert_awaited_once()
         delay.assert_awaited_once()
 
     async def test_rejected_response_forces_reconnect_and_stays_pending(self):
