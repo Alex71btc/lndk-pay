@@ -76,6 +76,20 @@ can be installed normally and preserve the saved server address.
 
 [Download the latest Android Companion release](https://github.com/Alex71btc/lndk-pay/releases/latest/download/bolt12-pay-companion.apk)
 
+SHA256 checksum of the published signed APK:
+
+```text
+6839268cd9487ec115cdb67125a06c11ce08ffd60b5e22b6785afdd5cb3447d8  bolt12-pay-companion.apk
+```
+
+Verify the downloaded file on Linux:
+
+```bash
+sha256sum bolt12-pay-companion.apk
+```
+
+Compare the output with the checksum above before installing. This checksum applies to the current APK release and must be updated when the APK changes.
+
 ---
 
 # 🟣 Umbrel Setup
