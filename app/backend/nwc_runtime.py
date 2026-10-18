@@ -20,6 +20,8 @@ _nwc_request_lock = asyncio.Lock()
 _nwc_requests_in_flight: set[str] = set()
 _nwc_requests_seen: dict[str, float] = {}
 _nwc_requests_seen_loaded = False
+_nwc_pending_responses: dict[str, dict[str, Any]] = {}
+_nwc_response_ids_by_request: dict[str, str] = {}
 
 NWC_RECONNECT_BASE_SECONDS = 5.0
 NWC_RECONNECT_MAX_SECONDS = 300.0
@@ -27,6 +29,9 @@ NWC_STABLE_CONNECTION_SECONDS = 30.0
 NWC_INITIAL_LOOKBACK_SECONDS = 30
 NWC_REQUEST_DEDUP_TTL_SECONDS = 24 * 60 * 60
 NWC_REQUEST_DEDUP_MAX_ITEMS = 5000
+NWC_PENDING_RESPONSE_TTL_SECONDS = 10 * 60
+NWC_PENDING_RESPONSE_MAX_ITEMS = 500
+NWC_RETRYABLE_RELAY_REJECTION_PREFIXES = {"rate-limited", "error"}
 NWC_REQUEST_DEDUP_PATH = Path(
     os.getenv(
         "NWC_REQUEST_DEDUP_PATH",
@@ -37,6 +42,14 @@ NWC_REQUEST_DEDUP_PATH = Path(
         ),
     )
 )
+
+
+class NwcRelaySubscriptionClosed(ConnectionError):
+    """The relay closed the active request subscription."""
+
+
+class NwcRelayPublishRejected(ConnectionError):
+    """The relay rejected a response event that still needs delivery."""
 
 
 def _log(message: str) -> None:
@@ -222,6 +235,114 @@ def _build_nwc_error_content(code: str, message: str) -> str:
 # Nostr response sending
 # ---------------------------------------------------------------------------
 
+def _remove_pending_nwc_response(response_event_id: str) -> None:
+    pending = _nwc_pending_responses.pop(response_event_id, None)
+    if not pending:
+        return
+
+    request_event_id = str(pending.get("request_event_id") or "")
+    if _nwc_response_ids_by_request.get(request_event_id) == response_event_id:
+        _nwc_response_ids_by_request.pop(request_event_id, None)
+
+
+def _prune_pending_nwc_responses(now: float) -> None:
+    cutoff = now - NWC_PENDING_RESPONSE_TTL_SECONDS
+    for response_event_id, pending in list(_nwc_pending_responses.items()):
+        if float(pending.get("created_at") or 0) < cutoff:
+            _remove_pending_nwc_response(response_event_id)
+
+    overflow = len(_nwc_pending_responses) - NWC_PENDING_RESPONSE_MAX_ITEMS
+    if overflow > 0:
+        oldest = sorted(
+            _nwc_pending_responses.items(),
+            key=lambda item: float(item[1].get("created_at") or 0),
+        )
+        for response_event_id, _ in oldest[:overflow]:
+            _remove_pending_nwc_response(response_event_id)
+
+
+def _register_pending_nwc_response(
+    request_event: dict[str, Any],
+    signed_response: dict[str, Any],
+) -> None:
+    request_event_id = str(request_event.get("id") or "").strip()
+    response_event_id = str(signed_response.get("id") or "").strip()
+    if not request_event_id or not response_event_id:
+        return
+
+    previous_response_id = _nwc_response_ids_by_request.get(request_event_id)
+    if previous_response_id and previous_response_id != response_event_id:
+        _remove_pending_nwc_response(previous_response_id)
+
+    _nwc_pending_responses[response_event_id] = {
+        "request_event_id": request_event_id,
+        "client_pubkey": str(request_event.get("pubkey") or "").strip().lower(),
+        "wallet_service_pubkey": _extract_first_p_tag(request_event.get("tags") or []),
+        "signed_event": signed_response,
+        "created_at": time.time(),
+        "send_count": 0,
+    }
+    _nwc_response_ids_by_request[request_event_id] = response_event_id
+    _prune_pending_nwc_responses(time.time())
+
+
+def _pending_nwc_response_for_request(
+    request_event_id: str,
+) -> dict[str, Any] | None:
+    _prune_pending_nwc_responses(time.time())
+    response_event_id = _nwc_response_ids_by_request.get(request_event_id)
+    if not response_event_id:
+        return None
+    return _nwc_pending_responses.get(response_event_id)
+
+
+async def _send_pending_nwc_response(
+    ws,
+    pending: dict[str, Any],
+    *,
+    retry: bool,
+) -> None:
+    signed_event = pending.get("signed_event")
+    if not isinstance(signed_event, dict):
+        return
+
+    await ws.send(json.dumps(["EVENT", signed_event]))
+    pending["send_count"] = int(pending.get("send_count") or 0) + 1
+    _log(
+        f"response {'retried' if retry else 'sent'}: "
+        f"request_event_id={_short_identifier(pending.get('request_event_id'))} "
+        f"response_event_id={_short_identifier(signed_event.get('id'))} "
+        f"send_count={pending['send_count']}"
+    )
+
+
+async def _resend_pending_nwc_responses(
+    ws,
+    connections: list[dict[str, Any]],
+) -> None:
+    configured_pairs = {
+        (
+            str(conn.get("client_pubkey") or "").strip().lower(),
+            str(conn.get("wallet_service_pubkey") or "").strip().lower(),
+        )
+        for conn in connections
+    }
+    _prune_pending_nwc_responses(time.time())
+
+    pending_for_relay = [
+        pending
+        for pending in _nwc_pending_responses.values()
+        if (
+            str(pending.get("client_pubkey") or ""),
+            str(pending.get("wallet_service_pubkey") or ""),
+        ) in configured_pairs
+    ]
+    if pending_for_relay:
+        _log(f"retrying pending responses: count={len(pending_for_relay)}")
+    for pending in pending_for_relay:
+        await _send_pending_nwc_response(ws, pending, retry=True)
+
+
 async def _send_nwc_response_event(
     ws,
     request_event: dict[str, Any],
@@ -249,12 +370,12 @@ async def _send_nwc_response_event(
     }
 
     signed = _sign_nostr_event(response_event)
-    await ws.send(json.dumps(["EVENT", signed]))
-
-    _log(
-        f"response sent: request_event_id={_short_identifier(request_event_id)} "
-        f"response_event_id={_short_identifier(signed.get('id'))}"
-    )
+    _register_pending_nwc_response(request_event, signed)
+    pending = _pending_nwc_response_for_request(request_event_id)
+    if pending is None:
+        await ws.send(json.dumps(["EVENT", signed]))
+        return
+    await _send_pending_nwc_response(ws, pending, retry=False)
 
 
 async def _send_nwc_success(
@@ -329,19 +450,29 @@ async def _send_nwc_relay_subscription(
     if not wallet_service_pubkeys:
         raise ValueError("No wallet service pubkey configured")
 
+    client_pubkeys = sorted({
+        str(conn.get("client_pubkey") or "").strip().lower()
+        for conn in connections
+        if str(conn.get("client_pubkey") or "").strip()
+    })
+    if not client_pubkeys:
+        raise ValueError("No NWC client pubkey configured")
+
     sub_id = _build_relay_subscription_id(relay)
     await ws.send(json.dumps([
         "REQ",
         sub_id,
         {
             "kinds": [23194],
+            "authors": client_pubkeys,
             "#p": wallet_service_pubkeys,
             "since": max(0, int(since)),
         },
     ]))
     _log(
         f"relay subscription active: relay={relay} sub_id={sub_id} "
-        f"connections={len(connections)} wallet_keys={len(wallet_service_pubkeys)}"
+        f"connections={len(connections)} clients={len(client_pubkeys)} "
+        f"wallet_keys={len(wallet_service_pubkeys)}"
     )
 
 
@@ -486,13 +617,22 @@ async def _handle_request_event(
         return
 
     now = time.time()
+    pending_response = None
     async with _nwc_request_lock:
         _load_seen_nwc_requests()
         _prune_seen_nwc_requests(now)
         if event_id in _nwc_requests_seen or event_id in _nwc_requests_in_flight:
-            _log(f"duplicate request ignored: event_id={_short_identifier(event_id)}")
-            return
-        _nwc_requests_in_flight.add(event_id)
+            pending_response = _pending_nwc_response_for_request(event_id)
+            if pending_response is None:
+                _log(f"duplicate request ignored: event_id={_short_identifier(event_id)}")
+                return
+        else:
+            _nwc_requests_in_flight.add(event_id)
+
+    if pending_response is not None:
+        _log(f"duplicate request response retry: event_id={_short_identifier(event_id)}")
+        await _send_pending_nwc_response(ws, pending_response, retry=True)
+        return
 
     try:
         await _handle_request_event_once(ws, conn, event)
@@ -951,12 +1091,51 @@ def _handle_notice_message(conn: dict[str, Any], data: list[Any]) -> None:
 
 
 def _handle_ok_message(conn: dict[str, Any], data: list[Any]) -> None:
-    event_id = data[1] if len(data) > 1 else ""
+    event_id = str(data[1] if len(data) > 1 else "").strip()
     accepted = data[2] if len(data) > 2 else None
     message = data[3] if len(data) > 3 else ""
     _log(
         f"OK on {conn.get('name')}: event_id={_short_identifier(event_id)} "
         f"accepted={accepted} message={_safe_log_text(message)}"
+    )
+
+    pending = _nwc_pending_responses.get(event_id)
+    if pending is None:
+        return
+
+    message_prefix = str(message or "").strip().lower().split(":", 1)[0]
+    if accepted is True or message_prefix == "duplicate":
+        _remove_pending_nwc_response(event_id)
+        return
+
+    if message_prefix in NWC_RETRYABLE_RELAY_REJECTION_PREFIXES:
+        raise NwcRelayPublishRejected(
+            f"response {_short_identifier(event_id)} rejected: {_safe_log_text(message)}"
+        )
+
+    _remove_pending_nwc_response(event_id)
+    _log(
+        f"response permanently rejected: event_id={_short_identifier(event_id)} "
+        f"message={_safe_log_text(message)}"
+    )
+
+
+def _handle_closed_message(
+    conn: dict[str, Any],
+    data: list[Any],
+    *,
+    expected_sub_id: str,
+) -> None:
+    sub_id = str(data[1] if len(data) > 1 else "").strip()
+    message = data[2] if len(data) > 2 else ""
+    _log(
+        f"CLOSED on {conn.get('name')}: sub_id={sub_id or '-'} "
+        f"message={_safe_log_text(message)}"
+    )
+    if sub_id != expected_sub_id:
+        return
+    raise NwcRelaySubscriptionClosed(
+        f"subscription {sub_id} closed: {_safe_log_text(message)}"
     )
 
 
@@ -995,6 +1174,14 @@ async def handle_nwc_message(ws, conn: dict[str, Any], msg: str) -> None:
 
     if msg_type == "OK":
         _handle_ok_message(conn, data)
+        return
+
+    if msg_type == "CLOSED":
+        _handle_closed_message(
+            conn,
+            data,
+            expected_sub_id=_build_subscription_id(conn),
+        )
         return
 
     _handle_unhandled_message(conn, data)
@@ -1075,6 +1262,13 @@ async def handle_nwc_relay_message(
         return None
     if msg_type == "OK":
         _handle_ok_message(label, data)
+        return None
+    if msg_type == "CLOSED":
+        _handle_closed_message(
+            label,
+            data,
+            expected_sub_id=_build_relay_subscription_id(relay),
+        )
         return None
     _handle_unhandled_message(label, data)
     return None
@@ -1157,6 +1351,7 @@ async def nwc_relay_loop(
                     f"connected relay: {relay} connections={len(connections)}"
                 )
 
+                await _resend_pending_nwc_responses(ws, connections)
                 await _publish_nwc_info_event(ws, connections[0])
                 await _send_nwc_relay_subscription(
                     ws,

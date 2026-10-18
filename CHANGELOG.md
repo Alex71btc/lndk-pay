@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Recover Nostr Wallet Connect subscriptions after relay-side `CLOSED`
+  messages and safely retry rate-limited response events without executing the
+  original wallet operation twice.
+- Narrow shared NWC relay subscriptions by both client author and wallet
+  service pubkey to reduce unrelated relay traffic.
+
 ## [0.3.13] - 2026-10-17
 
 ### Fixed
