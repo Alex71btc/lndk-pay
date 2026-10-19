@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-10-19
+
 ### Fixed
 
 - Recover Nostr Wallet Connect subscriptions after relay-side `CLOSED`
