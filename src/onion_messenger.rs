@@ -1,6 +1,8 @@
 use crate::clock::TokioClock;
 use crate::grpc::Retryable;
-use crate::lnd::{features_support_onion_messages, PeerConnector, ONION_MESSAGES_OPTIONAL};
+use crate::lnd::{
+    features_support_onion_messages, OnionTransport, PeerConnector, ONION_MESSAGES_OPTIONAL,
+};
 use crate::offers::connect_to_peer_with_retry;
 use crate::rate_limit::{RateLimiter, RateLimiterCfg, TokenLimiter};
 use crate::{LifecycleSignals, LndkOnionMessenger, LDK_LOGGER_NAME};
@@ -43,8 +45,9 @@ use tonic_lnd::tonic::Response;
 use tonic_lnd::Client;
 use tonic_lnd::{
     lnrpc::peer_event::EventType::PeerOffline, lnrpc::peer_event::EventType::PeerOnline,
-    lnrpc::CustomMessage, lnrpc::PeerEvent, lnrpc::SendCustomMessageRequest,
-    lnrpc::SendCustomMessageResponse, tonic::Status, LightningClient,
+    lnrpc::CustomMessage, lnrpc::OnionMessageUpdate, lnrpc::PeerEvent,
+    lnrpc::SendCustomMessageRequest, lnrpc::SendOnionMessageRequest, tonic::Status,
+    LightningClient,
 };
 use triggered::Listener;
 
@@ -183,6 +186,7 @@ impl LndkOnionMessenger {
         network: Network,
         signals: LifecycleSignals,
         rate_limiter_cfg: RateLimiterCfg,
+        transport: OnionTransport,
     ) -> Result<(), ()>
     where
         ES::Target: EntropySource,
@@ -292,13 +296,28 @@ impl LndkOnionMessenger {
         let (messages_shutdown, messages_listener) =
             (signals.shutdown.clone(), signals.listener.clone());
         set.spawn(async move {
-            match subscribe_custom_messages_with_retry(
-                &mut messages_client,
-                messages_listener,
-                in_msg_sender,
-            )
-            .await
-            {
+            // Select the inbound transport based on the connected LND version.
+            // Both producers feed the same MessengerEvents::IncomingMessage
+            // events, so everything downstream is identical.
+            let result = match transport {
+                OnionTransport::Native => {
+                    subscribe_onion_messages_with_retry(
+                        &mut messages_client,
+                        messages_listener,
+                        in_msg_sender,
+                    )
+                    .await
+                }
+                OnionTransport::CustomMessage => {
+                    subscribe_custom_messages_with_retry(
+                        &mut messages_client,
+                        messages_listener,
+                        in_msg_sender,
+                    )
+                    .await
+                }
+            };
+            match result {
                 Ok(_) => {
                     debug!("Message events producer exited.")
                 }
@@ -338,8 +357,13 @@ impl LndkOnionMessenger {
             rate_limiter_cfg.call_period_secs,
             TokioClock::new(),
         );
-        let mut message_sender = CustomMessenger {
-            client: Retryable::new(ln_client.clone()),
+        let mut message_sender: Box<dyn OnionMessageSender> = match transport {
+            OnionTransport::Native => Box::new(NativeOnionMessenger {
+                client: Retryable::new(ln_client.clone()),
+            }),
+            OnionTransport::CustomMessage => Box::new(CustomMessenger {
+                client: Retryable::new(ln_client.clone()),
+            }),
         };
         let event_handler = LndkEventHandler {
             lnd_client: ln_client.clone(),
@@ -348,7 +372,7 @@ impl LndkOnionMessenger {
         let consume_result = consume_messenger_events(
             onion_messenger,
             receiver,
-            &mut message_sender,
+            message_sender.as_mut(),
             rate_limiter,
             event_handler,
             network,
@@ -623,7 +647,7 @@ async fn subscribe_custom_messages_with_retry(
                         }
                         Err(e) => {
                             error!("Error subscribing to message events: {e}.");
-                            return Ok(())
+                            return Err(e.into())
                         }
                     };
 
@@ -638,6 +662,60 @@ async fn subscribe_custom_messages_with_retry(
                             },
                             Err(e) => {
                                 error!("Message events producer exited: {e}. Going to retry again");
+                                continue
+                            }
+                        }
+            }
+        }
+    }
+}
+
+/// subscribe_onion_messages_with_retry subscribes to LND's native
+/// SubscribeOnionMessages stream (LND >= 0.21) and produces incoming onion
+/// message events. It mirrors subscribe_custom_messages_with_retry but reads
+/// from the native onion message RPC. Both feed the same downstream pipeline.
+async fn subscribe_onion_messages_with_retry(
+    messages_client: &mut Retryable<LightningClient>,
+    shutdown_listener: Listener,
+    in_msg_sender: Sender<MessengerEvents>,
+) -> Result<(), Box<dyn Error>> {
+    loop {
+        select! {
+            biased;
+            _ = shutdown_listener.clone() => {
+                info!("Received shutdown signal, exiting subscribe to onion messages loop.");
+                return Ok(())
+            }
+            _ = async {} => {
+                    let message_subscription = match messages_client
+                        .with_infinite_retries(
+                            LightningClient::subscribe_onion_messages,
+                            tonic_lnd::lnrpc::SubscribeOnionMessagesRequest {},
+                            None,
+                        )
+                        .await
+                    {
+                        Ok(response) => {
+                            info!("Connected to native onion message subscription.");
+                            response.into_inner()
+                        }
+                        Err(e) => {
+                            error!("Error subscribing to onion message events: {e}.");
+                            return Err(e.into())
+                        }
+                    };
+
+                    let message_stream = OnionMessageStream {
+                        message_subscription,
+                    };
+                    match produce_incoming_message_events(message_stream, in_msg_sender.clone(), shutdown_listener.clone())
+                        .await {
+                            Ok(_) => {
+                                debug!("Onion message events producer exited.");
+                                return Ok(())
+                            },
+                            Err(e) => {
+                                error!("Onion message events producer exited: {e}. Going to retry again");
                                 continue
                             }
                         }
@@ -727,6 +805,61 @@ impl IncomingMessageProducer for MessageStream {
             Some(msg) => Ok(msg),
             None => Err(Status::unknown("no message provided")),
         }
+    }
+}
+
+struct OnionMessageStream {
+    message_subscription: tonic_lnd::tonic::Streaming<OnionMessageUpdate>,
+}
+
+#[async_trait]
+impl IncomingMessageProducer for OnionMessageStream {
+    async fn receive(&mut self) -> Result<CustomMessage, Status> {
+        loop {
+            match self.message_subscription.message().await? {
+                Some(update) if is_native_update_for_us(&update) => {
+                    return Ok(native_update_to_custom_message(update));
+                }
+                Some(_) => {
+                    trace!("Ignoring native onion message update already forwarded by LND");
+                }
+                None => return Err(Status::unknown("no message provided")),
+            }
+        }
+    }
+}
+
+/// LND publishes updates both for messages delivered to this node and for messages it has already
+/// forwarded. Only locally delivered messages contain custom records for LNDK to handle. Feeding a
+/// forwarded update into LDK would make LNDK forward the same onion message a second time.
+fn is_native_update_for_us(update: &OnionMessageUpdate) -> bool {
+    !update.custom_records.is_empty()
+}
+
+/// native_update_to_custom_message adapts an OnionMessageUpdate from LND's
+/// native SubscribeOnionMessages stream (LND >= 0.21) into the same
+/// CustomMessage shape produced by the custom-message-513 path, so that the
+/// downstream pipeline (which parses an LDK OnionMessage out of `data`) is
+/// identical for both transports.
+///
+/// LND >= 0.21 peels the outer onion at ingress, but the update still carries
+/// the *original* received bytes: `path_key` is the message's blinding point
+/// and `onion` is the original onion_message_packet (see lnd
+/// onionmessage/actor.go). The LDK OnionMessage wire format is:
+///   blinding_point(33) || u16 onion_len || onion_packet
+/// so we reassemble exactly those bytes here. LDK then re-peels the message
+/// using LND's signer, exactly as it did when the bytes arrived as custom
+/// message type 513.
+fn native_update_to_custom_message(update: OnionMessageUpdate) -> CustomMessage {
+    let mut data = Vec::with_capacity(update.path_key.len() + 2 + update.onion.len());
+    data.extend_from_slice(&update.path_key);
+    data.extend_from_slice(&(update.onion.len() as u16).to_be_bytes());
+    data.extend_from_slice(&update.onion);
+
+    CustomMessage {
+        peer: update.peer,
+        r#type: ONION_MESSAGE_TYPE,
+        data,
     }
 }
 
@@ -857,7 +990,7 @@ impl fmt::Display for MessengerEvents {
 async fn consume_messenger_events(
     onion_messenger: impl OnionMessageHandler + EventsProvider,
     mut events: Receiver<MessengerEvents>,
-    message_sender: &mut impl SendCustomMessage,
+    message_sender: &mut dyn OnionMessageSender,
     rate_limiter: &mut impl RateLimiter,
     event_handler: impl EventHandler,
     network: Network,
@@ -938,32 +1071,78 @@ async fn consume_messenger_events(
 }
 
 #[async_trait]
-/// SendCustomMessage provides a level of abstraction over LND's send custom message API.
-trait SendCustomMessage {
-    async fn send_custom_message(
+/// OnionMessageSender abstracts over how an outgoing LDK OnionMessage is handed
+/// to LND. LND < 0.21 tunnels it through SendCustomMessage as type 513; LND >=
+/// 0.21 uses the native SendOnionMessage RPC. The serialization that each
+/// transport requires lives in its respective implementation.
+trait OnionMessageSender {
+    async fn send_onion_message(
         &mut self,
-        request: SendCustomMessageRequest,
-    ) -> Result<SendCustomMessageResponse, Status>;
+        peer: &PublicKey,
+        msg: &OnionMessage,
+    ) -> Result<(), Status>;
 }
 
+/// CustomMessenger relays onion messages through LND's SendCustomMessage RPC as
+/// custom message type 513 (LND < 0.21).
 struct CustomMessenger {
     client: Retryable<LightningClient>,
 }
 
 #[async_trait]
-impl SendCustomMessage for CustomMessenger {
-    async fn send_custom_message(
+impl OnionMessageSender for CustomMessenger {
+    async fn send_onion_message(
         &mut self,
-        request: SendCustomMessageRequest,
-    ) -> Result<SendCustomMessageResponse, Status> {
-        match self
-            .client
+        peer: &PublicKey,
+        msg: &OnionMessage,
+    ) -> Result<(), Status> {
+        let mut buf = vec![];
+        msg.write(&mut buf)
+            .map_err(|e| Status::internal(format!("error writing onion message: {e}")))?;
+
+        let request = SendCustomMessageRequest {
+            peer: peer.serialize().to_vec(),
+            r#type: ONION_MESSAGE_TYPE,
+            data: buf,
+        };
+
+        self.client
             .with_max_attempts(LightningClient::send_custom_message, request, Some(3))
             .await
-        {
-            Ok(resp) => Ok(resp.into_inner()),
-            Err(status) => Err(status),
-        }
+            .map(|_| ())
+    }
+}
+
+/// NativeOnionMessenger relays onion messages through LND's native
+/// SendOnionMessage RPC (LND >= 0.21). The LDK OnionMessage exposes its
+/// blinding point and onion packet as public fields, which map directly onto
+/// the RPC's `path_key` and `onion` fields.
+struct NativeOnionMessenger {
+    client: Retryable<LightningClient>,
+}
+
+#[async_trait]
+impl OnionMessageSender for NativeOnionMessenger {
+    async fn send_onion_message(
+        &mut self,
+        peer: &PublicKey,
+        msg: &OnionMessage,
+    ) -> Result<(), Status> {
+        let mut onion = vec![];
+        msg.onion_routing_packet
+            .write(&mut onion)
+            .map_err(|e| Status::internal(format!("error writing onion packet: {e}")))?;
+
+        let request = SendOnionMessageRequest {
+            peer: peer.serialize().to_vec(),
+            path_key: msg.blinding_point.serialize().to_vec(),
+            onion,
+        };
+
+        self.client
+            .with_max_attempts(LightningClient::send_onion_message, request, Some(3))
+            .await
+            .map(|_| ())
     }
 }
 
@@ -1006,28 +1185,11 @@ async fn produce_outgoing_message_events(
 async fn relay_outgoing_msg_event(
     peer: &PublicKey,
     msg: OnionMessage,
-    ln_client: &mut impl SendCustomMessage,
+    ln_client: &mut dyn OnionMessageSender,
 ) {
-    let mut buf = vec![];
-    match msg.write(&mut buf) {
-        Ok(_) => {}
-        Err(err) => {
-            error!("Error writing onion message: {}.", err);
-            return;
-        }
-    }
-
-    // Relay this message to LND.
-    let req = tonic_lnd::lnrpc::SendCustomMessageRequest {
-        peer: peer.serialize().to_vec(),
-        r#type: ONION_MESSAGE_TYPE,
-        data: buf,
-    };
-
-    // TODO: To improve resilience, retry this call in the event of a temporary connection error.
-    match ln_client.send_custom_message(req).await {
+    match ln_client.send_onion_message(peer, &msg).await {
         Ok(_) => debug!("Sent outgoing onion message {msg:?} to {peer}."),
-        Err(e) => error!("Error sending custom message {e} to {peer}."),
+        Err(e) => error!("Error sending onion message {e} to {peer}."),
     }
 }
 
@@ -1161,11 +1323,11 @@ mod tests {
     }
 
     mock! {
-        SendCustomMessenger{}
+        SendOnionMessenger{}
 
         #[async_trait]
-         impl SendCustomMessage for SendCustomMessenger{
-             async fn send_custom_message(&mut self, request: SendCustomMessageRequest) -> Result<SendCustomMessageResponse, Status>;
+         impl OnionMessageSender for SendOnionMessenger{
+             async fn send_onion_message(&mut self, peer: &PublicKey, msg: &OnionMessage) -> Result<(), Status>;
          }
     }
 
@@ -1286,7 +1448,7 @@ mod tests {
         let pk_1 = pubkey(1);
         let pk_2 = pubkey(2);
         let mut mock = MockOnionHandler::new();
-        let mut sender_mock = MockSendCustomMessenger::new();
+        let mut sender_mock = MockSendOnionMessenger::new();
         let mut rate_limiter = MockRateLimiter::new();
 
         // Setup rate limiter to no-op on peer connected / disconnected calls (we have proper
@@ -1321,13 +1483,9 @@ mod tests {
             .returning(|_| None);
 
         sender_mock
-            .expect_send_custom_message()
+            .expect_send_onion_message()
             .times(2)
-            .returning(|_| {
-                Ok(SendCustomMessageResponse {
-                    ..Default::default()
-                })
-            });
+            .returning(|_, _| Ok(()));
 
         // Peer connected: onion messaging not supported.
         sender
@@ -1414,7 +1572,7 @@ mod tests {
             .unwrap();
         mock.expect_peer_connected().return_once(|_, _, _| Err(()));
 
-        let mut sender_mock = MockSendCustomMessenger::new();
+        let mut sender_mock = MockSendOnionMessenger::new();
 
         let (_, listener) = triggered::trigger();
         let consume_err = consume_messenger_events(
@@ -1439,7 +1597,7 @@ mod tests {
         // the sender manually has the effect of closing the channel.
         let (sender_done, receiver_done) = channel(1);
         drop(sender_done);
-        let mut sender_mock = MockSendCustomMessenger::new();
+        let mut sender_mock = MockSendOnionMessenger::new();
         let mut rate_limiter = MockRateLimiter::new();
         let (_, listener) = triggered::trigger();
 
@@ -1792,5 +1950,56 @@ mod tests {
         assert!(produce_outgoing_message_events(sender, listener, interval)
             .await
             .is_ok());
+    }
+
+    // Verify the linchpin of the native-transport migration: an
+    // OnionMessageUpdate from LND's SubscribeOnionMessages stream (which
+    // carries the original blinding point as `path_key` and the original
+    // onion packet as `onion`) reconstructs into byte-identical OnionMessage
+    // wire bytes, so the existing LDK pipeline parses it exactly as it did the
+    // custom-message-513 payload.
+    #[test]
+    fn test_native_update_to_custom_message_roundtrips() {
+        let original = onion_message();
+
+        // Emulate what LND delivers natively: path_key = blinding_point and
+        // onion = the serialized onion packet, provided as separate fields.
+        let path_key = original.blinding_point.serialize().to_vec();
+        let mut onion = vec![];
+        original.onion_routing_packet.write(&mut onion).unwrap();
+
+        let update = OnionMessageUpdate {
+            peer: pubkey(0).serialize().to_vec(),
+            path_key,
+            onion,
+            custom_records: HashMap::from([(64, vec![1])]),
+            ..Default::default()
+        };
+
+        let custom = native_update_to_custom_message(update);
+        assert_eq!(custom.r#type, ONION_MESSAGE_TYPE);
+        assert_eq!(custom.peer, pubkey(0).serialize().to_vec());
+
+        // The reconstructed bytes must parse back into an OnionMessage that is
+        // byte-for-byte identical to the original.
+        let parsed = OnionMessage::read(&mut Cursor::new(custom.data)).unwrap();
+
+        let mut original_bytes = vec![];
+        original.write(&mut original_bytes).unwrap();
+        let mut parsed_bytes = vec![];
+        parsed.write(&mut parsed_bytes).unwrap();
+        assert_eq!(original_bytes, parsed_bytes);
+    }
+
+    #[test]
+    fn test_native_update_filters_messages_forwarded_by_lnd() {
+        let forwarded_update = OnionMessageUpdate::default();
+        assert!(!is_native_update_for_us(&forwarded_update));
+
+        let delivered_update = OnionMessageUpdate {
+            custom_records: HashMap::from([(64, vec![1])]),
+            ..Default::default()
+        };
+        assert!(is_native_update_for_us(&delivered_update));
     }
 }

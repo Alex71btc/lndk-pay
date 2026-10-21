@@ -1,7 +1,6 @@
 use lightning::blinded_path::payment::BlindedPaymentPath;
 use lightning::blinded_path::IntroductionNode;
 use lightning::offers::invoice_request::InvoiceRequest;
-use lightning::offers::offer::Amount;
 use log::{error, trace};
 use tonic::async_trait;
 use tonic_lnd::lnrpc::{
@@ -229,14 +228,17 @@ impl Bolt12InvoiceCreator for Client {
         &mut self,
         invoice_request: InvoiceRequest,
     ) -> Result<AddInvoiceResponse, Status> {
-        let amount = match invoice_request.amount() {
-            Some(Amount::Bitcoin { amount_msats }) => amount_msats as i64,
-            _ => 0,
-        };
-        let description = match invoice_request.description() {
-            Some(description) => description.to_string(),
-            None => "".to_string(),
-        };
+        // Use the request's amount (the payer's dynamic amount for amountless offers, or the
+        // offer amount times quantity for fixed-amount offers) rather than the offer's amount,
+        // which is None for amountless offers and would yield a 0-value invoice that LND cannot
+        // build blinded paths for.
+        let amount = invoice_request.amount_msats().unwrap_or(0) as i64;
+        let description = invoice_request
+            .description()
+            .map(|d| d.to_string())
+            .filter(|d| !d.is_empty())
+            .map(|d| format!("BOLT12 Offer: {d}"))
+            .unwrap_or_else(|| "BOLT12 Offer".to_string());
         let req = Invoice {
             memo: description,
             value_msat: amount,

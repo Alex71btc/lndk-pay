@@ -1,4 +1,4 @@
-use bitcoin::hashes::Hmac;
+use bitcoin::hashes::{sha256, Hash as BitcoinHash, Hmac};
 use bitcoin::key::Secp256k1;
 use bitcoin::Network;
 use futures::executor::block_on;
@@ -17,11 +17,13 @@ use lightning::onion_message::messenger::{
 };
 use lightning::onion_message::offers::{OffersMessage, OffersMessageHandler};
 use lightning::sign::EntropySource;
+use lightning::util::ser::Writeable;
 use log::{debug, error, info, trace, warn};
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::Hash as StdHash;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::{sleep, timeout};
 use tonic_lnd::lnrpc::{FeeLimit, Payment};
 use tonic_lnd::Client;
@@ -36,6 +38,76 @@ use crate::onion_messenger::MessengerUtilities;
 use crate::payment_metadata::{IncomingPaymentMetadata, IncomingPaymentMetadataStore};
 
 pub const DEFAULT_RESPONSE_INVOICE_TIMEOUT: u32 = 15;
+// Onion messages are unreliable, so a payer may send the same invoice request more than once.
+// Reuse the original invoice for exact repeats, but bound the cache because anyone holding an
+// offer can create unique, valid requests.
+const INVOICE_REQUEST_CACHE_CAPACITY: usize = 256;
+const INVOICE_REQUEST_CACHE_TTL: Duration = Duration::from_secs(2 * 60 * 60);
+
+struct BoundedTtlCache<K, V> {
+    entries: HashMap<K, (Instant, V)>,
+    insertion_order: VecDeque<K>,
+    capacity: usize,
+    ttl: Duration,
+}
+
+impl<K: Clone + Eq + StdHash, V: Clone> BoundedTtlCache<K, V> {
+    fn new(capacity: usize, ttl: Duration) -> Self {
+        Self {
+            entries: HashMap::new(),
+            insertion_order: VecDeque::new(),
+            capacity,
+            ttl,
+        }
+    }
+
+    fn get(&mut self, key: &K) -> Option<V> {
+        self.remove_expired();
+        self.entries.get(key).map(|(_, value)| value.clone())
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        if self.capacity == 0 {
+            return;
+        }
+
+        self.remove_expired();
+        if self.entries.contains_key(&key) {
+            self.insertion_order.retain(|cached_key| cached_key != &key);
+        }
+
+        while self.entries.len() >= self.capacity {
+            let Some(oldest_key) = self.insertion_order.pop_front() else {
+                break;
+            };
+            self.entries.remove(&oldest_key);
+        }
+
+        self.insertion_order.push_back(key.clone());
+        self.entries.insert(key, (Instant::now(), value));
+    }
+
+    fn remove_expired(&mut self) {
+        let now = Instant::now();
+        while let Some(oldest_key) = self.insertion_order.front() {
+            let expired = self
+                .entries
+                .get(oldest_key)
+                .map(|(inserted_at, _)| now.duration_since(*inserted_at) >= self.ttl)
+                .unwrap_or(true);
+            if !expired {
+                break;
+            }
+
+            let oldest_key = self.insertion_order.pop_front().unwrap();
+            self.entries.remove(&oldest_key);
+        }
+    }
+}
+
+fn invoice_request_id(invoice_request: &InvoiceRequest) -> sha256::Hash {
+    <sha256::Hash as BitcoinHash>::hash(&invoice_request.encode())
+}
 
 pub(crate) enum PaymentState {
     InvoiceRequestCreated,
@@ -52,6 +124,7 @@ pub struct OfferHandler {
     // here. Then we wait until we receive an invoice with the same PaymentId.
     active_payments: Mutex<HashMap<PaymentId, PaymentInfo>>,
     pending_messages: Mutex<Vec<(OffersMessage, MessageSendInstructions)>>,
+    invoice_request_cache: Mutex<BoundedTtlCache<sha256::Hash, Bolt12Invoice>>,
     pub messenger_utils: MessengerUtilities,
     expanded_key: ExpandedKey,
     /// The amount of time in seconds that we will wait for the offer creator to respond with
@@ -94,8 +167,10 @@ pub struct SendPaymentParams {
 pub struct CreateOfferParams {
     /// LND tonic client used to query information from the node.
     pub client: Client,
-    /// The amount of the offer in millisatoshis.
-    pub amount_msats: u64,
+    /// The amount of the offer in millisatoshis. If None, the offer has no
+    /// minimum amount and the payer decides. Per BOLT 12 (bolts #1316),
+    /// offer_amount must be greater than zero when present.
+    pub amount_msats: Option<u64>,
     /// The chain the offer is valid on.
     pub chain: Network,
     /// Optional description of the offer. If not provided, the offer will have description "".
@@ -137,6 +212,10 @@ impl OfferHandler {
         OfferHandler {
             active_payments: Mutex::new(HashMap::new()),
             pending_messages: Mutex::new(Vec::new()),
+            invoice_request_cache: Mutex::new(BoundedTtlCache::new(
+                INVOICE_REQUEST_CACHE_CAPACITY,
+                INVOICE_REQUEST_CACHE_TTL,
+            )),
             messenger_utils,
             expanded_key,
             response_invoice_timeout,
@@ -413,6 +492,7 @@ impl OffersMessageHandler for OfferHandler {
                 // Clone invoice_request before verification since it consumes the value.
                 // TODO: create_invoice should use VerifiedInvoiceRequest instead of InvoiceRequest.
                 let invoice_request_clone = invoice_request.clone();
+                let request_id = invoice_request_id(&invoice_request_clone);
                 let verfied_invoice = match invoice_request.verify_using_recipient_data(
                     nonce,
                     &self.expanded_key,
@@ -422,6 +502,16 @@ impl OffersMessageHandler for OfferHandler {
                     Err(_) => return None,
                 };
 
+                let cached_invoice = self.invoice_request_cache.lock().unwrap().get(&request_id);
+                if let Some(invoice) = cached_invoice {
+                    debug!("Reusing cached invoice for repeated invoice request {request_id}");
+                    self.pending_messages.lock().unwrap().push((
+                        OffersMessage::Invoice(invoice),
+                        responder.respond().into_instructions(),
+                    ));
+                    return None;
+                }
+
                 let client = match self.client {
                     Some(_) => self.client.clone().unwrap(),
                     None => {
@@ -429,7 +519,7 @@ impl OffersMessageHandler for OfferHandler {
                         return None;
                     }
                 };
-                log::trace!("Creating invoice");
+                debug!("Creating invoice for new invoice request {request_id}");
                 let invoice_info =
                     match block_on(self.create_invoice(client, invoice_request_clone)) {
                         Ok(invoice) => invoice,
@@ -473,6 +563,10 @@ impl OffersMessageHandler for OfferHandler {
                             }
                         }
 
+                        self.invoice_request_cache
+                            .lock()
+                            .unwrap()
+                            .insert(request_id, invoice.clone());
                         {
                             let mut pending_messages = self.pending_messages.lock().unwrap();
                             pending_messages.push((
@@ -562,6 +656,28 @@ mod tests {
     use super::*;
 
     const NONCE_BYTES: &[u8] = &[42u8; 16];
+
+    #[test]
+    fn bounded_ttl_cache_reuses_entries_and_evicts_the_oldest() {
+        let mut cache = BoundedTtlCache::new(2, Duration::from_secs(60));
+        cache.insert(1, "first");
+        cache.insert(2, "second");
+
+        assert_eq!(cache.get(&1), Some("first"));
+
+        cache.insert(3, "third");
+        assert_eq!(cache.get(&1), None);
+        assert_eq!(cache.get(&2), Some("second"));
+        assert_eq!(cache.get(&3), Some("third"));
+    }
+
+    #[test]
+    fn bounded_ttl_cache_drops_expired_entries() {
+        let mut cache = BoundedTtlCache::new(1, Duration::ZERO);
+        cache.insert(1, "expired");
+
+        assert_eq!(cache.get(&1), None);
+    }
 
     #[test]
     fn test_handle_invoice_error_existing_payment() {

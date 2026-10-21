@@ -238,6 +238,44 @@ pub fn has_version(version: &Version, requirement: Option<VersionRequirement>) -
     true
 }
 
+/// OnionTransport selects how LNDK exchanges onion messages with LND.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OnionTransport {
+    /// LND < 0.21: onion messages are tunneled through LND's
+    /// SendCustomMessage / SubscribeCustomMessages RPCs as custom message
+    /// type 513. This requires LND to be run with
+    /// `--protocol.custom-message=513`.
+    CustomMessage,
+    /// LND >= 0.21: onion messages use LND's native SendOnionMessage /
+    /// SubscribeOnionMessages RPCs. In 0.21 type 513 is a known message
+    /// (`MsgOnionMessage`) that LND parses and routes to its native onion
+    /// message handler, so the custom-message path no longer receives them.
+    Native,
+}
+
+/// Native onion message RPCs (SendOnionMessage / SubscribeOnionMessages) were
+/// introduced in LND v0.21.0-beta.
+const NATIVE_ONION_MIN_MINOR_VER: u32 = 21;
+
+/// onion_transport_for_version returns the onion message transport that should
+/// be used for the given LND version. LND v0.21+ exposes native onion message
+/// RPCs and stops delivering type 513 via the custom message stream, so we must
+/// switch transports based on the connected node's version.
+pub fn onion_transport_for_version(version: &Version) -> OnionTransport {
+    let native_requirement = VersionRequirement {
+        major: MIN_LND_MAJOR_VER,
+        minor: NATIVE_ONION_MIN_MINOR_VER,
+        patch: 0,
+        pre_release: MIN_LND_PRE_RELEASE_VER.to_string(),
+    };
+
+    if has_version(version, Some(native_requirement)) {
+        OnionTransport::Native
+    } else {
+        OnionTransport::CustomMessage
+    }
+}
+
 pub fn has_build_tags(version: &Version, requirement: Option<BuildTagsRequirement>) -> bool {
     let requirement = requirement.unwrap_or(BuildTagsRequirement {
         tags: BUILD_TAGS_REQUIRED.to_vec(),
@@ -826,6 +864,51 @@ mod tests {
             ..Default::default()
         };
         assert!(!has_version(&version, Some(get_version_requirement())))
+    }
+
+    #[test]
+    fn test_onion_transport_native_for_0_21() {
+        let version = Version {
+            app_major: 0,
+            app_minor: 21,
+            app_patch: 0,
+            app_pre_release: "beta".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            onion_transport_for_version(&version),
+            OnionTransport::Native
+        );
+    }
+
+    #[test]
+    fn test_onion_transport_native_for_above_0_21() {
+        let version = Version {
+            app_major: 0,
+            app_minor: 22,
+            app_patch: 1,
+            app_pre_release: "beta".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            onion_transport_for_version(&version),
+            OnionTransport::Native
+        );
+    }
+
+    #[test]
+    fn test_onion_transport_custom_for_0_20() {
+        let version = Version {
+            app_major: 0,
+            app_minor: 20,
+            app_patch: 1,
+            app_pre_release: "beta".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            onion_transport_for_version(&version),
+            OnionTransport::CustomMessage
+        );
     }
 
     #[test]

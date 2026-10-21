@@ -1,0 +1,98 @@
+# Empty [workspace] so this vendored crate is its own workspace root. Without
+# it, Cargo walks up to lndk's Cargo.toml (which has no [workspace]) and errors
+# with "current package believes it's in a workspace when it's not".
+[workspace]
+
+[package]
+name = "lndk-tonic-lnd"
+version = "0.1.3"
+edition = "2021"
+rust-version = "1.65.0"
+description = "An async library implementing LND RPC via tonic and prost. Forked from https://github.com/Kixunil/tonic_lnd"
+homepage = "https://github.com/lndk-org/tonic_lnd"
+repository = "https://github.com/lndk-org/tonic_lnd"
+readme = "README.md"
+keywords = ["LND", "rpc", "grpc", "tonic", "async"]
+categories = [
+  "api-bindings",
+  "asynchronous",
+  "cryptography::cryptocurrencies",
+  "network-programming",
+]
+license = "MITNFA"
+
+[package.metadata.cargo-machete]
+ignored = ["prost", "tonic-prost", "tonic-prost-build"]
+
+[features]
+lightningrpc = []
+signrpc = []
+walletrpc = ["signrpc"]
+peersrpc = []
+versionrpc = []
+routerrpc = ["lightningrpc"]
+invoicesrpc = ["lightningrpc"]
+all = [
+  "lightningrpc",
+  "walletrpc",
+  "peersrpc",
+  "versionrpc",
+  "routerrpc",
+  "invoicesrpc",
+]
+default = ["all"]
+
+[dependencies]
+hex = "0.4.3"
+http = "1.3.1"
+hyper = { version = "1.7.0", features = ["client"], default-features = false }
+prost = "0.14.1"
+thiserror = "2.0.16"
+rustls = { version = "0.23.31", features = ["ring"], default-features = false }
+rustls-pemfile = "2.2.0"
+hyper-rustls = { version = "0.27.7", features = [
+  "http2",
+  "tls12",
+], default-features = false }
+hyper-util = "0.1.16"
+tonic = { version = "0.14.2", features = ["transport", "tls-ring"] }
+tonic-prost = "0.14.2"
+tokio = { version = "1.32.0", features = ["fs"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+zeroize = "1.8.1"
+
+[build-dependencies]
+tonic-prost-build = "0.14.2"
+
+[dev-dependencies]
+tokio = { version = "1.7.1", features = ["rt-multi-thread"] }
+
+[[example]]
+name = "get_info"
+path = "examples/get_info.rs"
+required-features = ["lightningrpc"]
+
+[[example]]
+name = "get_version"
+path = "examples/get_version.rs"
+required-features = ["versionrpc"]
+
+[[example]]
+name = "track_payment"
+path = "examples/track_payment.rs"
+required-features = ["routerrpc"]
+
+[[example]]
+name = "cancel_invoice"
+path = "examples/cancel_invoice.rs"
+required-features = ["invoicesrpc"]
+
+[[example]]
+name = "subscribe_invoices"
+path = "examples/subscribe_invoices.rs"
+required-features = ["invoicesrpc"]
+
+[[example]]
+name = "intercept_htlcs"
+path = "examples/intercept_htlcs.rs"
+required-features = ["routerrpc"]

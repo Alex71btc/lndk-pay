@@ -1,0 +1,6 @@
+edition = "2021"
+group_imports = "StdExternalCrate"
+imports_granularity = "Module"
+normalize_doc_attributes = false
+reorder_imports = true
+use_small_heuristics = "Off"

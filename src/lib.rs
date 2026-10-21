@@ -15,8 +15,8 @@ pub mod lndkrpc {
 
 use crate::lnd::{
     features_support_onion_messages, get_lnd_client, get_network, has_build_tags, has_version,
-    LndCfg, LndNodeSigner, MIN_LND_MAJOR_VER, MIN_LND_MINOR_VER, MIN_LND_PATCH_VER,
-    MIN_LND_PRE_RELEASE_VER,
+    onion_transport_for_version, LndCfg, LndNodeSigner, MIN_LND_MAJOR_VER, MIN_LND_MINOR_VER,
+    MIN_LND_PATCH_VER, MIN_LND_PRE_RELEASE_VER,
 };
 use crate::onion_messenger::{LndkNodeIdLookUp, MessengerUtilities};
 use bitcoin::secp256k1::PublicKey;
@@ -72,9 +72,8 @@ pub fn setup_logger(log_level: Option<String>, log_file: Option<PathBuf>) -> Res
             Err(_) => {
                 // Since the logger isn't set up yet, we use a println just this once.
                 println!(
-                    "User provided log level '{}' is invalid. Make sure it is set to either 'error',
-                    'warn', 'info', 'debug' or 'trace'",
-                    level_str
+                    "User provided log level '{level_str}' is invalid. Make sure it is set to either 'error',
+                    'warn', 'info', 'debug' or 'trace'"
                 );
                 return Err(());
             }
@@ -212,6 +211,15 @@ impl LndkOnionMessenger {
             IgnoringMessageHandler {}, // CustomOnionMessageHandler
         );
 
+        // LND v0.21 added native onion message RPCs and stopped delivering
+        // onion messages (type 513) via the custom message stream, so pick the
+        // transport based on the connected node's version.
+        let transport = onion_transport_for_version(&version);
+        info!(
+            "Using {transport:?} onion message transport for LND {}.",
+            &version.version
+        );
+
         let mut peers_client = client.lightning().clone();
         self.run_onion_messenger(
             &mut peers_client,
@@ -222,6 +230,7 @@ impl LndkOnionMessenger {
                 call_count: args.rate_limit_count,
                 call_period_secs: Duration::from_secs(args.rate_limit_period_secs),
             },
+            transport,
         )
         .await
     }

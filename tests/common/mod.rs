@@ -301,7 +301,7 @@ pub fn get_lnd_args(
     let lnd_port = lnd_port;
     let lnd_addr = format!("localhost:{}", lnd_port);
     let cookie_values = connect_params.unwrap();
-    let args = [
+    let mut args = vec![
         format!("--listen={}", lnd_addr),
         format!("--rpclisten={}", rpc_addr),
         format!("--norest"),
@@ -326,10 +326,19 @@ pub fn get_lnd_args(
             "--bitcoind.rpchost={:?}",
             bitcoind_connect_params.rpc_socket
         ),
-        format!("--protocol.custom-message=513"),
-        format!("--protocol.custom-nodeann=39"),
-        format!("--protocol.custom-init=39"),
     ];
+
+    // Onion message transport differs by LND version:
+    //  - LND >= 0.21 handles type 513 natively and advertises the onion message feature bit (39) by
+    //    default, so no extra flags are needed (and --protocol.custom-init=39 would even fail with
+    //    "feature bit 39 already set").
+    //  - LND <  0.21 has no native onion messaging, so LNDK tunnels onion messages as custom
+    //    message type 513; we must enable the override and advertise bit 39 manually.
+    if !lnd_advertises_onion_natively() {
+        args.push(format!("--protocol.custom-message=513"));
+        args.push(format!("--protocol.custom-nodeann=39"));
+        args.push(format!("--protocol.custom-init=39"));
+    }
 
     let stdout_log_path = lnd_data_dir.join("lnd-itest-stdout.log");
     let stderr_log_path = lnd_data_dir.join("lnd-itest-stderr.log");
@@ -338,7 +347,30 @@ pub fn get_lnd_args(
     let stderr_file =
         File::create(&stderr_log_path).expect("Failed to create stderr log file for lnd-itest");
 
-    (args.to_vec(), stdout_file, stderr_file)
+    (args, stdout_file, stderr_file)
+}
+
+/// lnd_advertises_onion_natively reports whether the lnd-itest binary handles
+/// onion messages natively (LND >= 0.21). The current working directory is the
+/// directory containing the lnd-itest binary when this is called.
+fn lnd_advertises_onion_natively() -> bool {
+    let output = match Command::new("./lnd-itest").arg("--version").output() {
+        Ok(output) => output,
+        Err(_) => return false,
+    };
+    // e.g. "lnd-itest version 0.21.0-beta commit=..."
+    let version = String::from_utf8_lossy(&output.stdout);
+    for token in version.split_whitespace() {
+        let nums: Vec<u32> = token
+            .split(|c: char| c == '.' || c == '-')
+            .filter_map(|s| s.parse::<u32>().ok())
+            .collect();
+        if nums.len() >= 2 {
+            let (major, minor) = (nums[0], nums[1]);
+            return major > 0 || minor >= 21;
+        }
+    }
+    false
 }
 
 pub async fn wait_for_ldk_payment_completion(
@@ -398,15 +430,22 @@ pub async fn wait_for_lnd_payment_completion(
             .await;
         assert!(invoices.is_ok());
         let invoices = invoices.unwrap().into_inner();
-        if !invoices.invoices.is_empty() {
-            let invoice = invoices.invoices[0].clone();
-            log::debug!("Invoice status: {:?}", invoice.state);
-            if invoice.state == InvoiceHtlcState::Settled as i32 {
-                log::info!("Payment succeeded");
-                return Ok(());
-            }
+        // A single offer can legitimately yield more than one invoice (e.g. when
+        // the payer sends several invoice_requests, each of which LNDK answers
+        // with its own invoice). Only one of them gets paid, so scan all
+        // invoices for any settled one rather than only checking invoices[0].
+        let settled = invoices
+            .invoices
+            .iter()
+            .any(|invoice| invoice.state == InvoiceHtlcState::Settled as i32);
+        if settled {
+            log::info!("Payment succeeded");
+            return Ok(());
         }
-        log::debug!("No payments found yet, waiting 1 second...");
+        log::debug!(
+            "No settled invoice yet among {} invoice(s), waiting 1 second...",
+            invoices.invoices.len()
+        );
         sleep(Duration::from_secs(1)).await;
     }
 }

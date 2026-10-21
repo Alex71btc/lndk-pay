@@ -1,0 +1,110 @@
+From 365c8fa9687014e21f4e90948f95ae412a288851 Mon Sep 17 00:00:00 2001
+From: Alex71btc <hardcorebtc@tutanota.com>
+Date: Sat, 20 Jun 2026 17:10:15 +0200
+Subject: [PATCH] vendor: add SendOnionMessage/SubscribeOnionMessages (LND
+ 0.21)
+
+Add the native onion message RPCs and their messages
+(SendOnionMessageRequest/Response, SubscribeOnionMessagesRequest,
+OnionMessageUpdate) to the vendored lightning.proto so the generated
+client exposes them. Mirrors lnd v0.21.0-beta lnrpc/lightning.proto.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+---
+ vendor/lightning.proto | 73 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 73 insertions(+)
+
+diff --git a/vendor/lightning.proto b/vendor/lightning.proto
+index ed35ab2..06d9226 100644
+--- a/vendor/lightning.proto
++++ b/vendor/lightning.proto
+@@ -584,6 +584,18 @@ service Lightning {
+     rpc SubscribeCustomMessages (SubscribeCustomMessagesRequest)
+         returns (stream CustomMessage);
+ 
++    /* lncli: `sendonion`
++    SendOnionMessage sends an onion message to a peer.
++    */
++    rpc SendOnionMessage (SendOnionMessageRequest)
++        returns (SendOnionMessageResponse);
++
++    /* lncli: `subscribeonion`
++    SubscribeOnionMessages subscribes to a stream of incoming onion messages.
++    */
++    rpc SubscribeOnionMessages (SubscribeOnionMessagesRequest)
++        returns (stream OnionMessageUpdate);
++
+     /* lncli: `listaliases`
+     ListAliases returns the set of all aliases that have ever existed with
+     their confirmed SCID (if it exists) and/or the base SCID (in the case of
+@@ -645,6 +657,67 @@ message SendCustomMessageRequest {
+ message SendCustomMessageResponse {
+ }
+ 
++message SubscribeOnionMessagesRequest {
++}
++
++message OnionMessageUpdate {
++    // Peer from which this message originates. Represented as a byte-encoded
++    // public key.
++    bytes peer = 1;
++
++    // PathKey is used to derive the blinded node id by tweaking the hop's
++    // static public key. The hop uses the corresponding blinded private key
++    // together with the sender's ephemeral key to perform ECDH and obtain the
++    // shared secret for decrypting the onion payload. Separately, for
++    // decrypting `encrypted_recipient_data`, the recipient performs ECDH
++    // between its static node private key and the path_key to derive the
++    // decryption key.
++    bytes path_key = 2;
++
++    // Serialized Sphinx onion packet (BOLT 4) containing the layered, per-hop
++    // encrypted payloads and routing instructions used to forward this message
++    // along its designated path.
++    bytes onion = 3;
++
++    // reply_path is the blinded path that should be used when replying to a
++    // received message.
++    BlindedPath reply_path = 4;
++
++    // encrypted_recipient_data is the encrypted data that contains the
++    // forwarding information for an onion message. It contains either
++    // next_node_id or short_channel_id for each non-final node. It MAY contain
++    // the path_id for the final node.
++    bytes encrypted_recipient_data = 5;
++
++    // Custom onion message tlv records. These are customized fields that are
++    // not defined by LND and cannot be extracted.
++    map<uint64, bytes> custom_records = 6;
++}
++
++message SendOnionMessageRequest {
++    // Peer to send the message to
++    bytes peer = 1;
++
++    // PathKey is used to derive the blinded node id by tweaking the hop's
++    // static public key. The hop uses the corresponding blinded private key
++    // together with the sender's ephemeral key to perform ECDH and obtain the
++    // shared secret for decrypting the onion payload. Separately, for
++    // decrypting `encrypted_recipient_data`, the recipient performs ECDH
++    // between its static node private key and the path_key to derive the
++    // decryption key.
++    bytes path_key = 2;
++
++    // Serialized Sphinx onion packet (BOLT 4) containing the layered, per-hop
++    // encrypted payloads and routing instructions used to forward this message
++    // along its designated path.
++    bytes onion = 3;
++}
++
++message SendOnionMessageResponse {
++    // The status of the onion message send operation.
++    string status = 1;
++}
++
+ message Utxo {
+     // The type of address
+     AddressType address_type = 1;
+-- 
+2.43.0
+
