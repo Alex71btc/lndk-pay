@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.15] - 2026-10-21
+
+### Added
+
+- Show incoming BOLT12 payer notes in Lightning Activity separately from the
+  offer memo. Preserve Unicode, emojis and line breaks without application-level
+  truncation, and include notes in activity search.
+- Persist received notes by payment hash before returning the payable invoice,
+  retain them across restarts, and migrate existing history automatically.
+
+### Changed
+
+- Bundle matching LNDK server and CLI builds with an authenticated incoming-payment
+  metadata API. Retain native onion messaging, amountless offers, descriptive offer
+  memos and invoice reuse for repeated requests from the existing patched runtime.
+- Preserve existing application data, payment history, NWC connections, aliases,
+  identities, Keysend messages and custom-record handling. No manual migration
+  or Companion update is required; the existing signed Android Companion remains
+  available.
+
 ## [0.3.14] - 2026-10-19
 
 ### Fixed

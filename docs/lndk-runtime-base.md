@@ -11,6 +11,12 @@ This baseline includes native onion RPC support for LND 0.21+, the vendored
 Incoming payer-note persistence and its authenticated metadata RPC are added
 on top of that baseline. The offer memo remains separate from the payer note.
 
+For BOLT12 Pay 0.3.15, the matching server and CLI are published as
+`alex71btc/lndk:bolt12-pay-295b537-multiarch` from
+[`Alex71btc/lndk-pay` at `295b537161b53827f81846e304269b853ff30e38`](https://github.com/Alex71btc/lndk-pay/commit/295b537161b53827f81846e304269b853ff30e38).
+Its amd64/arm64 image-index digest is
+`sha256:9d43c21a07892432602dfd369ba51391899519e4a2b07e41116b96ce766a07a1`.
+
 When updating the runtime, check its complete source and locked dependencies;
 an application image pin alone does not update the Rust source tree.
 The root Dockerfile builds this source tree. For the local two-service stack,

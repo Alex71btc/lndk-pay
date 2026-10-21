@@ -46,7 +46,7 @@ services:
       - ${UMBREL_ROOT}/app-data/lightning/data/lnd:/lnd:ro
 
   lndk:
-    image: alex71btc/lndk:bolt12-pay-89a06db@sha256:c3f12f3fc58c94e2d6284b107d25e1370b63ed711b5bce0294e146e642610cff
+    image: alex71btc/lndk:bolt12-pay-295b537-multiarch@sha256:9d43c21a07892432602dfd369ba51391899519e4a2b07e41116b96ce766a07a1
     restart: unless-stopped
     entrypoint:
       - /bin/sh

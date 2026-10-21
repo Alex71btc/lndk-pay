@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        LNDK_IMAGE: ${LNDK_IMAGE:-alex71btc/lndk:bolt12-pay-89a06db-multiarch@sha256:8c695fb18d593294e6f9a60ed9328bd7f6fc4c0b6ac9fae0dd3466cd3b9b0c97}
+        LNDK_IMAGE: ${LNDK_IMAGE:-alex71btc/lndk:bolt12-pay-295b537-multiarch@sha256:9d43c21a07892432602dfd369ba51391899519e4a2b07e41116b96ce766a07a1}
     container_name: bolt12-pay
     restart: unless-stopped
     ports:

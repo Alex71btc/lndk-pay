@@ -11,6 +11,7 @@ Self-hosted Lightning payment and identity server with next-generation BOLT12 su
 ## ✨ Features
 
 - ⚡ BOLT12 Offers (create & pay)
+- 💬 Incoming BOLT12 payer notes in Lightning Activity, saved separately from offer memos
 - 🔗 Lightning Address (BIP353)
 - 🔄 LNURL fallback
 - 🧾 Optional BOLT11 fallback invoices, created only on request
@@ -44,6 +45,14 @@ Without a domain you can still:
 - test BOLT12 functionality locally
 
 Public Alias pages use the Lightning Address/LNURL path without creating a BOLT11 invoice in the background. A visitor can explicitly click **Generate BOLT11 fallback invoice** if an older wallet still needs one. For an alias with a variable amount, the visitor enters the amount first; an alias with a fixed amount uses its configured value. Reloading the page never creates another invoice.
+
+Incoming BOLT12 payer notes appear separately from the offer description in
+**Lightning Activity** and remain available after restarts. Unicode, emojis and
+line breaks are preserved without an additional app-level length limit; the
+sending wallet and protocol determine what can be transmitted. Notes are rendered
+as text, not HTML. Only notes received by the updated bundled LNDK can be saved;
+notes discarded by an older receiver cannot be recovered retroactively. Run only
+one LNDK instance per LND node to avoid competing invoice responses.
 
 However:
 
