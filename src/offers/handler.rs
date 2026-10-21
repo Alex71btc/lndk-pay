@@ -19,8 +19,8 @@ use lightning::onion_message::offers::{OffersMessage, OffersMessageHandler};
 use lightning::sign::EntropySource;
 use log::{debug, error, info, trace, warn};
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::sync::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
 use tonic_lnd::lnrpc::{FeeLimit, Payment};
@@ -33,6 +33,7 @@ use super::lnd_requests::{
 use super::OfferError;
 use crate::offers::lnd_requests::{send_payment, track_payment, CreateOfferArgs};
 use crate::onion_messenger::MessengerUtilities;
+use crate::payment_metadata::{IncomingPaymentMetadata, IncomingPaymentMetadataStore};
 
 pub const DEFAULT_RESPONSE_INVOICE_TIMEOUT: u32 = 15;
 
@@ -57,6 +58,7 @@ pub struct OfferHandler {
     /// an invoice. If not provided, we will use the default value of 15 seconds.
     pub response_invoice_timeout: u32,
     client: Option<Client>,
+    incoming_payment_metadata_store: Option<Arc<IncomingPaymentMetadataStore>>,
 }
 
 #[derive(Clone)]
@@ -114,6 +116,15 @@ impl OfferHandler {
         seed: Option<[u8; 32]>,
         client: Option<Client>,
     ) -> Self {
+        Self::new_with_metadata_store(response_invoice_timeout, seed, client, None)
+    }
+
+    pub fn new_with_metadata_store(
+        response_invoice_timeout: Option<u32>,
+        seed: Option<[u8; 32]>,
+        client: Option<Client>,
+        incoming_payment_metadata_store: Option<Arc<IncomingPaymentMetadataStore>>,
+    ) -> Self {
         let messenger_utils = MessengerUtilities::default();
         let random_bytes = match seed {
             Some(seed) => seed,
@@ -130,7 +141,18 @@ impl OfferHandler {
             expanded_key,
             response_invoice_timeout,
             client,
+            incoming_payment_metadata_store,
         }
+    }
+
+    pub fn incoming_payment_metadata(
+        &self,
+        payment_hashes: &HashSet<String>,
+    ) -> Vec<IncomingPaymentMetadata> {
+        self.incoming_payment_metadata_store
+            .as_ref()
+            .map(|store| store.list(payment_hashes))
+            .unwrap_or_default()
     }
 
     /// Adds an offer to be paid with the amount specified. May only be called once for a single
@@ -437,6 +459,20 @@ impl OffersMessageHandler for OfferHandler {
 
                 match invoice_result {
                     Ok(invoice) => {
+                        if let (Some(store), Some(payer_note)) = (
+                            &self.incoming_payment_metadata_store,
+                            invoice_info.payer_note,
+                        ) {
+                            if let Err(error) =
+                                store.record(invoice_info.payment_hash.0, payer_note)
+                            {
+                                // Do not return an invoice that can be paid before its note has
+                                // been durably correlated with the payment hash.
+                                log::error!("Error persisting incoming BOLT12 payer note: {error}");
+                                return None;
+                            }
+                        }
+
                         {
                             let mut pending_messages = self.pending_messages.lock().unwrap();
                             pending_messages.push((

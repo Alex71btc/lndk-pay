@@ -1,7 +1,10 @@
 use clap::{Parser, Subcommand};
 use lightning::offers::invoice::Bolt12Invoice;
 use lndk::lndkrpc::offers_client::OffersClient;
-use lndk::lndkrpc::{CreateOfferRequest, GetInvoiceRequest, PayInvoiceRequest, PayOfferRequest};
+use lndk::lndkrpc::{
+    CreateOfferRequest, GetInvoiceRequest, ListIncomingPaymentMetadataRequest, PayInvoiceRequest,
+    PayOfferRequest,
+};
 use lndk::offers::decode;
 use lndk::offers::handler::DEFAULT_RESPONSE_INVOICE_TIMEOUT;
 use lndk::{
@@ -200,6 +203,11 @@ enum Commands {
         #[arg(long, required = false)]
         quantity: Option<u64>,
     },
+    /// Lists stored payer notes for incoming BOLT 12 payments.
+    ListIncomingPaymentMetadata {
+        /// Optional payment hashes to return. If omitted, all stored entries are returned.
+        payment_hashes: Vec<String>,
+    },
 }
 
 #[tokio::main]
@@ -346,6 +354,37 @@ async fn main() {
             add_metadata(&mut request, macaroon);
             match client.create_offer(request).await {
                 Ok(response) => println!("Offer: {:?}.", response.get_ref()),
+                Err(err) => err.exit_gracefully(),
+            }
+        }
+        Commands::ListIncomingPaymentMetadata { payment_hashes } => {
+            let tls = read_cert_from_args_or_exit(args.cert_pem, args.cert_path);
+            let channel = create_grpc_channel(args.grpc_host, args.grpc_port, tls).await;
+            let (mut client, macaroon) = create_authenticated_client(
+                channel,
+                args.macaroon_path,
+                args.macaroon_hex,
+                &args.network,
+            );
+
+            let mut request = Request::new(ListIncomingPaymentMetadataRequest { payment_hashes });
+            add_metadata(&mut request, macaroon);
+
+            match client.list_incoming_payment_metadata(request).await {
+                Ok(response) => {
+                    let items = response
+                        .into_inner()
+                        .items
+                        .into_iter()
+                        .map(|item| {
+                            serde_json::json!({
+                                "payment_hash": item.payment_hash,
+                                "payer_note": item.payer_note,
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    println!("{}", serde_json::json!({ "items": items }));
+                }
                 Err(err) => err.exit_gracefully(),
             }
         }

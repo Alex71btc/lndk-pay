@@ -5,6 +5,7 @@ pub mod lnd;
 mod message_router;
 pub mod offers;
 pub mod onion_messenger;
+pub mod payment_metadata;
 mod rate_limit;
 pub mod server;
 

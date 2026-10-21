@@ -1,4 +1,5 @@
-FROM alex71btc/lndk:bolt12-pay-89a06db-multiarch@sha256:8c695fb18d593294e6f9a60ed9328bd7f6fc4c0b6ac9fae0dd3466cd3b9b0c97 AS lndkstage
+ARG LNDK_IMAGE=alex71btc/lndk:bolt12-pay-89a06db-multiarch@sha256:8c695fb18d593294e6f9a60ed9328bd7f6fc4c0b6ac9fae0dd3466cd3b9b0c97
+FROM ${LNDK_IMAGE} AS lndkstage
 
 FROM python:3.12-slim
 

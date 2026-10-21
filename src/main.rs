@@ -13,6 +13,7 @@ use home::home_dir;
 use internal::*;
 use lndk::lnd::{build_seed_from_lnd_node, get_lnd_client, validate_lnd_creds, LndCfg};
 use lndk::offers::handler::OfferHandler;
+use lndk::payment_metadata::IncomingPaymentMetadataStore;
 use lndk::server::LNDKServer;
 use lndk::{
     lndkrpc, setup_logger, Cfg, LifecycleSignals, LndkOnionMessenger, DEFAULT_CONFIG_FILE_NAME,
@@ -209,18 +210,24 @@ async fn main() -> Result<(), ()> {
     generate_tls_creds(data_dir.clone(), config.tls_ip).map_err(|e| {
         error!("Error generating tls credentials: {e}");
     })?;
-    let identity = read_tls(data_dir).map_err(|e| {
+    let identity = read_tls(data_dir.clone()).map_err(|e| {
         error!("Error reading tls credentials: {e}");
     })?;
+
+    let incoming_payment_metadata_store =
+        Arc::new(IncomingPaymentMetadataStore::open(&data_dir).map_err(|e| {
+            error!("Error opening incoming payment metadata store: {e}");
+        })?);
 
     let mut signer = client.clone();
     let seed = build_seed_from_lnd_node(&mut signer).await.map_err(|e| {
         error!("Error creating seed: {:?}", e);
     })?;
-    let handler = Arc::new(OfferHandler::new(
+    let handler = Arc::new(OfferHandler::new_with_metadata_store(
         config.response_invoice_timeout,
         Some(seed),
         Some(client.clone()),
+        Some(incoming_payment_metadata_store),
     ));
     let messenger = LndkOnionMessenger::new();
 

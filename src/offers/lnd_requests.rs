@@ -54,6 +54,7 @@ const MAX_ATTEMPTS: u32 = 10;
 pub struct LndkBolt12InvoiceInfo {
     pub payment_hash: PaymentHash,
     pub payment_paths: Vec<BlindedPaymentPath>,
+    pub payer_note: Option<String>,
 }
 
 pub(super) async fn create_invoice_request(
@@ -250,6 +251,13 @@ pub(super) async fn create_invoice_info_from_request(
     invoice_request: InvoiceRequest,
 ) -> Result<LndkBolt12InvoiceInfo, OfferError> {
     log::trace!("Creating invoice");
+    // PrintableString's Display implementation replaces control characters.
+    // Read the underlying UTF-8 string so newlines and other payer-provided
+    // content survive unchanged; rendering layers remain responsible for
+    // escaping this untrusted text.
+    let payer_note = invoice_request
+        .payer_note()
+        .map(|payer_note| payer_note.0.to_owned());
     let invoice_response = creator
         .add_invoice(invoice_request)
         .await
@@ -273,6 +281,7 @@ pub(super) async fn create_invoice_info_from_request(
     Ok(LndkBolt12InvoiceInfo {
         payment_hash,
         payment_paths,
+        payer_note,
     })
 }
 
@@ -1632,7 +1641,7 @@ mod tests {
     }
 
     // Helper function to create a dummy invoice request for testing
-    async fn create_dummy_invoice_request() -> InvoiceRequest {
+    async fn create_dummy_invoice_request_with_note(payer_note: Option<String>) -> InvoiceRequest {
         let offer = decode(get_offer()).unwrap();
         let offer_amount = offer.amount().unwrap();
         let amount = match offer_amount {
@@ -1647,11 +1656,15 @@ mod tests {
             &entropy_source,
             expanded_key,
             Some(amount),
-            None,
+            payer_note,
         )
         .await
         .unwrap();
         invoice_request
+    }
+
+    async fn create_dummy_invoice_request() -> InvoiceRequest {
+        create_dummy_invoice_request_with_note(None).await
     }
 
     #[tokio::test]
@@ -1676,13 +1689,16 @@ mod tests {
             })
         });
 
-        let invoice_request = create_dummy_invoice_request().await;
+        let payer_note = format!("Erste Zeile\nZweite Zeile 🚀\n{}", "💛".repeat(200));
+        let invoice_request =
+            create_dummy_invoice_request_with_note(Some(payer_note.clone())).await;
         let result = create_invoice_info_from_request(creator_mock, invoice_request).await;
 
         assert!(result.is_ok());
         let invoice_info = result.unwrap();
         assert_eq!(invoice_info.payment_hash.0.len(), 32);
         assert_eq!(invoice_info.payment_paths.len(), 0);
+        assert_eq!(invoice_info.payer_note, Some(payer_note));
     }
 
     #[tokio::test]

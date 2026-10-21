@@ -646,6 +646,19 @@
         opacity: 0.8;
       }
 
+      .txPayerNote {
+        margin-top: 6px;
+        font-size: 0.9em;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .txPayerNoteLabel {
+        color: var(--muted);
+        font-weight: 600;
+      }
+
       .txWallet {
         font-size: 0.95rem;
         font-weight: 600;
@@ -5944,6 +5957,10 @@
             item.memo && item.memo !== visibleTarget
               ? item.memo
               : "";
+          const displayPayerNote =
+            typeof item.payer_note === "string"
+              ? item.payer_note
+              : "";
 
           const paymentHash = item.payment_hash || raw.payment_hash || raw.r_hash || "";
           const txKey = [
@@ -5956,6 +5973,7 @@
             item.settled_at || "",
             item.identifier || "",
             item.memo || "",
+            item.payer_note || "",
           ].join("|");
           const txKeyAttr = String(txKey).replace(/"/g, "&quot;");
           const txDetailsOpenAttr = openTxDetails.has(txKey) ? " open" : "";
@@ -6082,6 +6100,14 @@
                   displayComment
                     ? `
                 <div class="txComment">💬 ${escapeContactHtml(displayComment)}</div>
+                `
+                    : ""
+                }
+
+                ${
+                  displayPayerNote
+                    ? `
+                <div class="txPayerNote"><span class="txPayerNoteLabel">💬 ${window.__t("history.payer_note")}:</span> ${escapeContactHtml(displayPayerNote)}</div>
                 `
                     : ""
                 }
@@ -9043,6 +9069,7 @@
               "Hier erscheint das letzte Zahlungsergebnis...",
             "title.lightning_activity": " Lightning-Aktivität",
             "history.payment": "Zahlung",
+            "history.payer_note": "Payer-Notiz",
             "history.show_details": "Details anzeigen",
             "history.hide_details": "Details ausblenden",
             "history.fee": "Gebühr",
@@ -9544,6 +9571,7 @@
             "history.show_details": "Show Details",
             "history.hide_details": "Hide Details",
             "history.payment": "Payment",
+            "history.payer_note": "Payer note",
             "history.wallet": "Wallet",
             "history.api": "API",
             "history.bolt11_invoice": "BOLT11 Invoice",

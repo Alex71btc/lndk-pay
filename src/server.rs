@@ -17,16 +17,18 @@ use lightning::util::ser::Writeable;
 use lndkrpc::offers_server::Offers;
 use lndkrpc::{
     Bolt12InvoiceContents, DecodeInvoiceRequest, FeatureBit, GetInvoiceRequest, GetInvoiceResponse,
-    PayInvoiceRequest, PayInvoiceResponse, PayOfferRequest, PayOfferResponse, PaymentHash,
-    PaymentPaths,
+    IncomingPaymentMetadata, ListIncomingPaymentMetadataRequest,
+    ListIncomingPaymentMetadataResponse, PayInvoiceRequest, PayInvoiceResponse, PayOfferRequest,
+    PayOfferResponse, PaymentHash, PaymentPaths,
 };
+use std::collections::HashSet;
 use std::num::NonZeroU64;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tonic::metadata::MetadataMap;
 use tonic::{Request, Response, Status};
-use tonic_lnd::lnrpc::GetInfoRequest;
+use tonic_lnd::lnrpc::{GetInfoRequest, ListInvoiceRequest};
 use tonic_types::{ErrorDetails, StatusExt};
 
 pub struct LNDKServer {
@@ -218,6 +220,50 @@ impl Offers for LNDKServer {
         };
 
         Ok(Response::new(reply))
+    }
+
+    async fn list_incoming_payment_metadata(
+        &self,
+        request: Request<ListIncomingPaymentMetadataRequest>,
+    ) -> Result<Response<ListIncomingPaymentMetadataResponse>, Status> {
+        let macaroon = check_auth_metadata(request.metadata())?;
+        let creds = Creds::String {
+            cert: self.lnd_cert.clone(),
+            macaroon,
+        };
+        let lnd_cfg = LndCfg::new(self.address.clone(), creds);
+        let mut client = get_lnd_client(lnd_cfg)?;
+        client
+            .lightning()
+            .list_invoices(ListInvoiceRequest {
+                num_max_invoices: 1,
+                ..Default::default()
+            })
+            .await
+            .map_err(|error| LndError::ServiceUnavailable(error.message().to_string()))?;
+
+        let mut payment_hashes = HashSet::new();
+        for payment_hash in &request.get_ref().payment_hashes {
+            let normalized = payment_hash.trim().to_ascii_lowercase();
+            if normalized.len() != 64 || hex::decode(&normalized).is_err() {
+                return Err(Status::invalid_argument(format!(
+                    "Invalid payment hash: {payment_hash}"
+                )));
+            }
+            payment_hashes.insert(normalized);
+        }
+
+        let items = self
+            .offer_handler
+            .incoming_payment_metadata(&payment_hashes)
+            .into_iter()
+            .map(|item| IncomingPaymentMetadata {
+                payment_hash: item.payment_hash,
+                payer_note: item.payer_note,
+            })
+            .collect();
+
+        Ok(Response::new(ListIncomingPaymentMetadataResponse { items }))
     }
 
     async fn create_offer(

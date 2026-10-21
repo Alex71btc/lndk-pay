@@ -4,9 +4,11 @@ RUN apt-get update && apt-get install -y protobuf-compiler git
 
 WORKDIR /app
 
-COPY . /app
+COPY Cargo.toml Cargo.lock build.rs config_spec.toml ./
+COPY src ./src
+COPY proto ./proto
 
-RUN cargo build --release
+RUN cargo build --locked --release --jobs 2
 
 FROM debian:bookworm-slim AS final
 

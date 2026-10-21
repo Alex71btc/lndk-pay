@@ -1,6 +1,9 @@
 services:
   bolt12-pay:
-    build: .
+    build:
+      context: .
+      args:
+        LNDK_IMAGE: ${LNDK_IMAGE:-alex71btc/lndk:bolt12-pay-89a06db-multiarch@sha256:8c695fb18d593294e6f9a60ed9328bd7f6fc4c0b6ac9fae0dd3466cd3b9b0c97}
     container_name: bolt12-pay
     restart: unless-stopped
     ports:

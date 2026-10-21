@@ -9,6 +9,7 @@ service Offers {
     rpc DecodeInvoice (DecodeInvoiceRequest) returns (Bolt12InvoiceContents);
     rpc PayInvoice (PayInvoiceRequest) returns (PayInvoiceResponse);
     rpc CreateOffer (CreateOfferRequest) returns (CreateOfferResponse);
+    rpc ListIncomingPaymentMetadata (ListIncomingPaymentMetadataRequest) returns (ListIncomingPaymentMetadataResponse);
 }
 
 message PayOfferRequest {
@@ -49,6 +50,21 @@ message PayInvoiceRequest {
 
 message PayInvoiceResponse {
     string payment_preimage = 1;
+}
+
+message ListIncomingPaymentMetadataRequest {
+    // Empty returns all stored entries. Callers may provide payment hashes to
+    // keep responses bounded to the invoices they are currently processing.
+    repeated string payment_hashes = 1;
+}
+
+message IncomingPaymentMetadata {
+    string payment_hash = 1;
+    string payer_note = 2;
+}
+
+message ListIncomingPaymentMetadataResponse {
+    repeated IncomingPaymentMetadata items = 1;
 }
 
 message Bolt12InvoiceContents {

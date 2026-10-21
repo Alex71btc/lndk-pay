@@ -1318,6 +1318,8 @@ dependencies = [
  "rand_chacha 0.9.0",
  "rand_core 0.9.3",
  "rcgen",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tonic",

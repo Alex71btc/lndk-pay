@@ -1,5 +1,9 @@
 .git
 .gitignore
+target/
+app/secrets/
+app/.env
+app/.env.*
 .env
 .env.*
 data/config.json

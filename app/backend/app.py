@@ -514,6 +514,7 @@ def init_db():
             status TEXT,
 
             memo TEXT,
+            payer_note TEXT,
             identifier TEXT,
 
             created_at TEXT,
@@ -579,6 +580,10 @@ def init_db():
         conn.execute("ALTER TABLE tx_history ADD COLUMN origin TEXT")
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute("ALTER TABLE tx_history ADD COLUMN payer_note TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -602,12 +607,13 @@ def save_tx_history_item(item: dict):
                 fee_sat,
                 status,
                 memo,
+                payer_note,
                 identifier,
                 created_at,
                 settled_at,
                 raw_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["payment_hash"],
@@ -620,6 +626,7 @@ def save_tx_history_item(item: dict):
                 item.get("fee_sat"),
                 item.get("status"),
                 item.get("memo"),
+                item.get("payer_note"),
                 item.get("identifier"),
                 item.get("created_at"),
                 item.get("settled_at"),
@@ -638,6 +645,7 @@ def _log_tx(
     amount_sat: int,
     status: str,
     memo: str = "",
+    payer_note: str | None = None,
     identifier: str = "",
     fee_sat: int | None = None,
     created_at: str | None = None,
@@ -658,6 +666,7 @@ def _log_tx(
         "fee_sat": fee_sat,
         "status": status,
         "memo": memo,
+        "payer_note": payer_note,
         "identifier": identifier,
         "created_at": created_at or str(int(time.time())),
         "settled_at": settled_at,
@@ -684,6 +693,7 @@ def list_tx_history(
                 LOWER(COALESCE(tx_history.counterparty, '')) LIKE ?
                 OR LOWER(COALESCE(tx_history.identifier, '')) LIKE ?
                 OR LOWER(COALESCE(tx_history.memo, '')) LIKE ?
+                OR LOWER(COALESCE(tx_history.payer_note, '')) LIKE ?
                 OR LOWER(COALESCE(tx_history.payment_hash, '')) LIKE ?
                 OR LOWER(COALESCE(tx_history.method, '')) LIKE ?
                 OR EXISTS (
@@ -701,7 +711,7 @@ def list_tx_history(
             )
         """
 
-        params.extend([pattern] * 6)
+        params.extend([pattern] * 7)
 
     with _db_conn() as conn:
         rows = conn.execute(
@@ -828,6 +838,7 @@ def update_tx_history_metadata(
     payment_hash: str,
     *,
     memo: str | None = None,
+    payer_note: str | None = None,
     counterparty: str | None = None,
     method: str | None = None,
     origin: str | None = None,
@@ -838,6 +849,10 @@ def update_tx_history_metadata(
     if memo is not None:
         fields.append("memo = ?")
         values.append(memo)
+
+    if payer_note is not None:
+        fields.append("payer_note = ?")
+        values.append(payer_note)
 
     if counterparty is not None:
         fields.append("counterparty = ?")
@@ -1973,6 +1988,51 @@ def _run_command(args: list[str]) -> str:
         raise HTTPException(status_code=502, detail=message)
 
     return stdout or stderr
+
+
+def _get_incoming_bolt12_payer_notes(
+    payment_hashes: list[str],
+) -> dict[str, str]:
+    normalized_hashes = []
+    seen = set()
+    for payment_hash in payment_hashes:
+        normalized = _normalize_payment_hash(payment_hash)
+        if (
+            len(normalized) == 64
+            and normalized not in seen
+            and all(character in "0123456789abcdef" for character in normalized)
+        ):
+            seen.add(normalized)
+            normalized_hashes.append(normalized)
+
+    if not normalized_hashes:
+        return {}
+
+    try:
+        raw_output = _run_command(
+            _base_command()
+            + ["list-incoming-payment-metadata", *normalized_hashes]
+        )
+        payload = json.loads(raw_output)
+    except (HTTPException, json.JSONDecodeError, TypeError) as exc:
+        # Keep history synchronization compatible with an older LNDK while the
+        # two containers are being upgraded. A later poll will backfill notes.
+        print(
+            f"incoming BOLT12 payer-note sync unavailable: {exc}",
+            flush=True,
+        )
+        return {}
+
+    notes: dict[str, str] = {}
+    for item in payload.get("items", []) if isinstance(payload, dict) else []:
+        if not isinstance(item, dict):
+            continue
+        payment_hash = _normalize_payment_hash(item.get("payment_hash"))
+        payer_note = item.get("payer_note")
+        if payment_hash in seen and isinstance(payer_note, str):
+            notes[payment_hash] = payer_note
+
+    return notes
 
 
 def _run_command_retry(args: list[str], retries: int = 3) -> str:
@@ -7414,8 +7474,13 @@ async def _list_payments() -> dict[str, Any]:
 
     return data
 
-def _invoice_to_tx_history(inv: dict):
+def _invoice_to_tx_history(
+    inv: dict,
+    payer_notes: dict[str, str] | None = None,
+):
     memo = inv.get("memo") or ""
+    payment_hash = _normalize_payment_hash(inv.get("r_hash"))
+    payer_note = (payer_notes or {}).get(payment_hash)
 
     tx_type = "invoice"
     method = "bolt11"
@@ -7447,7 +7512,11 @@ def _invoice_to_tx_history(inv: dict):
 
     memo_lower = memo.lower()
 
-    if memo_lower.startswith("bolt12 offer"):
+    if payer_note is not None:
+        tx_type = "offer"
+        method = "bolt12"
+
+    elif memo_lower.startswith("bolt12 offer"):
         tx_type = "offer"
         method = "bolt12"
 
@@ -7473,9 +7542,7 @@ def _invoice_to_tx_history(inv: dict):
         method = "bolt11"
 
     return {
-        "payment_hash": _normalize_payment_hash(
-            inv.get("r_hash")
-        ),
+        "payment_hash": payment_hash,
         "direction": "incoming",
         "type": tx_type,
         "method": method,
@@ -7484,6 +7551,7 @@ def _invoice_to_tx_history(inv: dict):
         "fee_sat": None,
         "status": "settled" if settled else "pending",
         "memo": memo,
+        "payer_note": payer_note,
         "identifier": memo,
         "created_at": inv.get("creation_date"),
         "settled_at": inv.get("settle_date"),
@@ -7606,9 +7674,12 @@ async def _payment_to_tx_history(payment: dict, existing: dict | None = None):
     }
 
 
-def _upsert_invoice_history(inv: dict[str, Any]) -> bool:
+def _upsert_invoice_history(
+    inv: dict[str, Any],
+    payer_notes: dict[str, str] | None = None,
+) -> bool:
     """Store one invoice while preserving the richer app-side classification."""
-    item = _invoice_to_tx_history(inv)
+    item = _invoice_to_tx_history(inv, payer_notes)
     payment_hash = item["payment_hash"]
 
     existing = None
@@ -7626,6 +7697,12 @@ def _upsert_invoice_history(inv: dict[str, Any]) -> bool:
                     existing["raw_json"] = {}
 
     if existing:
+        if item.get("payer_note") is None:
+            item["payer_note"] = existing.get("payer_note")
+            if item["payer_note"] is not None and not inv.get("is_keysend"):
+                item["method"] = "bolt12"
+                item["type"] = "offer"
+
         if item.get("method") == "bolt11" and existing.get("method") in {
             "lnurl",
             "lightning_address",
@@ -7647,6 +7724,7 @@ def _upsert_invoice_history(inv: dict[str, Any]) -> bool:
             "fee_sat": item["fee_sat"],
             "status": item["status"],
             "memo": item["memo"],
+            "payer_note": item.get("payer_note"),
             "identifier": item["identifier"],
             "created_at": item["created_at"],
             "settled_at": item["settled_at"],
@@ -7661,6 +7739,7 @@ def _upsert_invoice_history(inv: dict[str, Any]) -> bool:
             "fee_sat": existing.get("fee_sat"),
             "status": existing.get("status"),
             "memo": existing.get("memo"),
+            "payer_note": existing.get("payer_note"),
             "identifier": existing.get("identifier"),
             "created_at": existing.get("created_at"),
             "settled_at": existing.get("settled_at"),
@@ -7681,6 +7760,7 @@ def _upsert_invoice_history(inv: dict[str, Any]) -> bool:
         fee_sat=item["fee_sat"],
         status=item["status"],
         memo=item["memo"],
+        payer_note=item.get("payer_note"),
         identifier=item["identifier"],
         created_at=item["created_at"],
         settled_at=item["settled_at"],
@@ -7694,10 +7774,19 @@ def _upsert_invoice_history(inv: dict[str, Any]) -> bool:
 
 async def _sync_tx_history_once():
     invoices = await _list_invoices()
+    invoice_items = invoices.get("invoices", [])
+    payer_notes = await asyncio.to_thread(
+        _get_incoming_bolt12_payer_notes,
+        [
+            _normalize_payment_hash(invoice.get("r_hash"))
+            for invoice in invoice_items
+            if isinstance(invoice, dict)
+        ],
+    )
     count = 0
 
-    for inv in invoices.get("invoices", []):
-        if _upsert_invoice_history(inv):
+    for inv in invoice_items:
+        if _upsert_invoice_history(inv, payer_notes):
             count += 1
 
     payments = await _list_payments()
