@@ -442,6 +442,51 @@ The encrypted file is tied to the LND node that created it. If you move BOLT12 P
 > **Keep the Notification nsec you enter secret.** It gives full control over that Nostr identity. Encryption protects the stored file, but a running node with access to LND must still be trusted. Never paste the nsec into support chats, logs, screenshots, Tunnel settings, or public configuration files. If you do not want your main profile key on the server, use a dedicated Nostr profile for notifications.
 
 ---
+## 🔌 Nostr Wallet Connect (NWC)
+
+BOLT12 Pay supports Nostr Wallet Connect (NWC), allowing compatible clients such as Amethyst, Primal and Damus to connect to your self-hosted LND Lightning wallet.
+
+### Create an NWC connection
+
+1. Open the BOLT12 Pay `/pay` page.
+2. Scroll down and expand **NWC / Zap Wallet**.
+3. Click **Unlock NWC** and enter your password.
+4. Enter a descriptive **Connection Name**, e.g. `Amethyst on Android`.
+5. Select a **Relay URL**. The default is `wss://relay.getalby.com/v1`. You can also use your own compatible Nostr relay.
+6. Configure the spending limits:
+   - **Max payment per invoice (sat):** Maximum amount allowed for a single payment.
+   - **Budget period:** Time period for the spending budget.
+   - **Budget (sats):** Total spending allowance for that period.
+7. Choose the permissions you want to allow: `get_info`, `get_balance` and/or `pay_invoice`.
+8. Click **Create NWC connection**.
+9. Copy the generated NWC connection URL and import it into your compatible wallet client.
+
+**Important: Set a spending budget!**
+
+The default budget is **0 sats**. A connection with a zero spending budget cannot make outgoing payments or send Zaps, even if balance queries work.
+
+For Zap-enabled clients, enable `pay_invoice` and configure an appropriate nonzero budget and per-invoice limit.
+
+**Security:** Treat the generated NWC connection URL like a password. Never share it publicly. Use separate connections and limited budgets for different clients.
+
+### Troubleshooting: Multiple NWC connections in Amethyst
+
+When using multiple NWC wallet connections in the same Amethyst instance, balance requests may occasionally get stuck loading, even though Lightning payments still work.
+
+This behavior has been observed when connecting multiple BOLT12 Pay instances (e.g., one on Umbrel and another on StartOS) through the same Nostr relay.
+
+**Workaround:** When creating the NWC connections in BOLT12 Pay, select a **different Nostr relay for each connection**. For example:
+
+- **BOLT12 Pay on Umbrel:** `wss://relay.getalby.com/v1`
+- **BOLT12 Pay on StartOS:** Your own Nostr relay
+
+Both connections can then be used simultaneously in Amethyst.
+
+If a connection remains unresponsive after changing the configuration, remove the affected wallet connection from Amethyst, close the app and reopen it after a short wait.
+
+The underlying cause has not yet been confirmed and may involve how Amethyst or the relay handles multiple NWC connections.
+
+---
 
 # 🔒 Access Control
 
