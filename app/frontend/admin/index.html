@@ -305,6 +305,54 @@
         flex: 1;
       }
 
+      .payAddressActions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .payAddressActions[hidden] {
+        display: none;
+      }
+
+      .payAddressCopy {
+        min-width: 0;
+        max-width: 100%;
+        display: inline-grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        column-gap: 8px;
+        row-gap: 2px;
+        text-align: left;
+      }
+
+      .payAddressCopy > [aria-hidden="true"] {
+        grid-row: 1 / span 2;
+      }
+
+      .payAddressCopyValue {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        user-select: all;
+      }
+
+      .payAddressCopyLabel {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .payAddressActionIcon {
+        width: 20px;
+        height: 20px;
+        flex: none;
+      }
+
+      .payAddressSavedStatus {
+        margin: 0;
+      }
+
       .payPreviewBolt12Availability {
         display: none;
         align-items: center;
@@ -1184,7 +1232,7 @@
         </button>
       </div>
       <div class="heroGrid">
-        <section class="section payHero">
+        <form id="payForm" class="section payHero" novalidate>
           <h2><span data-i18n="title.pay">Offer bezahlen</span></h2>
 
           <label class="label" for="payOfferInput"
@@ -1196,6 +1244,8 @@
         <input
           id="payOfferInput"
           type="text"
+          required
+          autocomplete="off"
           placeholder="lno... oder lnbc... oder name@domain"
         />
 
@@ -1214,6 +1264,46 @@
         />
       </button>
       </div>
+
+          <div id="payAddressActions" class="payAddressActions" hidden>
+            <button
+              id="copyPayAddressBtn"
+              class="secondary payAddressCopy"
+              type="button"
+              data-i18n-title="btn.copy_address"
+              title="Adresse kopieren"
+            >
+              <span aria-hidden="true">⚡</span>
+              <span
+                id="payAddressValue"
+                class="mono payAddressCopyValue"
+              ></span>
+              <span
+                class="payAddressCopyLabel"
+                data-i18n="btn.copy_address"
+              >Adresse kopieren</span>
+            </button>
+            <button
+              id="savePayAddressBtn"
+              class="secondary"
+              type="button"
+            >
+              <img
+                src="/assets/icons/contacts.svg"
+                class="payAddressActionIcon"
+                alt=""
+                aria-hidden="true"
+              />
+              <span data-i18n="contacts.add_address"
+                >Zu Kontakten hinzufügen</span
+              >
+            </button>
+            <span
+              id="payAddressSavedStatus"
+              class="hint payAddressSavedStatus"
+              hidden
+            ></span>
+          </div>
 
           <div
             id="payLivePreview"
@@ -1293,6 +1383,8 @@
             type="number"
             min="1"
             step="1"
+            required
+            inputmode="numeric"
             data-i18n-placeholder="ph.amount"
             placeholder="z. B. 1000"
           />
@@ -1305,12 +1397,13 @@
           <input
             id="payerNoteInput"
             type="text"
+            maxlength="300"
             data-i18n-placeholder="ph.payer_note"
             placeholder="z. B. test"
           />
 
           <div class="row">
-            <button id="payOfferBtn" type="button">
+            <button id="payOfferBtn" type="submit">
               <span data-i18n="btn.pay">⚡ Zahlung starten</span>
             </button>
             <button class="secondary" id="useCurrentOfferBtn" type="button">
@@ -1326,7 +1419,7 @@
               BOLT11 und LNURL / Lightning Address.</span
             >
           </div>
-        </section>
+        </form>
 
         <section class="section">
           <h2><span data-i18n="title.create">Offer erzeugen</span></h2>
@@ -2841,9 +2934,24 @@
       const qrModeBadge = document.getElementById("qrModeBadge");
       const offerQrBox = document.getElementById("offerQrBox");
 
+      const payForm = document.getElementById("payForm");
       const payOfferInput = document.getElementById("payOfferInput");
       const payAmountInput = document.getElementById("payAmountInput");
       const payerNoteInput = document.getElementById("payerNoteInput");
+      const payOfferBtn = document.getElementById("payOfferBtn");
+      const payAddressActions = document.getElementById(
+        "payAddressActions",
+      );
+      const payAddressValue = document.getElementById("payAddressValue");
+      const copyPayAddressBtn = document.getElementById(
+        "copyPayAddressBtn",
+      );
+      const savePayAddressBtn = document.getElementById(
+        "savePayAddressBtn",
+      );
+      const payAddressSavedStatus = document.getElementById(
+        "payAddressSavedStatus",
+      );
       const payLivePreview = document.getElementById("payLivePreview");
       const payPreviewImage = document.getElementById("payPreviewImage");
       const payPreviewTitle = document.getElementById("payPreviewTitle");
@@ -3164,6 +3272,17 @@
         }
 
         loadContacts();
+      });
+
+      copyPayAddressBtn?.addEventListener("click", async () => {
+        const address = normalizePaymentInput(payOfferInput.value);
+        await copyText(address, window.__t("toast.address_copied"));
+      });
+
+      savePayAddressBtn?.addEventListener("click", () => {
+        const address = normalizePaymentInput(payOfferInput.value);
+        if (!isLightningAddress(address)) return;
+        openSaveContactModal();
       });
 
       newContactBtn?.addEventListener(
@@ -5434,6 +5553,7 @@
 
         const data = await readJsonOrThrow(res);
         loadedContacts = data.contacts || [];
+        refreshPayAddressActions();
 
         return loadedContacts;
       }
@@ -6556,6 +6676,7 @@
             : "In Pay";
           usePayBtn.addEventListener("click", () => {
             payOfferInput.value = item.offer || "";
+            payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
             setStatus(window.__t("toast.history_to_pay"));
           });
 
@@ -6760,6 +6881,49 @@
 
       let lastPaymentTargetInput = null;
       let focusNewPaymentTarget = false;
+
+      function isLightningAddress(value) {
+        return /^[^@\s]+@[^@\s]+$/.test(
+          String(value || "").trim(),
+        );
+      }
+
+      function findContactByIdentifier(identifier) {
+        const normalized = String(identifier || "").trim().toLowerCase();
+        if (!normalized) return null;
+
+        return (
+          loadedContacts.find((contact) =>
+            (contact.entries || []).some(
+              (entry) =>
+                String(entry.identifier || "").trim().toLowerCase() ===
+                normalized,
+            ),
+          ) || null
+        );
+      }
+
+      function refreshPayAddressActions() {
+        if (!payAddressActions) return;
+
+        const address = normalizePaymentInput(payOfferInput.value);
+        if (!isLightningAddress(address)) {
+          payAddressActions.hidden = true;
+          payAddressValue.textContent = "";
+          return;
+        }
+
+        const existingContact = findContactByIdentifier(address);
+        payAddressValue.textContent = address;
+        payAddressActions.hidden = false;
+        savePayAddressBtn.hidden = Boolean(existingContact);
+        payAddressSavedStatus.hidden = !existingContact;
+        payAddressSavedStatus.textContent = existingContact
+          ? `${window.__t("contacts.already_saved")} "${
+              existingContact.alias || address
+            }"`
+          : "";
+      }
 
       function resetPayUiState() {
         payAmountInput.disabled = false;
@@ -7473,6 +7637,7 @@
 
         if (scanTarget === "pay") {
           payOfferInput.value = value;
+          payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
           setStatus(window.__t("toast.qr_to_pay"));
         } else {
           decodeInput.value = value;
@@ -7924,11 +8089,13 @@
           const currentOffer = getCurrentOffer();
           if (!currentOffer) {
             payOfferInput.value = DEFAULT_ADDRESS;
+            payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
             setStatus(window.__t("toast.no_offer_default_used"));
             return;
           }
 
           payOfferInput.value = currentOffer;
+          payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
           setStatus(window.__t("toast.use_current_offer"));
         });
 
@@ -7953,7 +8120,7 @@
         };
         if (payerNote) payload.payer_note = payerNote;
 
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
         btn.disabled = true;
         const oldText = btn.textContent;
         btn.textContent = "Bezahle...";
@@ -8003,7 +8170,7 @@
         const nodeId = normalizePaymentInput(payOfferInput.value);
         const amountSat = payAmountInput.value.trim();
         const payerNote = payerNoteInput.value.trim();
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
 
         if (!/^0[23][0-9a-f]{64}$/i.test(nodeId)) {
           setStatus(window.__t("toast.invalid_node_id"), "error");
@@ -8066,7 +8233,7 @@
         const lnurl = normalizePaymentInput(payOfferInput.value);
         const amountSat = payAmountInput.value.trim();
         const payerNote = payerNoteInput.value.trim();
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
 
         if (!lnurl) {
           setStatus(window.__t("toast.enter_lnurl"), "error");
@@ -8127,7 +8294,7 @@
 
       async function payBolt11Flow() {
         const invoice = normalizePaymentInput(payOfferInput.value);
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
 
         if (!invoice) {
           setStatus(window.__t("toast.enter_invoice"), "error");
@@ -8173,7 +8340,58 @@
         }
       }
 
+      let paymentInProgress = false;
+
+      function validatePaymentInputs(kind) {
+        if (kind === "empty") {
+          setStatus(window.__t("toast.enter_target"), "error");
+          payOfferInput.focus();
+          return false;
+        }
+
+        if (kind === "unknown") {
+          setStatus(window.__t("toast.unknown_payment_format"), "error", true);
+          payOfferInput.focus();
+          return false;
+        }
+
+        if (
+          ["bolt12", "lnurl", "keysend", "ambiguous_address"].includes(kind)
+        ) {
+          const amountText = payAmountInput.value.trim();
+          const amountSat = Number(amountText);
+
+          if (!amountText) {
+            setStatus(window.__t("toast.enter_amount"), "error");
+            payAmountInput.focus();
+            return false;
+          }
+
+          if (
+            !/^[1-9]\d*$/.test(amountText) ||
+            !Number.isSafeInteger(amountSat)
+          ) {
+            setStatus(window.__t("toast.invalid_amount"), "error");
+            payAmountInput.focus();
+            return false;
+          }
+        }
+
+        if (payerNoteInput.value.length > 300) {
+          setStatus(window.__t("toast.payer_note_too_long"), "error");
+          payerNoteInput.focus();
+          return false;
+        }
+
+        return true;
+      }
+
       async function startSmartPayment() {
+        if (paymentInProgress) {
+          setStatus(window.__t("toast.payment_in_progress"), "warn");
+          return;
+        }
+
         updatePayUiForInput();
 
         const rawInput = payOfferInput.value.trim();
@@ -8198,37 +8416,24 @@
           payerNoteInput.disabled = true;
         }
 
-        if (kind === "empty") {
-          setStatus(window.__t("toast.enter_target"), "error");
-          return;
-        }
+        if (!validatePaymentInputs(kind)) return;
 
-        if (kind === "bolt12") {
-          return payBolt12Flow();
+        paymentInProgress = true;
+        try {
+          if (kind === "bolt12") return await payBolt12Flow();
+          if (kind === "bolt11") return await payBolt11Flow();
+          if (kind === "lnurl") return await payLnurlFlow();
+          if (kind === "keysend") return await payKeysendFlow();
+          if (kind === "ambiguous_address") return await payAddressFlow();
+        } finally {
+          paymentInProgress = false;
         }
-
-        if (kind === "bolt11") {
-          return payBolt11Flow();
-        }
-
-        if (kind === "lnurl") {
-          return payLnurlFlow();
-        }
-
-        if (kind === "keysend") {
-          return payKeysendFlow();
-        }
-
-        if (kind === "ambiguous_address") {
-          return payAddressFlow();
-        }
-
-        setStatus(window.__t("toast.unknown_payment_format"), "error", true);
       }
 
-      document
-        .getElementById("payOfferBtn")
-        .addEventListener("click", startSmartPayment);
+      payForm?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void startSmartPayment();
+      });
 
       let paymentMethodChoiceResolve = null;
       let paymentMethodPreviousFocus = null;
@@ -8331,7 +8536,7 @@
           return;
         }
 
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
         btn.disabled = true;
         const oldText = btn.textContent;
         btn.textContent = "Prüfe / bezahle...";
@@ -8430,6 +8635,7 @@
         });
 
       payOfferInput.addEventListener("input", () => {
+        refreshPayAddressActions();
         if (payPreviewTimer) clearTimeout(payPreviewTimer);
         payPreviewTimer = setTimeout(() => {
           loadPayPreview();
@@ -8942,6 +9148,7 @@
             "contacts.save": "Speichern",
 
             "contacts.save_as_new": "💾 Als neuen Kontakt speichern",
+            "contacts.add_address": "Zu Kontakten hinzufügen",
 
             "contacts.already_saved": "✓ Bereits gespeichert als",
             "contacts.delete_text": "Kontakt löschen?",
@@ -8959,6 +9166,12 @@
             "toast.enter_offer_or_bip353":
               "Bitte ein BOLT12-Offer oder eine BIP353-Adresse eingeben.",
             "toast.enter_amount": "Bitte einen Zahlbetrag in sats eingeben.",
+            "toast.invalid_amount":
+              "Bitte einen positiven, ganzen Zahlbetrag in sats eingeben.",
+            "toast.payer_note_too_long":
+              "Die Payer Note darf höchstens 300 Zeichen lang sein.",
+            "toast.payment_in_progress":
+              "Eine Zahlung wird bereits verarbeitet.",
             "toast.paying": "Bezahle:",
             "toast.enter_lnurl": "Bitte LNURL eingeben.",
             "toast.paying_lnurl": "Bezahle LNURL:",
@@ -9447,6 +9660,7 @@
             "contacts.save": "Save",
 
             "contacts.save_as_new": "💾 Save as new contact",
+            "contacts.add_address": "Add to contacts",
 
             "contacts.already_saved": "✓ Already saved as",
             "contacts.delete_text": "Delete contact?",
@@ -9463,6 +9677,12 @@
             "toast.enter_offer_or_bip353":
               "Please enter a BOLT12 offer or a BIP353 address.",
             "toast.enter_amount": "Please enter an amount in sats.",
+            "toast.invalid_amount":
+              "Please enter a positive whole-number amount in sats.",
+            "toast.payer_note_too_long":
+              "The payer note cannot be longer than 300 characters.",
+            "toast.payment_in_progress":
+              "A payment is already being processed.",
             "toast.paying": "Paying:",
             "toast.enter_lnurl": "Please enter LNURL.",
             "toast.paying_lnurl": "Paying LNURL:",
