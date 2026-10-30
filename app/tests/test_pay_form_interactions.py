@@ -40,6 +40,28 @@ class PayFormInteractionTests(unittest.TestCase):
         )
         self.assertIn("openSaveContactModal();", self.html)
 
+    def test_clipboard_button_detects_and_inserts_supported_targets(self):
+        self.assertIn('id="clipboardPasteBtn"', self.html)
+        self.assertIn("navigator.clipboard?.readText", self.html)
+        self.assertIn("function detectClipboardPaymentTarget(raw)", self.html)
+        self.assertIn('"bolt12",', self.html)
+        self.assertIn('"bolt11",', self.html)
+        self.assertIn('"lnurl",', self.html)
+        self.assertIn('"ambiguous_address",', self.html)
+        self.assertIn('"keysend",', self.html)
+        self.assertIn('payOfferInput.addEventListener("paste"', self.html)
+        self.assertIn("insertDetectedPaymentTarget(detected);", self.html)
+        self.assertIn('window.__t("clipboard.read_unavailable")', self.html)
+
+    def test_pay_scanner_is_a_compact_action_next_to_the_target(self):
+        self.assertIn('class="payInputActions"', self.html)
+        self.assertIn('id="scanToPayBtn"', self.html)
+        self.assertIn('data-i18n-title="clipboard.scan"', self.html)
+        self.assertNotIn(
+            '<span data-i18n="nav.qr_pay">QR → Pay</span>',
+            self.html,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

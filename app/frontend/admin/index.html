@@ -296,13 +296,40 @@
       }
 
       .payInputRow {
-        display: flex;
-        gap: 10px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
         align-items: center;
       }
 
       .payInputRow input {
-        flex: 1;
+        min-width: 0;
+      }
+
+      .payInputActions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .payInputAction {
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        flex: none;
+        color: var(--accent);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        box-shadow: none;
+      }
+
+      .payInputAction:hover {
+        color: #ffba61;
+        background: rgba(247, 147, 26, 0.08);
+        border-color: rgba(247, 147, 26, 0.55);
       }
 
       .payAddressActions {
@@ -320,27 +347,28 @@
       .payAddressCopy {
         min-width: 0;
         max-width: 100%;
-        display: inline-grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        align-items: center;
-        column-gap: 8px;
-        row-gap: 2px;
+        padding: 2px 0;
+        display: inline-flex;
         text-align: left;
+        color: var(--accent);
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
       }
 
-      .payAddressCopy > [aria-hidden="true"] {
-        grid-row: 1 / span 2;
+      .payAddressCopy:hover {
+        transform: none;
+        color: #ffba61;
+        background: transparent;
+        box-shadow: none;
+        text-decoration: underline;
       }
 
       .payAddressCopyValue {
         min-width: 0;
         overflow-wrap: anywhere;
         user-select: all;
-      }
-
-      .payAddressCopyLabel {
-        font-size: 0.85rem;
-        color: var(--muted);
       }
 
       .payAddressActionIcon {
@@ -380,28 +408,16 @@
         line-height: 1.35;
       }
 
-      #contactPickerBtn {
-          width: 52px;
-          height: 52px;
-          padding: 0;
-
-          display: flex;
-          align-items: center;
-          justify-content: center;
-
-          background: transparent;
-          border: 0;
-          box-shadow: none;
-      }
-
-      .contactButtonIcon {
-          width: 48px;
-          height: 48px;
+      .payInputActionIcon {
+          width: 22px;
+          height: 22px;
           display: block;
       }
 
-      #contactPickerBtn:hover {
-            background: rgba(255, 255, 255, 0.05);
+      .contactButtonIcon {
+          width: 26px;
+          height: 26px;
+          display: block;
       }
 
       .contactAction {
@@ -1224,9 +1240,6 @@
         <button class="secondary" id="scanToDecodeBtn" type="button">
           <span data-i18n="nav.qr_decode">QR → Decode</span>
         </button>
-        <button class="secondary" id="scanToPayBtn" type="button">
-          <span data-i18n="nav.qr_pay">QR → Pay</span>
-        </button>
         <button class="danger" id="logoutBtn" type="button">
           <span data-i18n="nav.logout">Logout</span>
         </button>
@@ -1240,30 +1253,82 @@
               >Offer, Invoice oder Lightning Address</span
             ></label
           >
-      <div class="payInputRow">
-        <input
-          id="payOfferInput"
-          type="text"
-          required
-          autocomplete="off"
-          placeholder="lno... oder lnbc... oder name@domain"
-        />
+          <div class="payInputRow">
+            <input
+              id="payOfferInput"
+              type="text"
+              required
+              autocomplete="off"
+              placeholder="lno... oder lnbc... oder name@domain"
+            />
 
-      <button
-        id="contactPickerBtn"
-        class="secondary"
-        type="button"
-        title="Contacts"
-        data-i18n-title="contacts.title"
-      >
-        <img
-          src="/assets/icons/contacts.svg"
-          class="contactButtonIcon"
-          alt=""
-          aria-hidden="true"
-        />
-      </button>
-      </div>
+            <div class="payInputActions">
+              <button
+                id="scanToPayBtn"
+                class="secondary payInputAction"
+                type="button"
+                title="QR-Code scannen"
+                aria-label="QR-Code scannen"
+                data-i18n-title="clipboard.scan"
+                data-i18n-aria-label="clipboard.scan"
+              >
+                <svg
+                  class="payInputActionIcon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 7h3l1.2-2h5.6L16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"></path>
+                  <circle cx="12" cy="13" r="3.25"></circle>
+                </svg>
+              </button>
+
+              <button
+                id="clipboardPasteBtn"
+                class="secondary payInputAction"
+                type="button"
+                title="Zahlungsziel aus Zwischenablage erkennen und einfügen"
+                aria-label="Zahlungsziel aus Zwischenablage erkennen und einfügen"
+                data-i18n-title="clipboard.paste"
+                data-i18n-aria-label="clipboard.paste"
+              >
+                <svg
+                  class="payInputActionIcon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="6" y="5" width="12" height="16" rx="2"></rect>
+                  <path d="M9 5V3.8A1.8 1.8 0 0 1 10.8 2h2.4A1.8 1.8 0 0 1 15 3.8V5"></path>
+                </svg>
+              </button>
+
+              <button
+                id="contactPickerBtn"
+                class="secondary payInputAction"
+                type="button"
+                title="Contacts"
+                aria-label="Contacts"
+                data-i18n-title="contacts.title"
+                data-i18n-aria-label="contacts.title"
+              >
+                <img
+                  src="/assets/icons/contacts.svg"
+                  class="contactButtonIcon"
+                  alt=""
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+          </div>
 
           <div id="payAddressActions" class="payAddressActions" hidden>
             <button
@@ -1273,15 +1338,10 @@
               data-i18n-title="btn.copy_address"
               title="Adresse kopieren"
             >
-              <span aria-hidden="true">⚡</span>
               <span
                 id="payAddressValue"
                 class="mono payAddressCopyValue"
               ></span>
-              <span
-                class="payAddressCopyLabel"
-                data-i18n="btn.copy_address"
-              >Adresse kopieren</span>
             </button>
             <button
               id="savePayAddressBtn"
@@ -2939,6 +2999,9 @@
       const payAmountInput = document.getElementById("payAmountInput");
       const payerNoteInput = document.getElementById("payerNoteInput");
       const payOfferBtn = document.getElementById("payOfferBtn");
+      const clipboardPasteBtn = document.getElementById(
+        "clipboardPasteBtn",
+      );
       const payAddressActions = document.getElementById(
         "payAddressActions",
       );
@@ -3254,6 +3317,10 @@
         );
       nwcQrBox?.addEventListener("click", () =>
         copyText(nwcUriOutput?.value || "", window.__t("toast.nwc_uri_copied")),
+      );
+      clipboardPasteBtn?.addEventListener(
+        "click",
+        pastePaymentTargetFromClipboard,
       );
       contactPickerBtn?.addEventListener("click", () => {
         const value = payOfferInput.value.trim().toLowerCase();
@@ -5625,12 +5692,14 @@
         value = value.replace(/^lightning:/i, "");
         value = value.replace(/^bitcoin:\??/i, "");
 
-        const lnoParamMatch = value.match(/(?:^|\?|&)lno=([^&]+)/i);
-        if (lnoParamMatch && lnoParamMatch[1]) {
+        const paymentParamMatch = value.match(
+          /(?:^|\?|&)(?:lightning|lno)=([^&]+)/i,
+        );
+        if (paymentParamMatch && paymentParamMatch[1]) {
           try {
-            value = decodeURIComponent(lnoParamMatch[1]).trim();
+            value = decodeURIComponent(paymentParamMatch[1]).trim();
           } catch {
-            value = lnoParamMatch[1].trim();
+            value = paymentParamMatch[1].trim();
           }
         }
 
@@ -5751,6 +5820,90 @@
 
         return "unknown";
       }
+
+      function detectClipboardPaymentTarget(raw) {
+        const target = normalizePaymentInput(raw);
+        const kind = detectPaymentType(target);
+        const supportedKinds = [
+          "bolt12",
+          "bolt11",
+          "lnurl",
+          "ambiguous_address",
+          "keysend",
+        ];
+
+        return supportedKinds.includes(kind) ? { target, kind } : null;
+      }
+
+      function getClipboardPaymentTypeLabel(kind) {
+        const translationKeys = {
+          bolt12: "history.bolt12_offer",
+          bolt11: "history.bolt11_invoice",
+          lnurl: "history.lnurl",
+          ambiguous_address: "history.lightning_address",
+          keysend: "clipboard.node_pubkey",
+        };
+
+        return window.__t(translationKeys[kind] || "label.target");
+      }
+
+      function insertDetectedPaymentTarget(detected) {
+        payOfferInput.value = detected.target;
+        updatePayUiForInput();
+        payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
+        payOfferInput.focus();
+
+        setStatus(
+          `${getClipboardPaymentTypeLabel(detected.kind)} ${window.__t(
+            "clipboard.detected_and_inserted",
+          )}`,
+        );
+      }
+
+      function showClipboardPasteFallback() {
+        payOfferInput.focus();
+        setStatus(window.__t("clipboard.read_unavailable"), "warn", true);
+      }
+
+      async function pastePaymentTargetFromClipboard() {
+        if (!navigator.clipboard?.readText || !window.isSecureContext) {
+          showClipboardPasteFallback();
+          return;
+        }
+
+        clipboardPasteBtn.disabled = true;
+        setStatus(window.__t("clipboard.reading"), "warn");
+
+        try {
+          const clipboardText = await navigator.clipboard.readText();
+          if (!clipboardText.trim()) {
+            setStatus(window.__t("clipboard.empty"), "warn");
+            return;
+          }
+
+          const detected = detectClipboardPaymentTarget(clipboardText);
+          if (!detected) {
+            setStatus(window.__t("clipboard.unsupported"), "error", true);
+            return;
+          }
+
+          insertDetectedPaymentTarget(detected);
+        } catch {
+          showClipboardPasteFallback();
+        } finally {
+          clipboardPasteBtn.disabled = false;
+        }
+      }
+
+      payOfferInput.addEventListener("paste", (event) => {
+        const pastedText = event.clipboardData?.getData("text") || "";
+        const detected = detectClipboardPaymentTarget(pastedText);
+        if (!detected) return;
+
+        event.preventDefault();
+        insertDetectedPaymentTarget(detected);
+      });
+
       function getActiveValue() {
         return getCurrentOffer() || DEFAULT_ADDRESS;
       }
@@ -9195,6 +9348,17 @@
               "Bitte Offer, Invoice, Lightning Address oder Node ID eingeben.",
             "toast.unknown_payment_format":
               "Unbekanntes Zahlungsformat. Erwartet: BOLT12, BOLT11, LNURL, Lightning Address oder Node ID.",
+            "clipboard.paste":
+              "Zahlungsziel aus Zwischenablage erkennen und einfügen",
+            "clipboard.scan": "QR-Code für Zahlung scannen",
+            "clipboard.reading": "Prüfe Zwischenablage…",
+            "clipboard.empty": "Die Zwischenablage ist leer.",
+            "clipboard.unsupported":
+              "Kein unterstütztes Zahlungsziel in der Zwischenablage erkannt. Erwartet: BOLT12, BOLT11, LNURL, Lightning-Adresse oder Node-Pubkey.",
+            "clipboard.read_unavailable":
+              "Zwischenablage konnte nicht automatisch gelesen werden. Das Zahlungsfeld ist aktiv – bitte jetzt Einfügen beziehungsweise Strg+V verwenden.",
+            "clipboard.detected_and_inserted": "erkannt und eingefügt.",
+            "clipboard.node_pubkey": "Node-Pubkey",
             "toast.enter_lightning_or_bip353":
               "Bitte eine Lightning Address oder BIP353-Adresse eingeben.",
             "toast.checking_and_paying": "Prüfe und bezahle:",
@@ -9706,6 +9870,17 @@
               "Please enter an offer, invoice, Lightning Address or Node ID.",
             "toast.unknown_payment_format":
               "Unknown payment format. Expected: BOLT12, BOLT11, LNURL, Lightning Address or Node ID.",
+            "clipboard.paste":
+              "Detect and insert payment target from clipboard",
+            "clipboard.scan": "Scan payment QR code",
+            "clipboard.reading": "Checking clipboard…",
+            "clipboard.empty": "The clipboard is empty.",
+            "clipboard.unsupported":
+              "No supported payment target was detected in the clipboard. Expected: BOLT12, BOLT11, LNURL, Lightning Address or node pubkey.",
+            "clipboard.read_unavailable":
+              "The clipboard could not be read automatically. The payment field is focused; paste now using the system paste action or Ctrl+V.",
+            "clipboard.detected_and_inserted": "detected and inserted.",
+            "clipboard.node_pubkey": "Node pubkey",
             "toast.enter_lightning_or_bip353":
               "Please enter a Lightning Address or BIP353 address.",
             "toast.checking_and_paying": "Checking and paying:",
@@ -10060,6 +10235,16 @@
           document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
             const key = el.getAttribute("data-i18n-placeholder");
             el.placeholder = t(key);
+          });
+
+          document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+            const key = el.getAttribute("data-i18n-title");
+            el.title = t(key);
+          });
+
+          document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
+            const key = el.getAttribute("data-i18n-aria-label");
+            el.setAttribute("aria-label", t(key));
           });
 
           if (window.renderHistory) window.renderHistory();
