@@ -28,17 +28,17 @@ class PayFormInteractionTests(unittest.TestCase):
         self.assertIn("paymentInProgress = true;", self.html)
         self.assertIn("paymentInProgress = false;", self.html)
 
-    def test_lightning_address_has_copy_and_contact_actions(self):
-        self.assertIn('id="payAddressActions"', self.html)
-        self.assertIn('id="copyPayAddressBtn"', self.html)
-        self.assertIn('id="savePayAddressBtn"', self.html)
+    def test_lightning_address_is_copied_from_pay_field(self):
+        self.assertIn('id="contactPickerBtn"', self.html)
         self.assertIn("function isLightningAddress(value)", self.html)
-        self.assertIn("refreshPayAddressActions();", self.html)
+        self.assertIn("function updatePayInputCopyState()", self.html)
+        self.assertIn('classList.toggle("copyablePaymentAddress"', self.html)
+        self.assertIn('payOfferInput.addEventListener("click"', self.html)
         self.assertIn(
             'copyText(address, window.__t("toast.address_copied"))',
             self.html,
         )
-        self.assertIn("openSaveContactModal();", self.html)
+        self.assertNotIn('id="payAddressActions"', self.html)
 
     def test_clipboard_button_detects_and_inserts_supported_targets(self):
         self.assertIn('id="clipboardPasteBtn"', self.html)
@@ -52,6 +52,9 @@ class PayFormInteractionTests(unittest.TestCase):
         self.assertIn('payOfferInput.addEventListener("paste"', self.html)
         self.assertIn("insertDetectedPaymentTarget(detected);", self.html)
         self.assertIn('window.__t("clipboard.read_unavailable")', self.html)
+        self.assertIn("let clipboardReadInProgress = false;", self.html)
+        self.assertNotIn("clipboardPasteBtn.disabled = true", self.html)
+        self.assertNotIn('window.__t("clipboard.reading")', self.html)
 
     def test_pay_scanner_is_a_compact_action_next_to_the_target(self):
         self.assertIn('class="payInputActions"', self.html)

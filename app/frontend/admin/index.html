@@ -306,6 +306,10 @@
         min-width: 0;
       }
 
+      .payInputRow input.copyablePaymentAddress {
+        cursor: copy;
+      }
+
       .payInputActions {
         display: flex;
         align-items: center;
@@ -330,55 +334,6 @@
         color: #ffba61;
         background: rgba(247, 147, 26, 0.08);
         border-color: rgba(247, 147, 26, 0.55);
-      }
-
-      .payAddressActions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-top: 10px;
-      }
-
-      .payAddressActions[hidden] {
-        display: none;
-      }
-
-      .payAddressCopy {
-        min-width: 0;
-        max-width: 100%;
-        padding: 2px 0;
-        display: inline-flex;
-        text-align: left;
-        color: var(--accent);
-        background: transparent;
-        border: 0;
-        border-radius: 0;
-        box-shadow: none;
-      }
-
-      .payAddressCopy:hover {
-        transform: none;
-        color: #ffba61;
-        background: transparent;
-        box-shadow: none;
-        text-decoration: underline;
-      }
-
-      .payAddressCopyValue {
-        min-width: 0;
-        overflow-wrap: anywhere;
-        user-select: all;
-      }
-
-      .payAddressActionIcon {
-        width: 20px;
-        height: 20px;
-        flex: none;
-      }
-
-      .payAddressSavedStatus {
-        margin: 0;
       }
 
       .payPreviewBolt12Availability {
@@ -1328,41 +1283,6 @@
                 />
               </button>
             </div>
-          </div>
-
-          <div id="payAddressActions" class="payAddressActions" hidden>
-            <button
-              id="copyPayAddressBtn"
-              class="secondary payAddressCopy"
-              type="button"
-              data-i18n-title="btn.copy_address"
-              title="Adresse kopieren"
-            >
-              <span
-                id="payAddressValue"
-                class="mono payAddressCopyValue"
-              ></span>
-            </button>
-            <button
-              id="savePayAddressBtn"
-              class="secondary"
-              type="button"
-            >
-              <img
-                src="/assets/icons/contacts.svg"
-                class="payAddressActionIcon"
-                alt=""
-                aria-hidden="true"
-              />
-              <span data-i18n="contacts.add_address"
-                >Zu Kontakten hinzufügen</span
-              >
-            </button>
-            <span
-              id="payAddressSavedStatus"
-              class="hint payAddressSavedStatus"
-              hidden
-            ></span>
           </div>
 
           <div
@@ -3002,19 +2922,6 @@
       const clipboardPasteBtn = document.getElementById(
         "clipboardPasteBtn",
       );
-      const payAddressActions = document.getElementById(
-        "payAddressActions",
-      );
-      const payAddressValue = document.getElementById("payAddressValue");
-      const copyPayAddressBtn = document.getElementById(
-        "copyPayAddressBtn",
-      );
-      const savePayAddressBtn = document.getElementById(
-        "savePayAddressBtn",
-      );
-      const payAddressSavedStatus = document.getElementById(
-        "payAddressSavedStatus",
-      );
       const payLivePreview = document.getElementById("payLivePreview");
       const payPreviewImage = document.getElementById("payPreviewImage");
       const payPreviewTitle = document.getElementById("payPreviewTitle");
@@ -3339,17 +3246,6 @@
         }
 
         loadContacts();
-      });
-
-      copyPayAddressBtn?.addEventListener("click", async () => {
-        const address = normalizePaymentInput(payOfferInput.value);
-        await copyText(address, window.__t("toast.address_copied"));
-      });
-
-      savePayAddressBtn?.addEventListener("click", () => {
-        const address = normalizePaymentInput(payOfferInput.value);
-        if (!isLightningAddress(address)) return;
-        openSaveContactModal();
       });
 
       newContactBtn?.addEventListener(
@@ -5620,7 +5516,6 @@
 
         const data = await readJsonOrThrow(res);
         loadedContacts = data.contacts || [];
-        refreshPayAddressActions();
 
         return loadedContacts;
       }
@@ -5865,14 +5760,17 @@
         setStatus(window.__t("clipboard.read_unavailable"), "warn", true);
       }
 
+      let clipboardReadInProgress = false;
+
       async function pastePaymentTargetFromClipboard() {
+        if (clipboardReadInProgress) return;
+
         if (!navigator.clipboard?.readText || !window.isSecureContext) {
           showClipboardPasteFallback();
           return;
         }
 
-        clipboardPasteBtn.disabled = true;
-        setStatus(window.__t("clipboard.reading"), "warn");
+        clipboardReadInProgress = true;
 
         try {
           const clipboardText = await navigator.clipboard.readText();
@@ -5891,7 +5789,7 @@
         } catch {
           showClipboardPasteFallback();
         } finally {
-          clipboardPasteBtn.disabled = false;
+          clipboardReadInProgress = false;
         }
       }
 
@@ -5902,6 +5800,13 @@
 
         event.preventDefault();
         insertDetectedPaymentTarget(detected);
+      });
+
+      payOfferInput.addEventListener("click", async () => {
+        const address = normalizePaymentInput(payOfferInput.value);
+        if (!isLightningAddress(address)) return;
+
+        await copyText(address, window.__t("toast.address_copied"));
       });
 
       function getActiveValue() {
@@ -7041,40 +6946,12 @@
         );
       }
 
-      function findContactByIdentifier(identifier) {
-        const normalized = String(identifier || "").trim().toLowerCase();
-        if (!normalized) return null;
-
-        return (
-          loadedContacts.find((contact) =>
-            (contact.entries || []).some(
-              (entry) =>
-                String(entry.identifier || "").trim().toLowerCase() ===
-                normalized,
-            ),
-          ) || null
-        );
-      }
-
-      function refreshPayAddressActions() {
-        if (!payAddressActions) return;
-
+      function updatePayInputCopyState() {
         const address = normalizePaymentInput(payOfferInput.value);
-        if (!isLightningAddress(address)) {
-          payAddressActions.hidden = true;
-          payAddressValue.textContent = "";
-          return;
-        }
-
-        const existingContact = findContactByIdentifier(address);
-        payAddressValue.textContent = address;
-        payAddressActions.hidden = false;
-        savePayAddressBtn.hidden = Boolean(existingContact);
-        payAddressSavedStatus.hidden = !existingContact;
-        payAddressSavedStatus.textContent = existingContact
-          ? `${window.__t("contacts.already_saved")} "${
-              existingContact.alias || address
-            }"`
+        const copyable = isLightningAddress(address);
+        payOfferInput.classList.toggle("copyablePaymentAddress", copyable);
+        payOfferInput.title = copyable
+          ? window.__t("clipboard.click_address_to_copy")
           : "";
       }
 
@@ -8788,7 +8665,7 @@
         });
 
       payOfferInput.addEventListener("input", () => {
-        refreshPayAddressActions();
+        updatePayInputCopyState();
         if (payPreviewTimer) clearTimeout(payPreviewTimer);
         payPreviewTimer = setTimeout(() => {
           loadPayPreview();
@@ -9301,7 +9178,6 @@
             "contacts.save": "Speichern",
 
             "contacts.save_as_new": "💾 Als neuen Kontakt speichern",
-            "contacts.add_address": "Zu Kontakten hinzufügen",
 
             "contacts.already_saved": "✓ Bereits gespeichert als",
             "contacts.delete_text": "Kontakt löschen?",
@@ -9351,7 +9227,8 @@
             "clipboard.paste":
               "Zahlungsziel aus Zwischenablage erkennen und einfügen",
             "clipboard.scan": "QR-Code für Zahlung scannen",
-            "clipboard.reading": "Prüfe Zwischenablage…",
+            "clipboard.click_address_to_copy":
+              "Lightning-Adresse anklicken, um sie zu kopieren",
             "clipboard.empty": "Die Zwischenablage ist leer.",
             "clipboard.unsupported":
               "Kein unterstütztes Zahlungsziel in der Zwischenablage erkannt. Erwartet: BOLT12, BOLT11, LNURL, Lightning-Adresse oder Node-Pubkey.",
@@ -9824,7 +9701,6 @@
             "contacts.save": "Save",
 
             "contacts.save_as_new": "💾 Save as new contact",
-            "contacts.add_address": "Add to contacts",
 
             "contacts.already_saved": "✓ Already saved as",
             "contacts.delete_text": "Delete contact?",
@@ -9873,7 +9749,8 @@
             "clipboard.paste":
               "Detect and insert payment target from clipboard",
             "clipboard.scan": "Scan payment QR code",
-            "clipboard.reading": "Checking clipboard…",
+            "clipboard.click_address_to_copy":
+              "Click the Lightning Address to copy it",
             "clipboard.empty": "The clipboard is empty.",
             "clipboard.unsupported":
               "No supported payment target was detected in the clipboard. Expected: BOLT12, BOLT11, LNURL, Lightning Address or node pubkey.",
