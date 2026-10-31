@@ -72,11 +72,14 @@
 
       .toastWrap {
         position: fixed;
-        top: 14px;
+        top: calc(
+          14px + env(safe-area-inset-top, 0px) +
+            var(--toast-visual-offset-top, 0px)
+        );
         left: 50%;
         transform: translateX(-50%);
         width: min(980px, calc(100vw - 20px));
-        z-index: 3000;
+        z-index: 2147483647;
         pointer-events: none;
       }
 
@@ -296,13 +299,62 @@
       }
 
       .payInputRow {
-        display: flex;
-        gap: 10px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
         align-items: center;
       }
 
       .payInputRow input {
-        flex: 1;
+        min-width: 0;
+      }
+
+      .payInputRow input.copyablePaymentAddress {
+        cursor: copy;
+      }
+
+      .payInputActions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .payInputAction {
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        flex: none;
+        color: var(--accent);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        box-shadow: none;
+      }
+
+      .payInputAction:hover {
+        color: #ffba61;
+        background: rgba(247, 147, 26, 0.08);
+        border-color: rgba(247, 147, 26, 0.55);
+      }
+
+      .payContactStatus {
+        width: fit-content;
+        max-width: 100%;
+        margin-top: 8px;
+        padding: 4px 9px;
+        border: 1px solid rgba(93, 211, 158, 0.28);
+        border-radius: 999px;
+        color: #9ee6c4;
+        background: rgba(93, 211, 158, 0.08);
+        font-size: 0.82rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .payContactStatus[hidden] {
+        display: none;
       }
 
       .payPreviewBolt12Availability {
@@ -332,28 +384,16 @@
         line-height: 1.35;
       }
 
-      #contactPickerBtn {
-          width: 52px;
-          height: 52px;
-          padding: 0;
-
-          display: flex;
-          align-items: center;
-          justify-content: center;
-
-          background: transparent;
-          border: 0;
-          box-shadow: none;
-      }
-
-      .contactButtonIcon {
-          width: 48px;
-          height: 48px;
+      .payInputActionIcon {
+          width: 22px;
+          height: 22px;
           display: block;
       }
 
-      #contactPickerBtn:hover {
-            background: rgba(255, 255, 255, 0.05);
+      .contactButtonIcon {
+          width: 26px;
+          height: 26px;
+          display: block;
       }
 
       .contactAction {
@@ -1094,7 +1134,7 @@
     </style>
   </head>
   <body>
-    <div class="toastWrap">
+    <div class="toastWrap" id="toastWrap">
       <div class="statusBar" id="statusBar"></div>
     </div>
 
@@ -1176,15 +1216,12 @@
         <button class="secondary" id="scanToDecodeBtn" type="button">
           <span data-i18n="nav.qr_decode">QR → Decode</span>
         </button>
-        <button class="secondary" id="scanToPayBtn" type="button">
-          <span data-i18n="nav.qr_pay">QR → Pay</span>
-        </button>
         <button class="danger" id="logoutBtn" type="button">
           <span data-i18n="nav.logout">Logout</span>
         </button>
       </div>
       <div class="heroGrid">
-        <section class="section payHero">
+        <form id="payForm" class="section payHero" novalidate>
           <h2><span data-i18n="title.pay">Offer bezahlen</span></h2>
 
           <label class="label" for="payOfferInput"
@@ -1192,28 +1229,84 @@
               >Offer, Invoice oder Lightning Address</span
             ></label
           >
-      <div class="payInputRow">
-        <input
-          id="payOfferInput"
-          type="text"
-          placeholder="lno... oder lnbc... oder name@domain"
-        />
+          <div class="payInputRow">
+            <input
+              id="payOfferInput"
+              type="text"
+              required
+              autocomplete="off"
+              placeholder="lno... oder lnbc... oder name@domain"
+            />
 
-      <button
-        id="contactPickerBtn"
-        class="secondary"
-        type="button"
-        title="Contacts"
-        data-i18n-title="contacts.title"
-      >
-        <img
-          src="/assets/icons/contacts.svg"
-          class="contactButtonIcon"
-          alt=""
-          aria-hidden="true"
-        />
-      </button>
-      </div>
+            <div class="payInputActions">
+              <button
+                id="scanToPayBtn"
+                class="secondary payInputAction"
+                type="button"
+                title="QR-Code scannen"
+                aria-label="QR-Code scannen"
+                data-i18n-title="clipboard.scan"
+                data-i18n-aria-label="clipboard.scan"
+              >
+                <svg
+                  class="payInputActionIcon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 7h3l1.2-2h5.6L16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"></path>
+                  <circle cx="12" cy="13" r="3.25"></circle>
+                </svg>
+              </button>
+
+              <button
+                id="clipboardPasteBtn"
+                class="secondary payInputAction"
+                type="button"
+                title="Zahlungsziel aus Zwischenablage erkennen und einfügen"
+                aria-label="Zahlungsziel aus Zwischenablage erkennen und einfügen"
+                data-i18n-title="clipboard.paste"
+                data-i18n-aria-label="clipboard.paste"
+              >
+                <svg
+                  class="payInputActionIcon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="6" y="5" width="12" height="16" rx="2"></rect>
+                  <path d="M9 5V3.8A1.8 1.8 0 0 1 10.8 2h2.4A1.8 1.8 0 0 1 15 3.8V5"></path>
+                </svg>
+              </button>
+
+              <button
+                id="contactPickerBtn"
+                class="secondary payInputAction"
+                type="button"
+                title="Contacts"
+                aria-label="Contacts"
+                data-i18n-title="contacts.title"
+                data-i18n-aria-label="contacts.title"
+              >
+                <img
+                  src="/assets/icons/contacts.svg"
+                  class="contactButtonIcon"
+                  alt=""
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+          </div>
+
+          <div id="payContactStatus" class="payContactStatus" hidden></div>
 
           <div
             id="payLivePreview"
@@ -1293,6 +1386,8 @@
             type="number"
             min="1"
             step="1"
+            required
+            inputmode="numeric"
             data-i18n-placeholder="ph.amount"
             placeholder="z. B. 1000"
           />
@@ -1305,12 +1400,13 @@
           <input
             id="payerNoteInput"
             type="text"
+            maxlength="300"
             data-i18n-placeholder="ph.payer_note"
             placeholder="z. B. test"
           />
 
           <div class="row">
-            <button id="payOfferBtn" type="button">
+            <button id="payOfferBtn" type="submit">
               <span data-i18n="btn.pay">⚡ Zahlung starten</span>
             </button>
             <button class="secondary" id="useCurrentOfferBtn" type="button">
@@ -1326,7 +1422,7 @@
               BOLT11 und LNURL / Lightning Address.</span
             >
           </div>
-        </section>
+        </form>
 
         <section class="section">
           <h2><span data-i18n="title.create">Offer erzeugen</span></h2>
@@ -2831,6 +2927,7 @@
         } catch (_) {}
       }
 
+      const toastWrap = document.getElementById("toastWrap");
       const statusBar = document.getElementById("statusBar");
 
       const amountInput = document.getElementById("amountInput");
@@ -2841,9 +2938,17 @@
       const qrModeBadge = document.getElementById("qrModeBadge");
       const offerQrBox = document.getElementById("offerQrBox");
 
+      const payForm = document.getElementById("payForm");
       const payOfferInput = document.getElementById("payOfferInput");
       const payAmountInput = document.getElementById("payAmountInput");
       const payerNoteInput = document.getElementById("payerNoteInput");
+      const payOfferBtn = document.getElementById("payOfferBtn");
+      const clipboardPasteBtn = document.getElementById(
+        "clipboardPasteBtn",
+      );
+      const payContactStatus = document.getElementById(
+        "payContactStatus",
+      );
       const payLivePreview = document.getElementById("payLivePreview");
       const payPreviewImage = document.getElementById("payPreviewImage");
       const payPreviewTitle = document.getElementById("payPreviewTitle");
@@ -3147,6 +3252,10 @@
       nwcQrBox?.addEventListener("click", () =>
         copyText(nwcUriOutput?.value || "", window.__t("toast.nwc_uri_copied")),
       );
+      clipboardPasteBtn?.addEventListener(
+        "click",
+        pastePaymentTargetFromClipboard,
+      );
       contactPickerBtn?.addEventListener("click", () => {
         const value = payOfferInput.value.trim().toLowerCase();
 
@@ -3356,7 +3465,49 @@
       let scannerSuppressFocusUntil = 0;
       const scannerZoomIntervalMs = 45;
 
+      let toastViewportUpdateFrame = null;
+
+      function updateToastViewportPosition() {
+        toastViewportUpdateFrame = null;
+        if (!toastWrap) return;
+
+        const visualOffsetTop = Math.max(
+          0,
+          Number(window.visualViewport?.offsetTop) || 0,
+        );
+        toastWrap.style.setProperty(
+          "--toast-visual-offset-top",
+          `${visualOffsetTop}px`,
+        );
+      }
+
+      function queueToastViewportPositionUpdate() {
+        if (toastViewportUpdateFrame !== null) return;
+        toastViewportUpdateFrame = requestAnimationFrame(
+          updateToastViewportPosition,
+        );
+      }
+
+      window.visualViewport?.addEventListener(
+        "scroll",
+        queueToastViewportPositionUpdate,
+        { passive: true },
+      );
+      window.visualViewport?.addEventListener(
+        "resize",
+        queueToastViewportPositionUpdate,
+        { passive: true },
+      );
+      window.addEventListener("scroll", queueToastViewportPositionUpdate, {
+        passive: true,
+      });
+      window.addEventListener("resize", queueToastViewportPositionUpdate, {
+        passive: true,
+      });
+      updateToastViewportPosition();
+
       function setStatus(message, type = "ok", persist = false) {
+        updateToastViewportPosition();
         statusBar.textContent = message;
         statusBar.className = `statusBar show ${type}`;
 
@@ -5434,6 +5585,7 @@
 
         const data = await readJsonOrThrow(res);
         loadedContacts = data.contacts || [];
+        refreshPayContactStatus();
 
         return loadedContacts;
       }
@@ -5505,12 +5657,14 @@
         value = value.replace(/^lightning:/i, "");
         value = value.replace(/^bitcoin:\??/i, "");
 
-        const lnoParamMatch = value.match(/(?:^|\?|&)lno=([^&]+)/i);
-        if (lnoParamMatch && lnoParamMatch[1]) {
+        const paymentParamMatch = value.match(
+          /(?:^|\?|&)(?:lightning|lno)=([^&]+)/i,
+        );
+        if (paymentParamMatch && paymentParamMatch[1]) {
           try {
-            value = decodeURIComponent(lnoParamMatch[1]).trim();
+            value = decodeURIComponent(paymentParamMatch[1]).trim();
           } catch {
-            value = lnoParamMatch[1].trim();
+            value = paymentParamMatch[1].trim();
           }
         }
 
@@ -5631,6 +5785,123 @@
 
         return "unknown";
       }
+
+      function detectClipboardPaymentTarget(raw) {
+        const target = normalizePaymentInput(raw);
+        const kind = detectPaymentType(target);
+        const supportedKinds = [
+          "bolt12",
+          "bolt11",
+          "lnurl",
+          "ambiguous_address",
+          "keysend",
+        ];
+
+        return supportedKinds.includes(kind) ? { target, kind } : null;
+      }
+
+      function getClipboardPaymentTypeLabel(kind) {
+        const translationKeys = {
+          bolt12: "history.bolt12_offer",
+          bolt11: "history.bolt11_invoice",
+          lnurl: "history.lnurl",
+          ambiguous_address: "history.lightning_address",
+          keysend: "clipboard.node_pubkey",
+        };
+
+        return window.__t(translationKeys[kind] || "label.target");
+      }
+
+      function insertDetectedPaymentTarget(detected) {
+        payOfferInput.value = detected.target;
+        updatePayUiForInput();
+        payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
+        payOfferInput.focus();
+
+        setStatus(
+          `${getClipboardPaymentTypeLabel(detected.kind)} ${window.__t(
+            "clipboard.detected_and_inserted",
+          )}`,
+        );
+      }
+
+      function isAndroidUserAgent() {
+        return /Android/i.test(navigator.userAgent || "");
+      }
+
+      function showClipboardPasteFallback(reason = "unavailable") {
+        payOfferInput.focus();
+        const key =
+          reason === "insecure"
+            ? isAndroidUserAgent()
+              ? "clipboard.android_https_required"
+              : "clipboard.https_required"
+            : "clipboard.read_unavailable";
+        setStatus(window.__t(key), "warn", true);
+      }
+
+      let clipboardReadInProgress = false;
+
+      async function pastePaymentTargetFromClipboard() {
+        if (clipboardReadInProgress) return;
+
+        if (!window.isSecureContext) {
+          showClipboardPasteFallback("insecure");
+          return;
+        }
+
+        if (!navigator.clipboard?.readText) {
+          showClipboardPasteFallback();
+          return;
+        }
+
+        clipboardReadInProgress = true;
+
+        try {
+          const clipboardText = await navigator.clipboard.readText();
+          if (!clipboardText.trim()) {
+            setStatus(window.__t("clipboard.empty"), "warn");
+            return;
+          }
+
+          const detected = detectClipboardPaymentTarget(clipboardText);
+          if (!detected) {
+            setStatus(window.__t("clipboard.unsupported"), "error", true);
+            return;
+          }
+
+          insertDetectedPaymentTarget(detected);
+        } catch {
+          showClipboardPasteFallback();
+        } finally {
+          clipboardReadInProgress = false;
+        }
+      }
+
+      payOfferInput.addEventListener("paste", (event) => {
+        const pastedText = event.clipboardData?.getData("text") || "";
+        const detected = detectClipboardPaymentTarget(pastedText);
+        if (!detected) return;
+
+        event.preventDefault();
+        insertDetectedPaymentTarget(detected);
+      });
+
+      payOfferInput.addEventListener("click", async () => {
+        const target = normalizePaymentInput(payOfferInput.value);
+        const kind = detectPaymentType(target);
+        if (!isLightningAddress(target) && kind !== "bolt12") return;
+
+        await copyText(
+          target,
+          window.__t(
+            kind === "bolt12"
+              ? "toast.offer_copied"
+              : "toast.address_copied",
+          ),
+        );
+      });
+
       function getActiveValue() {
         return getCurrentOffer() || DEFAULT_ADDRESS;
       }
@@ -6556,6 +6827,7 @@
             : "In Pay";
           usePayBtn.addEventListener("click", () => {
             payOfferInput.value = item.offer || "";
+            payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
             setStatus(window.__t("toast.history_to_pay"));
           });
 
@@ -6760,6 +7032,55 @@
 
       let lastPaymentTargetInput = null;
       let focusNewPaymentTarget = false;
+
+      function isLightningAddress(value) {
+        return /^[^@\s]+@[^@\s]+$/.test(
+          String(value || "").trim(),
+        );
+      }
+
+      function findContactByIdentifier(identifier) {
+        const normalized = String(identifier || "").trim().toLowerCase();
+        if (!normalized) return null;
+
+        return (
+          loadedContacts.find((contact) =>
+            (contact.entries || []).some(
+              (entry) =>
+                String(entry.identifier || "").trim().toLowerCase() ===
+                normalized,
+            ),
+          ) || null
+        );
+      }
+
+      function refreshPayContactStatus() {
+        if (!payContactStatus) return;
+
+        const target = normalizePaymentInput(payOfferInput.value);
+        const existingContact = findContactByIdentifier(target);
+        payContactStatus.hidden = !existingContact;
+
+        if (!existingContact) {
+          payContactStatus.textContent = "";
+          return;
+        }
+
+        const alias = String(existingContact.alias || "").trim();
+        payContactStatus.textContent = alias
+          ? `${window.__t("contacts.already_saved")} "${alias}"`
+          : window.__t("contacts.already_saved");
+      }
+
+      function updatePayInputCopyState() {
+        const target = normalizePaymentInput(payOfferInput.value);
+        const kind = detectPaymentType(target);
+        const copyable = isLightningAddress(target) || kind === "bolt12";
+        payOfferInput.classList.toggle("copyablePaymentAddress", copyable);
+        payOfferInput.title = copyable
+          ? window.__t("clipboard.click_target_to_copy")
+          : "";
+      }
 
       function resetPayUiState() {
         payAmountInput.disabled = false;
@@ -7473,6 +7794,7 @@
 
         if (scanTarget === "pay") {
           payOfferInput.value = value;
+          payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
           setStatus(window.__t("toast.qr_to_pay"));
         } else {
           decodeInput.value = value;
@@ -7924,11 +8246,13 @@
           const currentOffer = getCurrentOffer();
           if (!currentOffer) {
             payOfferInput.value = DEFAULT_ADDRESS;
+            payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
             setStatus(window.__t("toast.no_offer_default_used"));
             return;
           }
 
           payOfferInput.value = currentOffer;
+          payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
           setStatus(window.__t("toast.use_current_offer"));
         });
 
@@ -7953,7 +8277,7 @@
         };
         if (payerNote) payload.payer_note = payerNote;
 
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
         btn.disabled = true;
         const oldText = btn.textContent;
         btn.textContent = "Bezahle...";
@@ -8003,7 +8327,7 @@
         const nodeId = normalizePaymentInput(payOfferInput.value);
         const amountSat = payAmountInput.value.trim();
         const payerNote = payerNoteInput.value.trim();
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
 
         if (!/^0[23][0-9a-f]{64}$/i.test(nodeId)) {
           setStatus(window.__t("toast.invalid_node_id"), "error");
@@ -8066,7 +8390,7 @@
         const lnurl = normalizePaymentInput(payOfferInput.value);
         const amountSat = payAmountInput.value.trim();
         const payerNote = payerNoteInput.value.trim();
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
 
         if (!lnurl) {
           setStatus(window.__t("toast.enter_lnurl"), "error");
@@ -8127,7 +8451,7 @@
 
       async function payBolt11Flow() {
         const invoice = normalizePaymentInput(payOfferInput.value);
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
 
         if (!invoice) {
           setStatus(window.__t("toast.enter_invoice"), "error");
@@ -8173,7 +8497,58 @@
         }
       }
 
+      let paymentInProgress = false;
+
+      function validatePaymentInputs(kind) {
+        if (kind === "empty") {
+          setStatus(window.__t("toast.enter_target"), "error");
+          payOfferInput.focus();
+          return false;
+        }
+
+        if (kind === "unknown") {
+          setStatus(window.__t("toast.unknown_payment_format"), "error", true);
+          payOfferInput.focus();
+          return false;
+        }
+
+        if (
+          ["bolt12", "lnurl", "keysend", "ambiguous_address"].includes(kind)
+        ) {
+          const amountText = payAmountInput.value.trim();
+          const amountSat = Number(amountText);
+
+          if (!amountText) {
+            setStatus(window.__t("toast.enter_amount"), "error");
+            payAmountInput.focus();
+            return false;
+          }
+
+          if (
+            !/^[1-9]\d*$/.test(amountText) ||
+            !Number.isSafeInteger(amountSat)
+          ) {
+            setStatus(window.__t("toast.invalid_amount"), "error");
+            payAmountInput.focus();
+            return false;
+          }
+        }
+
+        if (payerNoteInput.value.length > 300) {
+          setStatus(window.__t("toast.payer_note_too_long"), "error");
+          payerNoteInput.focus();
+          return false;
+        }
+
+        return true;
+      }
+
       async function startSmartPayment() {
+        if (paymentInProgress) {
+          setStatus(window.__t("toast.payment_in_progress"), "warn");
+          return;
+        }
+
         updatePayUiForInput();
 
         const rawInput = payOfferInput.value.trim();
@@ -8198,37 +8573,24 @@
           payerNoteInput.disabled = true;
         }
 
-        if (kind === "empty") {
-          setStatus(window.__t("toast.enter_target"), "error");
-          return;
-        }
+        if (!validatePaymentInputs(kind)) return;
 
-        if (kind === "bolt12") {
-          return payBolt12Flow();
+        paymentInProgress = true;
+        try {
+          if (kind === "bolt12") return await payBolt12Flow();
+          if (kind === "bolt11") return await payBolt11Flow();
+          if (kind === "lnurl") return await payLnurlFlow();
+          if (kind === "keysend") return await payKeysendFlow();
+          if (kind === "ambiguous_address") return await payAddressFlow();
+        } finally {
+          paymentInProgress = false;
         }
-
-        if (kind === "bolt11") {
-          return payBolt11Flow();
-        }
-
-        if (kind === "lnurl") {
-          return payLnurlFlow();
-        }
-
-        if (kind === "keysend") {
-          return payKeysendFlow();
-        }
-
-        if (kind === "ambiguous_address") {
-          return payAddressFlow();
-        }
-
-        setStatus(window.__t("toast.unknown_payment_format"), "error", true);
       }
 
-      document
-        .getElementById("payOfferBtn")
-        .addEventListener("click", startSmartPayment);
+      payForm?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void startSmartPayment();
+      });
 
       let paymentMethodChoiceResolve = null;
       let paymentMethodPreviousFocus = null;
@@ -8331,7 +8693,7 @@
           return;
         }
 
-        const btn = document.getElementById("payOfferBtn");
+        const btn = payOfferBtn;
         btn.disabled = true;
         const oldText = btn.textContent;
         btn.textContent = "Prüfe / bezahle...";
@@ -8430,6 +8792,8 @@
         });
 
       payOfferInput.addEventListener("input", () => {
+        updatePayInputCopyState();
+        refreshPayContactStatus();
         if (payPreviewTimer) clearTimeout(payPreviewTimer);
         payPreviewTimer = setTimeout(() => {
           loadPayPreview();
@@ -8959,6 +9323,12 @@
             "toast.enter_offer_or_bip353":
               "Bitte ein BOLT12-Offer oder eine BIP353-Adresse eingeben.",
             "toast.enter_amount": "Bitte einen Zahlbetrag in sats eingeben.",
+            "toast.invalid_amount":
+              "Bitte einen positiven, ganzen Zahlbetrag in sats eingeben.",
+            "toast.payer_note_too_long":
+              "Die Payer Note darf höchstens 300 Zeichen lang sein.",
+            "toast.payment_in_progress":
+              "Eine Zahlung wird bereits verarbeitet.",
             "toast.paying": "Bezahle:",
             "toast.enter_lnurl": "Bitte LNURL eingeben.",
             "toast.paying_lnurl": "Bezahle LNURL:",
@@ -8982,6 +9352,24 @@
               "Bitte Offer, Invoice, Lightning Address oder Node ID eingeben.",
             "toast.unknown_payment_format":
               "Unbekanntes Zahlungsformat. Erwartet: BOLT12, BOLT11, LNURL, Lightning Address oder Node ID.",
+            "clipboard.paste":
+              "Zahlungsziel aus Zwischenablage erkennen und einfügen",
+            "clipboard.scan": "QR-Code für Zahlung scannen",
+            "clipboard.click_address_to_copy":
+              "Lightning-Adresse anklicken, um sie zu kopieren",
+            "clipboard.click_target_to_copy":
+              "Lightning-Adresse oder BOLT12-Offer anklicken, um sie zu kopieren",
+            "clipboard.empty": "Die Zwischenablage ist leer.",
+            "clipboard.unsupported":
+              "Kein unterstütztes Zahlungsziel in der Zwischenablage erkannt. Erwartet: BOLT12, BOLT11, LNURL, Lightning-Adresse oder Node-Pubkey.",
+            "clipboard.read_unavailable":
+              "Zwischenablage konnte nicht automatisch gelesen werden. Das Zahlungsfeld ist aktiv – bitte jetzt Einfügen beziehungsweise Strg+V verwenden.",
+            "clipboard.https_required":
+              "Automatisches Einfügen benötigt HTTPS oder localhost. Bitte über die sichere Adresse öffnen oder manuell einfügen.",
+            "clipboard.android_https_required":
+              "Android blockiert den automatischen Clipboard-Zugriff über HTTP. Bitte BOLT12 Pay über die konfigurierte HTTPS-Adresse öffnen oder manuell einfügen.",
+            "clipboard.detected_and_inserted": "erkannt und eingefügt.",
+            "clipboard.node_pubkey": "Node-Pubkey",
             "toast.enter_lightning_or_bip353":
               "Bitte eine Lightning Address oder BIP353-Adresse eingeben.",
             "toast.checking_and_paying": "Prüfe und bezahle:",
@@ -9463,6 +9851,12 @@
             "toast.enter_offer_or_bip353":
               "Please enter a BOLT12 offer or a BIP353 address.",
             "toast.enter_amount": "Please enter an amount in sats.",
+            "toast.invalid_amount":
+              "Please enter a positive whole-number amount in sats.",
+            "toast.payer_note_too_long":
+              "The payer note cannot be longer than 300 characters.",
+            "toast.payment_in_progress":
+              "A payment is already being processed.",
             "toast.paying": "Paying:",
             "toast.enter_lnurl": "Please enter LNURL.",
             "toast.paying_lnurl": "Paying LNURL:",
@@ -9486,6 +9880,24 @@
               "Please enter an offer, invoice, Lightning Address or Node ID.",
             "toast.unknown_payment_format":
               "Unknown payment format. Expected: BOLT12, BOLT11, LNURL, Lightning Address or Node ID.",
+            "clipboard.paste":
+              "Detect and insert payment target from clipboard",
+            "clipboard.scan": "Scan payment QR code",
+            "clipboard.click_address_to_copy":
+              "Click the Lightning Address to copy it",
+            "clipboard.click_target_to_copy":
+              "Click the Lightning Address or BOLT12 offer to copy it",
+            "clipboard.empty": "The clipboard is empty.",
+            "clipboard.unsupported":
+              "No supported payment target was detected in the clipboard. Expected: BOLT12, BOLT11, LNURL, Lightning Address or node pubkey.",
+            "clipboard.read_unavailable":
+              "The clipboard could not be read automatically. The payment field is focused; paste now using the system paste action or Ctrl+V.",
+            "clipboard.https_required":
+              "Automatic paste requires HTTPS or localhost. Open the secure address or paste manually.",
+            "clipboard.android_https_required":
+              "Android blocks automatic clipboard access over HTTP. Open BOLT12 Pay through its configured HTTPS address or paste manually.",
+            "clipboard.detected_and_inserted": "detected and inserted.",
+            "clipboard.node_pubkey": "Node pubkey",
             "toast.enter_lightning_or_bip353":
               "Please enter a Lightning Address or BIP353 address.",
             "toast.checking_and_paying": "Checking and paying:",
@@ -9842,8 +10254,21 @@
             el.placeholder = t(key);
           });
 
+          document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+            const key = el.getAttribute("data-i18n-title");
+            el.title = t(key);
+          });
+
+          document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
+            const key = el.getAttribute("data-i18n-aria-label");
+            el.setAttribute("aria-label", t(key));
+          });
+
           if (window.renderHistory) window.renderHistory();
           if (window.renderTxHistory) window.renderTxHistory();
+          if (window.refreshPayContactStatus) {
+            window.refreshPayContactStatus();
+          }
           if (loadMoreBtn) {
             loadMoreBtn.style.display = txHistoryHasMore ? "" : "none";
           }

@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.17] - 2026-10-31
+
+### Added
+
+- Add compact QR scanner, clipboard and contacts actions beside the Pay target.
+  Detect and insert BOLT12 offers, BOLT11 invoices, LNURL targets, Lightning
+  Addresses and node public keys directly from the clipboard.
+- Show when the current payment target is already saved as a contact without
+  repeating the Lightning Address below the Pay field.
+
+### Changed
+
+- Submit payments with Enter from the Pay form while reusing the existing
+  validation and single-flight payment guard to prevent accidental duplicate
+  submissions.
+- Copy Lightning Addresses and BOLT12 offer strings by selecting the populated
+  Pay field, with format-specific confirmation messages.
+- Keep status messages visible in the mobile visual viewport while scrolling or
+  using the on-screen keyboard, and provide clearer HTTPS guidance when Android
+  blocks clipboard access on an insecure origin.
+
+### Fixed
+
+- Avoid the intermediate disabled clipboard state and keep browser-native paste
+  fallback behavior available when automatic clipboard reads are restricted.
+- Preserve the current address/contact context while simplifying the Pay layout
+  and removing the duplicate Lightning Address action row.
+
+## [0.3.16] - 2026-10-24
+
+### Changed
+
+- Update `rustls-webpki` to 0.103.16 for the eMudhra certificate distrust fix
+  and refresh the bundled Rust TLS and networking dependencies.
+- Rebuild the matching LNDK server and CLI images for AMD64 and ARM64 without
+  changing application data or requiring a migration.
+
 ## [0.3.15] - 2026-10-21
 
 ### Added
