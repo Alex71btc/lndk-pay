@@ -72,11 +72,14 @@
 
       .toastWrap {
         position: fixed;
-        top: 14px;
+        top: calc(
+          14px + env(safe-area-inset-top, 0px) +
+            var(--toast-visual-offset-top, 0px)
+        );
         left: 50%;
         transform: translateX(-50%);
         width: min(980px, calc(100vw - 20px));
-        z-index: 3000;
+        z-index: 2147483647;
         pointer-events: none;
       }
 
@@ -1131,7 +1134,7 @@
     </style>
   </head>
   <body>
-    <div class="toastWrap">
+    <div class="toastWrap" id="toastWrap">
       <div class="statusBar" id="statusBar"></div>
     </div>
 
@@ -2924,6 +2927,7 @@
         } catch (_) {}
       }
 
+      const toastWrap = document.getElementById("toastWrap");
       const statusBar = document.getElementById("statusBar");
 
       const amountInput = document.getElementById("amountInput");
@@ -3461,7 +3465,49 @@
       let scannerSuppressFocusUntil = 0;
       const scannerZoomIntervalMs = 45;
 
+      let toastViewportUpdateFrame = null;
+
+      function updateToastViewportPosition() {
+        toastViewportUpdateFrame = null;
+        if (!toastWrap) return;
+
+        const visualOffsetTop = Math.max(
+          0,
+          Number(window.visualViewport?.offsetTop) || 0,
+        );
+        toastWrap.style.setProperty(
+          "--toast-visual-offset-top",
+          `${visualOffsetTop}px`,
+        );
+      }
+
+      function queueToastViewportPositionUpdate() {
+        if (toastViewportUpdateFrame !== null) return;
+        toastViewportUpdateFrame = requestAnimationFrame(
+          updateToastViewportPosition,
+        );
+      }
+
+      window.visualViewport?.addEventListener(
+        "scroll",
+        queueToastViewportPositionUpdate,
+        { passive: true },
+      );
+      window.visualViewport?.addEventListener(
+        "resize",
+        queueToastViewportPositionUpdate,
+        { passive: true },
+      );
+      window.addEventListener("scroll", queueToastViewportPositionUpdate, {
+        passive: true,
+      });
+      window.addEventListener("resize", queueToastViewportPositionUpdate, {
+        passive: true,
+      });
+      updateToastViewportPosition();
+
       function setStatus(message, type = "ok", persist = false) {
+        updateToastViewportPosition();
         statusBar.textContent = message;
         statusBar.className = `statusBar show ${type}`;
 
@@ -5842,10 +5888,18 @@
       });
 
       payOfferInput.addEventListener("click", async () => {
-        const address = normalizePaymentInput(payOfferInput.value);
-        if (!isLightningAddress(address)) return;
+        const target = normalizePaymentInput(payOfferInput.value);
+        const kind = detectPaymentType(target);
+        if (!isLightningAddress(target) && kind !== "bolt12") return;
 
-        await copyText(address, window.__t("toast.address_copied"));
+        await copyText(
+          target,
+          window.__t(
+            kind === "bolt12"
+              ? "toast.offer_copied"
+              : "toast.address_copied",
+          ),
+        );
       });
 
       function getActiveValue() {
@@ -7019,11 +7073,12 @@
       }
 
       function updatePayInputCopyState() {
-        const address = normalizePaymentInput(payOfferInput.value);
-        const copyable = isLightningAddress(address);
+        const target = normalizePaymentInput(payOfferInput.value);
+        const kind = detectPaymentType(target);
+        const copyable = isLightningAddress(target) || kind === "bolt12";
         payOfferInput.classList.toggle("copyablePaymentAddress", copyable);
         payOfferInput.title = copyable
-          ? window.__t("clipboard.click_address_to_copy")
+          ? window.__t("clipboard.click_target_to_copy")
           : "";
       }
 
@@ -9302,6 +9357,8 @@
             "clipboard.scan": "QR-Code für Zahlung scannen",
             "clipboard.click_address_to_copy":
               "Lightning-Adresse anklicken, um sie zu kopieren",
+            "clipboard.click_target_to_copy":
+              "Lightning-Adresse oder BOLT12-Offer anklicken, um sie zu kopieren",
             "clipboard.empty": "Die Zwischenablage ist leer.",
             "clipboard.unsupported":
               "Kein unterstütztes Zahlungsziel in der Zwischenablage erkannt. Erwartet: BOLT12, BOLT11, LNURL, Lightning-Adresse oder Node-Pubkey.",
@@ -9828,6 +9885,8 @@
             "clipboard.scan": "Scan payment QR code",
             "clipboard.click_address_to_copy":
               "Click the Lightning Address to copy it",
+            "clipboard.click_target_to_copy":
+              "Click the Lightning Address or BOLT12 offer to copy it",
             "clipboard.empty": "The clipboard is empty.",
             "clipboard.unsupported":
               "No supported payment target was detected in the clipboard. Expected: BOLT12, BOLT11, LNURL, Lightning Address or node pubkey.",

@@ -34,11 +34,20 @@ class PayFormInteractionTests(unittest.TestCase):
         self.assertIn("function updatePayInputCopyState()", self.html)
         self.assertIn('classList.toggle("copyablePaymentAddress"', self.html)
         self.assertIn('payOfferInput.addEventListener("click"', self.html)
-        self.assertIn(
-            'copyText(address, window.__t("toast.address_copied"))',
-            self.html,
-        )
+        self.assertIn('kind !== "bolt12"', self.html)
+        self.assertIn('"toast.offer_copied"', self.html)
+        self.assertIn('"toast.address_copied"', self.html)
+        self.assertIn('"clipboard.click_target_to_copy"', self.html)
         self.assertNotIn('id="payAddressActions"', self.html)
+
+    def test_toasts_follow_the_mobile_visual_viewport(self):
+        self.assertIn('id="toastWrap"', self.html)
+        self.assertIn("function updateToastViewportPosition()", self.html)
+        self.assertIn("window.visualViewport?.offsetTop", self.html)
+        self.assertIn('window.visualViewport?.addEventListener(\n        "scroll"', self.html)
+        self.assertIn('window.visualViewport?.addEventListener(\n        "resize"', self.html)
+        self.assertIn("--toast-visual-offset-top", self.html)
+        self.assertIn("z-index: 2147483647", self.html)
 
     def test_saved_contact_status_is_shown_without_duplicate_address(self):
         self.assertIn('id="payContactStatus"', self.html)
