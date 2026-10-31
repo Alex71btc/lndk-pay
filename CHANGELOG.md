@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.18] - 2026-10-31
+
+### Changed
+
+- Submit the protected Pay login with Enter, the on-screen keyboard action or
+  the Login button through one native form-submit path.
+
+### Fixed
+
+- Validate empty login attempts before sending them, prevent duplicate login
+  requests while one is in progress, and preserve passwords exactly as entered
+  in the same-origin JSON request body.
+- Keep login errors and rate-limit feedback localized, and restrict post-login
+  redirects to same-origin paths.
+
 ## [0.3.17] - 2026-10-31
 
 ### Added

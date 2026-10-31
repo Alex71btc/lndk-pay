@@ -64,6 +64,15 @@
       opacity: .7;
       cursor: wait;
     }
+    /* Blink/Chrome detects autofill even when no input/change event fires. */
+    @keyframes bolt12PasswordAutofill {
+      from { opacity: 1; }
+      to { opacity: 1; }
+    }
+    input:-webkit-autofill,
+    input:autofill {
+      animation: bolt12PasswordAutofill 0.01s linear;
+    }
     .muted { opacity: .82; font-size: .95rem; margin-bottom: 16px; }
     .error { color: #fca5a5; min-height: 24px; margin-top: 12px; white-space: pre-wrap; }
     @media (max-height: 520px) {
@@ -83,22 +92,152 @@
       </div>
     </div>
 
-    <label for="password" id="passwordLabel">Password</label>
-    <input id="password" type="password" autocomplete="current-password" placeholder="Enter password" />
+    <form id="loginForm" action="/api/auth/login" method="post" novalidate>
+      <label for="password" id="passwordLabel">Password</label>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        autocomplete="current-password"
+        enterkeyhint="go"
+        placeholder="Enter password"
+        aria-describedby="msg"
+        required
+      />
 
-    <button id="loginBtn" type="button">Login</button>
-    <div id="msg" class="error"></div>
+      <button id="loginBtn" type="submit">Login</button>
+      <div id="msg" class="error" role="alert" aria-live="polite"></div>
+    </form>
   </main>
 
   <script>
+    const loginForm = document.getElementById("loginForm");
     const loginBtn = document.getElementById("loginBtn");
     const passwordEl = document.getElementById("password");
     const msgEl = document.getElementById("msg");
+    let loginInProgress = false;
+    let loginLockInterval = null;
+
+    const LOGIN_TEXT = {
+      de: {
+        passwordLabel: "Passwort",
+        passwordPlaceholder: "Passwort eingeben",
+        login: "Login",
+        loggingIn: "Login...",
+        emptyPassword: "Bitte Passwort eingeben.",
+        invalidPassword: "Ungültiges Passwort",
+        requestFailed: "Login-Anfrage fehlgeschlagen",
+        tooManyAttempts: (seconds) =>
+          `Zu viele Versuche. Bitte in ${seconds}s erneut versuchen.`,
+        wait: (seconds) => `Warte ${seconds}s`
+      },
+      en: {
+        passwordLabel: "Password",
+        passwordPlaceholder: "Enter password",
+        login: "Login",
+        loggingIn: "Login...",
+        emptyPassword: "Please enter a password.",
+        invalidPassword: "Invalid password",
+        requestFailed: "Login request failed",
+        tooManyAttempts: (seconds) =>
+          `Too many attempts. Try again in ${seconds}s`,
+        wait: (seconds) => `Wait ${seconds}s`
+      }
+    };
+
+    function getLoginLanguage() {
+      const stored = localStorage.getItem("app_lang");
+      if (stored === "de" || stored === "en") return stored;
+      const browserLanguage = navigator.language || navigator.userLanguage || "en";
+      return browserLanguage.toLowerCase().startsWith("de") ? "de" : "en";
+    }
+
+    function loginText(key, ...args) {
+      const value = LOGIN_TEXT[getLoginLanguage()][key];
+      return typeof value === "function" ? value(...args) : value;
+    }
+
+    function applyLoginI18n() {
+      document.documentElement.lang = getLoginLanguage();
+      document.getElementById("passwordLabel").textContent =
+        loginText("passwordLabel");
+      passwordEl.placeholder = loginText("passwordPlaceholder");
+      loginBtn.textContent = loginText("login");
+    }
+
+    function normalizeLoginError(data) {
+      const message = typeof data?.detail === "string"
+        ? data.detail
+        : (typeof data?.error === "string" ? data.error : "");
+
+      if (!message || message === "Invalid password" || message === "Ungültiges Passwort") {
+        return loginText("invalidPassword");
+      }
+      return message;
+    }
+
+    function restoreLoginButton() {
+      loginBtn.disabled = false;
+      loginBtn.textContent = loginText("login");
+    }
+
+    function startLoginLockout(seconds) {
+      if (loginLockInterval !== null) {
+        clearInterval(loginLockInterval);
+      }
+
+      let remaining = Math.max(1, seconds);
+      const render = () => {
+        msgEl.textContent = loginText("tooManyAttempts", remaining);
+        loginBtn.textContent = loginText("wait", remaining);
+      };
+
+      loginBtn.disabled = true;
+      render();
+      loginLockInterval = setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          clearInterval(loginLockInterval);
+          loginLockInterval = null;
+          msgEl.textContent = "";
+          restoreLoginButton();
+          passwordEl.focus();
+          return;
+        }
+        render();
+      }, 1000);
+    }
+
+    function getSafeNextPath() {
+      const requested = new URLSearchParams(window.location.search).get("next");
+      if (!requested || !requested.startsWith("/") || requested.startsWith("//")) {
+        return "/pay";
+      }
+
+      try {
+        const target = new URL(requested, window.location.origin);
+        if (target.origin !== window.location.origin) return "/pay";
+        return `${target.pathname}${target.search}${target.hash}`;
+      } catch {
+        return "/pay";
+      }
+    }
 
     async function doLogin() {
+      if (loginInProgress || loginBtn.disabled) return;
+
+      const password = passwordEl.value || "";
+      if (!password) {
+        msgEl.textContent = loginText("emptyPassword");
+        passwordEl.focus();
+        return;
+      }
+
+      loginInProgress = true;
       msgEl.textContent = "";
       loginBtn.disabled = true;
-      loginBtn.textContent = "Login...";
+      loginBtn.textContent = loginText("loggingIn");
+      let restoreButton = true;
 
       try {
         const res = await fetch("/api/auth/login", {
@@ -106,212 +245,122 @@
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           cache: "no-store",
-          body: JSON.stringify({ password: passwordEl.value || "" })
+          body: JSON.stringify({ password })
         });
 
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
           if (res.status === 429) {
-            let remaining = parseInt(data.retry_after || res.headers.get("Retry-After") || "0", 10);
-
+            const remaining = Number.parseInt(
+              data.retry_after || res.headers.get("Retry-After") || "0",
+              10
+            );
             if (remaining > 0) {
-              const lang = getLang();
-              const originalText = "Login";
-
-              const renderLockedMessage = () => {
-                msgEl.textContent = lang === "en"
-                  ? `Too many attempts. Try again in ${remaining}s`
-                  : `Zu viele Versuche. Bitte in ${remaining}s erneut versuchen.`;
-              };
-
-              renderLockedMessage();
-              loginBtn.disabled = true;
-              loginBtn.textContent = lang === "en"
-                ? `Wait ${remaining}s`
-                : `Warte ${remaining}s`;
-
-              const interval = setInterval(() => {
-                remaining--;
-
-                if (remaining <= 0) {
-                  clearInterval(interval);
-                  loginBtn.disabled = false;
-                  loginBtn.textContent = originalText;
-                  msgEl.textContent = "";
-                } else {
-                  renderLockedMessage();
-                  loginBtn.textContent = lang === "en"
-                    ? `Wait ${remaining}s`
-                    : `Warte ${remaining}s`;
-                }
-              }, 1000);
-
+              restoreButton = false;
+              startLoginLockout(remaining);
               return;
             }
           }
 
-          msgEl.textContent = (typeof data.detail === "string" && data.detail)
-            || (typeof data.error === "string" && data.error)
-            || (getLang() === "en"
-                ? "Invalid password"
-                : "Ungültiges Passwort");
-          loginBtn.disabled = false;
-          loginBtn.textContent = "Login";
+          msgEl.textContent = normalizeLoginError(data);
+          passwordEl.select();
           return;
         }
-        const next = new URLSearchParams(window.location.search).get("next") || "/pay";
-        window.location.href = next;
+
+        restoreButton = false;
+        window.location.assign(getSafeNextPath());
       } catch (err) {
-        msgEl.textContent = "Login request failed";
-        loginBtn.disabled = false;
-        loginBtn.textContent = "Login";
+        msgEl.textContent = loginText("requestFailed");
+        passwordEl.select();
+      } finally {
+        loginInProgress = false;
+        if (restoreButton && loginLockInterval === null) {
+          restoreLoginButton();
+        }
       }
     }
 
-    loginBtn.addEventListener("click", doLogin);
-    passwordEl.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") doLogin();
+    // Android Chrome's password manager fills the field but does not submit
+    // the form when the user confirms the credential picker. Best effort:
+    // react only to a browser-autofilled value following an explicit field
+    // interaction or a credential-picker-like focus handoff. Do NOT submit
+    // on page-load autofill or while someone is manually typing a password.
+    let credentialSelectionArmed = false;
+    let autofillLoginRequested = false;
+    let autofillLoginTimer = null;
+
+    function passwordIsBrowserAutofilled() {
+      for (const selector of [":autofill", ":-webkit-autofill"]) {
+        try {
+          if (passwordEl.matches(selector)) return true;
+        } catch {
+          // The selector may not exist in this browser.
+        }
+      }
+      return false;
+    }
+
+    function schedulePasswordManagerLogin() {
+      if (!credentialSelectionArmed || autofillLoginRequested ||
+          loginInProgress || loginBtn.disabled || !passwordEl.value) return;
+
+      if (autofillLoginTimer !== null) clearTimeout(autofillLoginTimer);
+      autofillLoginTimer = setTimeout(() => {
+        autofillLoginTimer = null;
+        if (!credentialSelectionArmed || autofillLoginRequested ||
+            loginInProgress || loginBtn.disabled || !passwordEl.value ||
+            !passwordIsBrowserAutofilled()) return;
+
+        // Always use the existing validation, fetch and single-flight guard.
+        autofillLoginRequested = true;
+        loginForm.requestSubmit();
+      }, 180);
+    }
+
+    function armPasswordManagerSelection() {
+      credentialSelectionArmed = true;
+      autofillLoginRequested = false;
+    }
+
+    // A tap on the password field usually precedes selecting a saved login.
+    // Keyboard typing alone never arms an automatic submission.
+    passwordEl.addEventListener("pointerdown", armPasswordManagerSelection, { passive: true });
+
+    // Some Android credential sheets take focus away from the browser.
+    // Cover that path even if the user did not first tap the password field.
+    window.addEventListener("blur", () => {
+      if (document.activeElement === passwordEl && !passwordEl.value) {
+        armPasswordManagerSelection();
+      }
     });
+    window.addEventListener("focus", schedulePasswordManagerLogin);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) schedulePasswordManagerLogin();
+    });
+
+    // Browser versions and password managers emit different notifications.
+    for (const eventName of ["input", "change"]) {
+      passwordEl.addEventListener(eventName, schedulePasswordManagerLogin);
+    }
+    passwordEl.addEventListener("animationstart", (event) => {
+      if (event.animationName === "bolt12PasswordAutofill") {
+        schedulePasswordManagerLogin();
+      }
+    });
+
+    loginForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (autofillLoginTimer !== null) {
+        clearTimeout(autofillLoginTimer);
+        autofillLoginTimer = null;
+      }
+      void doLogin();
+    });
+
+    applyLoginI18n();
+    passwordEl.focus();
   </script>
-
-<script>
-(function () {
-  if (window.__payLoginI18nInstalled) return;
-  window.__payLoginI18nInstalled = true;
-
-  function lang() {
-    return getLang();
-  }
-
-  const T = {
-    de: {
-      password_label: "Passwort",
-      password_ph: "Passwort eingeben",
-      login_btn: "Login",
-      empty_password: "Bitte Passwort eingeben.",
-      invalid_password: "Ungültiges Passwort"
-    },
-    en: {
-      password_label: "Password",
-      password_ph: "Enter password",
-      login_btn: "Login",
-      empty_password: "Please enter a password.",
-      invalid_password: "Invalid password"
-    }
-  };
-
-  function tx(key) {
-    const l = lang();
-    return (T[l] && T[l][key]) || T.de[key] || key;
-  }
-
-  function applyPayLoginI18n() {
-    const label = document.getElementById("passwordLabel");
-    const input = document.getElementById("password");
-    const btn = document.getElementById("loginBtn");
-
-    if (label) label.textContent = tx("password_label");
-    if (input) input.placeholder = tx("password_ph");
-    if (btn) btn.textContent = tx("login_btn");
-  }
-
-  function normalizeErrorMessage(msg) {
-    if (typeof msg !== "string") {
-      if (msg && typeof msg.detail === "string") {
-        msg = msg.detail;
-      } else if (msg && typeof msg.message === "string") {
-        msg = msg.message;
-      } else {
-        return tx("invalid_password");
-      }
-    }
-
-    const m = msg.trim();
-
-    if (
-      m === "[object Object]" ||
-      m === "Object object" ||
-      m === "undefined" ||
-      m === "null"
-    ) {
-      return tx("invalid_password");
-    }
-
-    if (
-      m === "Please enter a password." ||
-      m === "Bitte Passwort eingeben."
-    ) {
-      return tx("empty_password");
-    }
-
-    if (
-      m === "Invalid password" ||
-      m === "Ungültiges Passwort"
-    ) {
-      return tx("invalid_password");
-    }
-
-    return msg;
-  }
-
-  function patchErrorRendering() {
-    const errorEl = document.getElementById("error");
-    if (!errorEl) return;
-
-    const originalSetter = errorEl.__payLoginPatched;
-    if (originalSetter) return;
-    errorEl.__payLoginPatched = true;
-
-    const observer = new MutationObserver(() => {
-      const txt = (errorEl.textContent || "").trim();
-      if (!txt) return;
-      const fixed = normalizeErrorMessage(txt);
-      if (fixed !== txt) {
-        errorEl.textContent = fixed;
-      }
-    });
-
-    observer.observe(errorEl, { childList: true, characterData: true, subtree: true });
-  }
-
-  function patchLoginHandler() {
-    const btn = document.getElementById("loginBtn");
-    const passwordEl = document.getElementById("password");
-    const errorEl = document.getElementById("error");
-
-    if (!btn || !passwordEl || !errorEl) return;
-    if (btn.dataset.payLoginPatchBound === "1") return;
-    btn.dataset.payLoginPatchBound = "1";
-
-    btn.addEventListener("click", () => {
-      if (!(passwordEl.value || "").trim()) {
-        setTimeout(() => {
-          errorEl.textContent = tx("empty_password");
-        }, 0);
-      }
-    }, true);
-  }
-
-  document.addEventListener("DOMContentLoaded", () => {
-    applyPayLoginI18n();
-    patchErrorRendering();
-    patchLoginHandler();
-  });
-
-  window.addEventListener("load", () => {
-    applyPayLoginI18n();
-    patchErrorRendering();
-    patchLoginHandler();
-  });
-
-  setTimeout(() => {
-    applyPayLoginI18n();
-    patchErrorRendering();
-    patchLoginHandler();
-  }, 0);
-})();
-</script>
 
 </body>
 </html>
