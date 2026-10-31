@@ -40,6 +40,14 @@ class PayFormInteractionTests(unittest.TestCase):
         )
         self.assertNotIn('id="payAddressActions"', self.html)
 
+    def test_saved_contact_status_is_shown_without_duplicate_address(self):
+        self.assertIn('id="payContactStatus"', self.html)
+        self.assertIn("function findContactByIdentifier(identifier)", self.html)
+        self.assertIn("function refreshPayContactStatus()", self.html)
+        self.assertIn('window.__t("contacts.already_saved")', self.html)
+        self.assertIn("refreshPayContactStatus();", self.html)
+        self.assertNotIn('id="payAddressActions"', self.html)
+
     def test_clipboard_button_detects_and_inserts_supported_targets(self):
         self.assertIn('id="clipboardPasteBtn"', self.html)
         self.assertIn("navigator.clipboard?.readText", self.html)
@@ -51,10 +59,16 @@ class PayFormInteractionTests(unittest.TestCase):
         self.assertIn('"keysend",', self.html)
         self.assertIn('payOfferInput.addEventListener("paste"', self.html)
         self.assertIn("insertDetectedPaymentTarget(detected);", self.html)
-        self.assertIn('window.__t("clipboard.read_unavailable")', self.html)
+        self.assertIn('"clipboard.read_unavailable"', self.html)
         self.assertIn("let clipboardReadInProgress = false;", self.html)
         self.assertNotIn("clipboardPasteBtn.disabled = true", self.html)
         self.assertNotIn('window.__t("clipboard.reading")', self.html)
+
+    def test_clipboard_fallback_explains_insecure_android_context(self):
+        self.assertIn("function isAndroidUserAgent()", self.html)
+        self.assertIn('showClipboardPasteFallback("insecure")', self.html)
+        self.assertIn('"clipboard.https_required"', self.html)
+        self.assertIn('"clipboard.android_https_required"', self.html)
 
     def test_pay_scanner_is_a_compact_action_next_to_the_target(self):
         self.assertIn('class="payInputActions"', self.html)

@@ -336,6 +336,24 @@
         border-color: rgba(247, 147, 26, 0.55);
       }
 
+      .payContactStatus {
+        width: fit-content;
+        max-width: 100%;
+        margin-top: 8px;
+        padding: 4px 9px;
+        border: 1px solid rgba(93, 211, 158, 0.28);
+        border-radius: 999px;
+        color: #9ee6c4;
+        background: rgba(93, 211, 158, 0.08);
+        font-size: 0.82rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .payContactStatus[hidden] {
+        display: none;
+      }
+
       .payPreviewBolt12Availability {
         display: none;
         align-items: center;
@@ -1284,6 +1302,8 @@
               </button>
             </div>
           </div>
+
+          <div id="payContactStatus" class="payContactStatus" hidden></div>
 
           <div
             id="payLivePreview"
@@ -2921,6 +2941,9 @@
       const payOfferBtn = document.getElementById("payOfferBtn");
       const clipboardPasteBtn = document.getElementById(
         "clipboardPasteBtn",
+      );
+      const payContactStatus = document.getElementById(
+        "payContactStatus",
       );
       const payLivePreview = document.getElementById("payLivePreview");
       const payPreviewImage = document.getElementById("payPreviewImage");
@@ -5516,6 +5539,7 @@
 
         const data = await readJsonOrThrow(res);
         loadedContacts = data.contacts || [];
+        refreshPayContactStatus();
 
         return loadedContacts;
       }
@@ -5755,9 +5779,19 @@
         );
       }
 
-      function showClipboardPasteFallback() {
+      function isAndroidUserAgent() {
+        return /Android/i.test(navigator.userAgent || "");
+      }
+
+      function showClipboardPasteFallback(reason = "unavailable") {
         payOfferInput.focus();
-        setStatus(window.__t("clipboard.read_unavailable"), "warn", true);
+        const key =
+          reason === "insecure"
+            ? isAndroidUserAgent()
+              ? "clipboard.android_https_required"
+              : "clipboard.https_required"
+            : "clipboard.read_unavailable";
+        setStatus(window.__t(key), "warn", true);
       }
 
       let clipboardReadInProgress = false;
@@ -5765,7 +5799,12 @@
       async function pastePaymentTargetFromClipboard() {
         if (clipboardReadInProgress) return;
 
-        if (!navigator.clipboard?.readText || !window.isSecureContext) {
+        if (!window.isSecureContext) {
+          showClipboardPasteFallback("insecure");
+          return;
+        }
+
+        if (!navigator.clipboard?.readText) {
           showClipboardPasteFallback();
           return;
         }
@@ -6944,6 +6983,39 @@
         return /^[^@\s]+@[^@\s]+$/.test(
           String(value || "").trim(),
         );
+      }
+
+      function findContactByIdentifier(identifier) {
+        const normalized = String(identifier || "").trim().toLowerCase();
+        if (!normalized) return null;
+
+        return (
+          loadedContacts.find((contact) =>
+            (contact.entries || []).some(
+              (entry) =>
+                String(entry.identifier || "").trim().toLowerCase() ===
+                normalized,
+            ),
+          ) || null
+        );
+      }
+
+      function refreshPayContactStatus() {
+        if (!payContactStatus) return;
+
+        const target = normalizePaymentInput(payOfferInput.value);
+        const existingContact = findContactByIdentifier(target);
+        payContactStatus.hidden = !existingContact;
+
+        if (!existingContact) {
+          payContactStatus.textContent = "";
+          return;
+        }
+
+        const alias = String(existingContact.alias || "").trim();
+        payContactStatus.textContent = alias
+          ? `${window.__t("contacts.already_saved")} "${alias}"`
+          : window.__t("contacts.already_saved");
       }
 
       function updatePayInputCopyState() {
@@ -8666,6 +8738,7 @@
 
       payOfferInput.addEventListener("input", () => {
         updatePayInputCopyState();
+        refreshPayContactStatus();
         if (payPreviewTimer) clearTimeout(payPreviewTimer);
         payPreviewTimer = setTimeout(() => {
           loadPayPreview();
@@ -9234,6 +9307,10 @@
               "Kein unterstütztes Zahlungsziel in der Zwischenablage erkannt. Erwartet: BOLT12, BOLT11, LNURL, Lightning-Adresse oder Node-Pubkey.",
             "clipboard.read_unavailable":
               "Zwischenablage konnte nicht automatisch gelesen werden. Das Zahlungsfeld ist aktiv – bitte jetzt Einfügen beziehungsweise Strg+V verwenden.",
+            "clipboard.https_required":
+              "Automatisches Einfügen benötigt HTTPS oder localhost. Bitte über die sichere Adresse öffnen oder manuell einfügen.",
+            "clipboard.android_https_required":
+              "Android blockiert den automatischen Clipboard-Zugriff über HTTP. Bitte BOLT12 Pay über die konfigurierte HTTPS-Adresse öffnen oder manuell einfügen.",
             "clipboard.detected_and_inserted": "erkannt und eingefügt.",
             "clipboard.node_pubkey": "Node-Pubkey",
             "toast.enter_lightning_or_bip353":
@@ -9756,6 +9833,10 @@
               "No supported payment target was detected in the clipboard. Expected: BOLT12, BOLT11, LNURL, Lightning Address or node pubkey.",
             "clipboard.read_unavailable":
               "The clipboard could not be read automatically. The payment field is focused; paste now using the system paste action or Ctrl+V.",
+            "clipboard.https_required":
+              "Automatic paste requires HTTPS or localhost. Open the secure address or paste manually.",
+            "clipboard.android_https_required":
+              "Android blocks automatic clipboard access over HTTP. Open BOLT12 Pay through its configured HTTPS address or paste manually.",
             "clipboard.detected_and_inserted": "detected and inserted.",
             "clipboard.node_pubkey": "Node pubkey",
             "toast.enter_lightning_or_bip353":
@@ -10126,6 +10207,9 @@
 
           if (window.renderHistory) window.renderHistory();
           if (window.renderTxHistory) window.renderTxHistory();
+          if (window.refreshPayContactStatus) {
+            window.refreshPayContactStatus();
+          }
           if (loadMoreBtn) {
             loadMoreBtn.style.display = txHistoryHasMore ? "" : "none";
           }
