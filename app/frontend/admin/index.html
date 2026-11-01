@@ -681,6 +681,34 @@
         min-width: 0;
       }
 
+      .txRepeatTarget {
+        appearance: none;
+        display: inline;
+        width: auto;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        color: var(--accent);
+        font: inherit;
+        text-align: left;
+        line-height: inherit;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        cursor: pointer;
+      }
+
+      .txRepeatTarget:hover,
+      .txRepeatTarget:focus-visible {
+        color: #ffba61;
+        background: transparent;
+        box-shadow: none;
+        transform: none;
+      }
+
       .txComment {
         font-size: 0.9em;
         opacity: 0.8;
@@ -3447,7 +3475,7 @@
           bubbles: true,
         }));
 
-        payOfferInput.focus();
+        focusPaymentFieldAfterAutomaticInsert(payOfferInput);
       });
 
       let statusTimer = null;
@@ -4577,12 +4605,23 @@
           clearContactSearchBtn.style.display = "none";
         }
 
+        // Opening a picker is not a request to type. Close any Android keyboard
+        // left open from the Pay field before showing the contact list.
+        if (isAndroidUserAgent()) dismissAndroidPaymentKeyboard();
+
         contactsModal.style.display = "flex";
         contactsModal.setAttribute("aria-hidden", "false");
 
         renderContacts(loadedContacts);
 
         requestAnimationFrame(() => {
+          if (isAndroidUserAgent()) {
+            // Keep keyboard hidden but give the dialog an accessible focus target.
+            // Search remains available when the user explicitly taps its field.
+            closeContactsBtn?.focus({ preventScroll: true });
+            return;
+          }
+          // Desktop keyboard users retain the existing search-first behavior.
           contactSearchInput?.focus();
         });
       }
@@ -5751,7 +5790,7 @@
         updatePayUiForInput();
         payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
         payOfferInput.scrollIntoView({ behavior: "smooth", block: "center" });
-        payOfferInput.focus();
+        focusPaymentFieldAfterAutomaticInsert(payOfferInput);
         setStatus(window.__t("intent.review"), "warn", true);
       }
 
@@ -5816,7 +5855,7 @@
         payOfferInput.value = detected.target;
         updatePayUiForInput();
         payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
-        payOfferInput.focus();
+        focusPaymentFieldAfterAutomaticInsert(payOfferInput);
 
         setStatus(
           `${getClipboardPaymentTypeLabel(detected.kind)} ${window.__t(
@@ -5827,6 +5866,25 @@
 
       function isAndroidUserAgent() {
         return /Android/i.test(navigator.userAgent || "");
+      }
+
+      function dismissAndroidPaymentKeyboard() {
+        if (!isAndroidUserAgent()) return false;
+        const active = document.activeElement;
+        // An already-focused payment field can keep the keyboard visible after
+        // tapping a clipboard/contact/history button. Release only text focus.
+        if (active?.matches?.('input, textarea, [contenteditable="true"]')) {
+          active.blur();
+        }
+        return true;
+      }
+
+      function focusPaymentFieldAfterAutomaticInsert(field, options) {
+        // Native Android inputs automatically open the virtual keyboard on
+        // focus(). This is helpful for typing but counterproductive after a
+        // target was already entered through contacts, QR, history or paste.
+        if (dismissAndroidPaymentKeyboard()) return;
+        field?.focus(options);
       }
 
       function showClipboardPasteFallback(reason = "unavailable") {
@@ -6220,7 +6278,21 @@
               ? raw.target || item.counterparty || item.identifier || ""
               : item.counterparty || item.identifier || "";
 
-          const visibleTarget = isTechnicalIdentifier(displayTarget)
+          // Only reuse real, supported outgoing payment targets. Never reuse a
+          // single-use BOLT11 invoice or turn a payment hash into a target.
+          const repeatTargetCandidate = item.method === "keysend"
+            ? raw.target || item.counterparty || item.identifier || raw.destination || ""
+            : displayTarget;
+          const detectedRepeatTarget = item.direction === "outgoing"
+            ? detectClipboardPaymentTarget(repeatTargetCandidate)
+            : null;
+          const repeatTarget = detectedRepeatTarget?.kind !== "bolt11"
+            ? detectedRepeatTarget
+            : null;
+
+          // Preserve the existing technical-ID filter, except valid Keysend pubkeys.
+          const visibleTarget = isTechnicalIdentifier(displayTarget) &&
+            !(item.method === "keysend" && repeatTarget?.kind === "keysend")
             ? ""
             : displayTarget;
 
@@ -6362,7 +6434,11 @@
                 ${
                   visibleTarget
                     ? `
-                <div class="txTarget">${escapeContactHtml(visibleTarget)}</div>
+                <div class="txTarget">${repeatTarget
+                  ? `<button class="txRepeatTarget" type="button"
+                         title="${window.__t("history.reuse_target")}" 
+                         aria-label="${window.__t("history.reuse_target")}: ${escapeContactHtml(visibleTarget)}">${escapeContactHtml(visibleTarget)}</button>`
+                  : escapeContactHtml(visibleTarget)}</div>
                 `
                     : ""
                 }
@@ -6463,6 +6539,28 @@
               </div>
             </details>
           `;
+
+          const repeatButton = div.querySelector(".txRepeatTarget");
+          repeatButton?.addEventListener("click", (event) => {
+            // A button inside <summary> must not expand/collapse transaction details.
+            event.preventDefault();
+            event.stopPropagation();
+            if (!repeatTarget) return;
+            if (paymentInProgress) {
+              setStatus(window.__t("toast.payment_in_progress"), "warn");
+              return;
+            }
+
+            payOfferInput.value = repeatTarget.target;
+            payAmountInput.value = "";
+            payerNoteInput.value = "";
+            updatePayUiForInput();
+            payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
+            payOfferInput.scrollIntoView({ behavior: "smooth", block: "center" });
+            focusPaymentFieldAfterAutomaticInsert(payAmountInput, { preventScroll: true });
+            setStatus(window.__t("toast.activity_target_to_pay"));
+            // No form submit or payment request here; user must enter a new amount.
+          });
 
           const contactElement = div.querySelector(".txContactExisting");
 
@@ -7004,6 +7102,12 @@
 
       function renderSuccessOutput(title, lines, detailsObj = null) {
         const summary = [title, ...lines.filter(Boolean)].join("\n");
+
+        dismissAndroidPaymentKeyboard();
+        // A successful payment keeps the result visible while opening and syncing Activity.
+        const activity = document.getElementById("txHistorySection");
+        if (activity) activity.open = true;
+        void syncTxHistory();
 
         if (paymentResultOutput) {
           if (detailsObj) {
@@ -9384,6 +9488,9 @@
             "toast.payment_result_copied": "Zahlungsergebnis kopiert.",
             "toast.history_cleared": "Offer-History gelöscht.",
             "toast.history_to_pay": "Offer in Pay übernommen.",
+            "toast.activity_target_to_pay":
+              "Zahlungsziel aus Lightning Activity übernommen. Betrag neu eingeben.",
+            "history.reuse_target": "Zahlungsziel erneut verwenden",
             "toast.history_to_qr": "Offer als aktueller QR übernommen.",
             "toast.history_deleted": "History-Eintrag gelöscht.",
             "toast.no_decode_output": "Noch keine Decode-Ausgabe vorhanden.",
@@ -9912,6 +10019,9 @@
             "toast.payment_result_copied": "Payment result copied.",
             "toast.history_cleared": "Offer history cleared.",
             "toast.history_to_pay": "Offer loaded into Pay.",
+            "toast.activity_target_to_pay":
+              "Payment target loaded from Lightning Activity. Enter a new amount.",
+            "history.reuse_target": "Use payment target again",
             "toast.history_to_qr": "Offer loaded as current QR.",
             "toast.history_deleted": "History entry deleted.",
             "toast.no_decode_output": "No decode output available yet.",

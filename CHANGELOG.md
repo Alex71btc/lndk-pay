@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.19] - 2026-11-01
+
+### Added
+
+- Reuse supported outgoing payment targets from Lightning Activity directly in
+  the Pay form, including Lightning/BIP353 addresses, BOLT12 offers, LNURL-pay
+  strings and Keysend pubkeys when present in stored history. Never offer
+  single-use BOLT11 invoices, hashes or unrelated technical identifiers.
+
+### Changed
+
+- Expand and refresh Lightning Activity automatically after a successful
+  payment while retaining the Last Payment Result view.
+- Reset amount and payer note when reusing a historical target. Require an
+  explicit new payment action; no automatic repeat payment.
+- Avoid opening the Android soft keyboard after automatic target insertion from
+  contacts, clipboard, payment links and Lightning Activity, and dismiss it
+  after successful payments. Manual typing and clipboard fallback stay intact.
+- Open the contacts picker on Android without focusing Search Contacts or
+  displaying the soft keyboard. Preserve desktop search autofocus and mobile
+  search on deliberate tap.
+
 ## [0.3.18] - 2026-10-31
 
 ### Changed
