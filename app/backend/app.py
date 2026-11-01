@@ -4519,14 +4519,14 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
         return await _pay_address_via_lnurl(payload)
 
     try:
-        normalized_offer = _normalize_offer_or_hrn(target)
+        normalized_offer = await asyncio.to_thread(_normalize_offer_or_hrn, target)
         args = _pay_offer_command(
             normalized_offer,
             payload.amount_sat,
             payload.payer_note,
         )
 
-        raw_cli_output = _run_command(args)
+        raw_cli_output = await asyncio.to_thread(_run_command, args)
 
         _log_tx(
             payment_hash=f"bip353-outgoing-{int(time.time())}",
