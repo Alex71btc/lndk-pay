@@ -26,6 +26,10 @@ All notable changes to this project will be documented in this file.
   displaying the soft keyboard. Preserve desktop search autofocus and mobile
   search on deliberate tap.
 
+### Fixed
+
+- Prevent BIP353 payment resolution and LNDK invoice timeouts from blocking the web UI event loop.
+
 ## [0.3.18] - 2026-10-31
 
 ### Changed
