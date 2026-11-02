@@ -313,6 +313,23 @@
         cursor: copy;
       }
 
+      .payTargetLabelRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .payTargetLabelRow .label {
+        margin-bottom: 0;
+      }
+
+      .payTargetLabelRow .payInputAction {
+        width: 34px;
+        height: 34px;
+      }
+
       .payInputActions {
         display: flex;
         align-items: center;
@@ -1252,11 +1269,36 @@
         <form id="payForm" class="section payHero" novalidate>
           <h2><span data-i18n="title.pay">Offer bezahlen</span></h2>
 
-          <label class="label" for="payOfferInput"
-            ><span data-i18n="label.target"
-              >Offer, Invoice oder Lightning Address</span
-            ></label
-          >
+          <div class="payTargetLabelRow">
+            <label class="label" for="payOfferInput"
+              ><span data-i18n="label.target"
+                >Offer, Invoice oder Lightning Address</span
+              ></label
+            >
+            <button
+              id="editPayTargetBtn"
+              class="secondary payInputAction"
+              type="button"
+              title="Zahlungsziel bearbeiten"
+              aria-label="Zahlungsziel bearbeiten"
+              data-i18n-title="clipboard.edit_target"
+              data-i18n-aria-label="clipboard.edit_target"
+            >
+              <svg
+                class="payInputActionIcon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m16 3 5 5-12 12H4v-5L16 3Z"></path>
+                <path d="m13 6 5 5"></path>
+              </svg>
+            </button>
+          </div>
           <div class="payInputRow">
             <input
               id="payOfferInput"
@@ -5945,7 +5987,42 @@
         insertDetectedPaymentTarget(detected);
       });
 
-      payOfferInput.addEventListener("click", async () => {
+      let payTargetPointerStartedFocused = false;
+
+      function preventMobilePayTargetCopyFocus(event) {
+        payTargetPointerStartedFocused = document.activeElement === payOfferInput;
+        if (payTargetPointerStartedFocused) return;
+        if (event.isPrimary === false || event.button !== 0) return;
+        const mobilePointer =
+          event.pointerType === "touch" ||
+          event.pointerType === "pen" ||
+          isAndroidUserAgent();
+        if (!mobilePointer) return;
+
+        const target = normalizePaymentInput(payOfferInput.value);
+        if (!isLightningAddress(target) && detectPaymentType(target) !== "bolt12")
+          return;
+
+        // Focus is a pointer-down default action, before the copy click handler.
+        // Keep manual editing available through the edit button or keyboard focus.
+        event.preventDefault();
+      }
+
+      payOfferInput.addEventListener("pointerdown", preventMobilePayTargetCopyFocus);
+      payOfferInput.addEventListener("blur", () => {
+        payTargetPointerStartedFocused = false;
+      });
+
+      document.getElementById("editPayTargetBtn").addEventListener("click", () => {
+        payTargetPointerStartedFocused = true;
+        payOfferInput.focus({ preventScroll: true });
+      });
+
+      payOfferInput.addEventListener("click", async (event) => {
+        if (
+          payTargetPointerStartedFocused ||
+          (event.detail === 0 && document.activeElement === payOfferInput)
+        ) return;
         const target = normalizePaymentInput(payOfferInput.value);
         const kind = detectPaymentType(target);
         if (!isLightningAddress(target) && kind !== "bolt12") return;
@@ -9459,6 +9536,7 @@
             "clipboard.paste":
               "Zahlungsziel aus Zwischenablage erkennen und einfügen",
             "clipboard.scan": "QR-Code für Zahlung scannen",
+            "clipboard.edit_target": "Zahlungsziel bearbeiten",
             "clipboard.click_address_to_copy":
               "Lightning-Adresse anklicken, um sie zu kopieren",
             "clipboard.click_target_to_copy":
@@ -9990,6 +10068,7 @@
             "clipboard.paste":
               "Detect and insert payment target from clipboard",
             "clipboard.scan": "Scan payment QR code",
+            "clipboard.edit_target": "Edit payment target",
             "clipboard.click_address_to_copy":
               "Click the Lightning Address to copy it",
             "clipboard.click_target_to_copy":
