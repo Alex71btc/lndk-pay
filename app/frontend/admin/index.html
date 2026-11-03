@@ -316,6 +316,14 @@
         cursor: copy;
       }
 
+      .payAppVersion {
+        margin: 18px auto 4px;
+        text-align: center;
+        color: var(--muted);
+        font-size: .78rem;
+        opacity: .82;
+      }
+
       .payTargetLabelRow {
         display: flex;
         align-items: center;
@@ -1184,7 +1192,70 @@
         cursor: pointer;
       }
     </style>
-  </head>
+
+    <style id="compact-language-switch">
+      /* Shared compact language selector */
+      select.langSwitch,
+      select.languagePicker,
+      .langSwitch select {
+        appearance: auto;
+        box-sizing: border-box;
+        width: 64px;
+        min-width: 64px;
+        max-width: 64px;
+        height: 28px;
+        margin: 0;
+        padding: 4px 7px;
+        border: 1px solid var(--border, #344158);
+        border-radius: 10px !important;
+        background: rgba(19, 28, 46, 0.92);
+        color: var(--text, #edf3ff);
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 400;
+        line-height: normal;
+        box-shadow: none;
+        cursor: pointer;
+      }
+
+      select.langSwitch option,
+      select.languagePicker option,
+      .langSwitch select option {
+        color: #edf3ff;
+        background: #131c2e;
+        font-weight: 400;
+      }
+
+      /* Pay: remove redundant outer frame */
+      .langSwitch:not(select) {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      /* Login: explicitly anchor picker to top right */
+      main.card {
+        position: relative;
+      }
+
+      main.card select.languagePicker {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        left: auto;
+      }
+
+      select.langSwitch:focus-visible,
+      select.languagePicker:focus-visible,
+      .langSwitch select:focus-visible {
+        outline: 2px solid #f7931a;
+        outline-offset: 2px;
+      }
+    </style>
+</head>
   <body>
     <div class="toastWrap" id="toastWrap">
       <div class="statusBar" id="statusBar"></div>
@@ -2766,6 +2837,10 @@
         ></textarea>
       </details>
     </main>
+
+    <div class="payAppVersion" id="payAppVersion" hidden>
+      BOLT12 Pay <span id="payAppVersionNumber"></span>
+    </div>
 
     <div
       class="scannerModal"
@@ -9200,6 +9275,33 @@
 
     <script>
       loadDefaultAddressFromConfig();
+    </script>
+    <script>
+      document.addEventListener("DOMContentLoaded", async () => {
+        try {
+          const response = await fetch("/api/info", {
+            cache: "no-store"
+          });
+          if (!response.ok) return;
+
+          const data = await response.json();
+          const version = String(data.version || "").trim();
+          if (!version) return;
+
+          const footer = document.getElementById("payAppVersion");
+          const label = document.getElementById("payAppVersionNumber");
+
+          if (!footer || !label) return;
+
+          label.textContent = version.startsWith("v")
+            ? version
+            : `v${version}`;
+
+          footer.hidden = false;
+        } catch (error) {
+          console.warn("Could not load app version:", error);
+        }
+      });
     </script>
   </body>
 </html>

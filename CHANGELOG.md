@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.20] - 2026-11-03
+
+### Added
+
+- Ship Android Companion v1.0.1 with native per-app language selection.
+- Full five-language support: English, German, Spanish, French and Polish.
+- Centralized translation catalogs for Console, Pay, login, public payment
+  links, alias pages and Android Companion.
+- Live language switching with English fallback and preservation of form
+  inputs, QR content, pending requests and error states.
+- Automated CI validation for translation keys, placeholders, generated
+  assets and untranslated interface text.
+
+### Fixed
+
+- Refine language selectors with compact EN/DE/ES/FR/PL labels.
+- Display the running application version in the Pay page footer.
+- Initialize the Pay QR code with the configured payment address while
+  preserving priority for an active BOLT12 offer.
+- Improve mobile payment-target editing and touch-to-copy behavior.
+- Display the editing button only on touch-oriented devices and improve
+  the mobile action layout.
+- Correct remaining untranslated interface labels and nested error messages.
+
 ## [0.3.19] - 2026-11-01
 
 ### Added

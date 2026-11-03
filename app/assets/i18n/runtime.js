@@ -82,7 +82,8 @@
         select.replaceChildren(...Object.entries(languages).map(([code, label]) => {
           const option = global.document.createElement("option");
           option.value = code;
-          option.textContent = label;
+          option.textContent = code.toUpperCase();
+          option.title = label;
           option.lang = code;
           return option;
         }));
@@ -90,6 +91,7 @@
         select.dataset.i18nBound = "1";
       }
       select.value = language;
+      select.title = languages[language];
     }
   }
 
