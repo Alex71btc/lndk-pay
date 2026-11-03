@@ -1,0 +1,14 @@
+{
+  "login.title": "Connexion à BOLT12 Pay",
+  "login.language": "Langue",
+  "login.protectedArea": "Espace de paiement protégé",
+  "login.passwordLabel": "Mot de passe",
+  "login.passwordPlaceholder": "Saisissez le mot de passe",
+  "login.login": "Se connecter",
+  "login.loggingIn": "Connexion en cours…",
+  "login.emptyPassword": "Veuillez saisir un mot de passe.",
+  "login.invalidPassword": "Mot de passe incorrect",
+  "login.requestFailed": "La demande de connexion a échoué",
+  "login.tooManyAttempts": "Trop de tentatives. Réessayez dans {seconds}s.",
+  "login.wait": "Patientez {seconds}s"
+}

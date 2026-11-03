@@ -1,0 +1,14 @@
+{
+  "login.title": "Iniciar sesión en BOLT12 Pay",
+  "login.language": "Idioma",
+  "login.protectedArea": "Área de pagos protegida",
+  "login.passwordLabel": "Contraseña",
+  "login.passwordPlaceholder": "Introduce la contraseña",
+  "login.login": "Iniciar sesión",
+  "login.loggingIn": "Iniciando sesión…",
+  "login.emptyPassword": "Introduce una contraseña.",
+  "login.invalidPassword": "Contraseña incorrecta",
+  "login.requestFailed": "La solicitud de inicio de sesión ha fallado",
+  "login.tooManyAttempts": "Demasiados intentos. Vuelve a intentarlo en {seconds}s.",
+  "login.wait": "Espera {seconds}s"
+}

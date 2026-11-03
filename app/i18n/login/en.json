@@ -1,0 +1,14 @@
+{
+  "login.title": "BOLT12 Pay Login",
+  "login.language": "Language",
+  "login.protectedArea": "Protected Pay Area",
+  "login.passwordLabel": "Password",
+  "login.passwordPlaceholder": "Enter password",
+  "login.login": "Log in",
+  "login.loggingIn": "Logging in…",
+  "login.emptyPassword": "Please enter a password.",
+  "login.invalidPassword": "Invalid password",
+  "login.requestFailed": "Login request failed",
+  "login.tooManyAttempts": "Too many attempts. Try again in {seconds}s.",
+  "login.wait": "Wait {seconds}s"
+}

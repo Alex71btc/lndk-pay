@@ -1,0 +1,14 @@
+{
+  "login.title": "BOLT12 Pay Anmeldung",
+  "login.language": "Sprache",
+  "login.protectedArea": "Geschützter Zahlungsbereich",
+  "login.passwordLabel": "Passwort",
+  "login.passwordPlaceholder": "Passwort eingeben",
+  "login.login": "Anmelden",
+  "login.loggingIn": "Anmeldung läuft…",
+  "login.emptyPassword": "Bitte Passwort eingeben.",
+  "login.invalidPassword": "Ungültiges Passwort",
+  "login.requestFailed": "Login-Anfrage fehlgeschlagen",
+  "login.tooManyAttempts": "Zu viele Versuche. Bitte in {seconds}s erneut versuchen.",
+  "login.wait": "Warte {seconds}s"
+}

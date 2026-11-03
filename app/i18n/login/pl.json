@@ -1,0 +1,14 @@
+{
+  "login.title": "Logowanie do BOLT12 Pay",
+  "login.language": "Język",
+  "login.protectedArea": "Chroniony obszar płatności",
+  "login.passwordLabel": "Hasło",
+  "login.passwordPlaceholder": "Wpisz hasło",
+  "login.login": "Zaloguj się",
+  "login.loggingIn": "Logowanie…",
+  "login.emptyPassword": "Wpisz hasło.",
+  "login.invalidPassword": "Nieprawidłowe hasło",
+  "login.requestFailed": "Żądanie logowania nie powiodło się",
+  "login.tooManyAttempts": "Zbyt wiele prób. Spróbuj ponownie za {seconds}s.",
+  "login.wait": "Poczekaj {seconds}s"
+}
