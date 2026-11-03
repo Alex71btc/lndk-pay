@@ -1,0 +1,21 @@
+{
+  "action.app": "Open app",
+  "action.copy_address": "Copy address",
+  "action.open": "Open",
+  "action.pay": "Open Pay",
+  "action.setup": "Setup wizard",
+  "alias.empty": "No public aliases available yet.",
+  "amount.fixed": "{amount} sats",
+  "amount.label": "Amount",
+  "amount.variable": "variable amount",
+  "brand.logo": "BOLT12 Pay Server logo",
+  "error.copy": "Copy failed.",
+  "nav.home": "Back to homepage",
+  "nav.language": "Language",
+  "page.heading": "⚡ Lightning Payments",
+  "page.subline": "BOLT12 • Lightning Address • BOLT11 fallback",
+  "page.subtitle": "Public payment pages on",
+  "page.title": "Lightning Payments",
+  "payment.default_description": "Lightning payment",
+  "toast.address_copied": "Address copied."
+}

@@ -11,6 +11,7 @@ import secrets
 import time
 import hmac
 import struct
+from html import escape
 from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import parse_qs, urlparse, quote
@@ -5043,6 +5044,22 @@ async def refresh_alias_offer(name: str, request: StarletteRequest):
 
     return _build_alias_response(alias_name, alias_data)
 
+def _public_description_html(description: str | None) -> str:
+    if description:
+        return escape(str(description))
+    return '<span data-i18n="payment.default_description">Lightning payment</span>'
+
+
+def _public_amount_html(amount_sat: int | None) -> str:
+    if not amount_sat:
+        return '<span data-i18n="amount.variable">variable amount</span>'
+    params = escape(json.dumps({"amount": amount_sat}))
+    return (
+        f'<span data-i18n="amount.fixed" data-i18n-params="{params}">'
+        f'{escape(str(amount_sat))} sats</span>'
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/links", response_class=HTMLResponse)
 async def public_index_page():
@@ -5052,37 +5069,41 @@ async def public_index_page():
     items_html = ""
 
     for alias_name, alias in aliases.items():
-        description = alias.get("description") or "Lightning payment"
+        description_html = _public_description_html(alias.get("description"))
         amount_sat = alias.get("amount_sat")
-        amount_label = f"{amount_sat} sats" if amount_sat else "variable amount"
+        amount_html = _public_amount_html(amount_sat)
 
         bolt12_domain = get_public_bolt12_address().split("@", 1)[1]
         bip353_address = f"{alias_name}@{bolt12_domain}"
 
         items_html += f"""
         <div class="aliasCard">
-          <div class="aliasTitle mono">{bip353_address}</div>
+          <div class="aliasTitle mono">{escape(bip353_address)}</div>
           <div class="aliasMeta">
-            {description}<br />
-            <span class="amount-label">Amount</span>: {amount_label}
+            {description_html}<br />
+            <span class="amount-label" data-i18n="amount.label">Amount</span>: {amount_html}
           </div>
           <div class="row">
-            <button onclick="window.open('/alias/{alias_name}', '_blank')">Open</button>
-            <button class="secondary" data-copy-address="{bip353_address}">Copy address</button>
+            <button data-i18n="action.open" data-alias-path="/alias/{escape(quote(alias_name, safe=''))}" onclick="window.open(this.dataset.aliasPath, '_blank')">Open</button>
+            <button data-i18n="action.copy_address" class="secondary" data-copy-address="{escape(bip353_address)}">Copy address</button>
           </div>
         </div>
         """
     if not items_html:
         items_html = """
     <div class="aliasCard" data-empty-alias-list="1">
-      <div class="aliasMeta">No public aliases available yet.</div>
+      <div class="aliasMeta" data-i18n="alias.empty">No public aliases available yet.</div>
     </div>
         """
 
     html = f"""
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
+<script src="/assets/i18n/runtime.js"></script>
+<script src="/assets/i18n/landing.js"></script>
+<script>window.Bolt12I18n.use("landing");</script>
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="icon" href="/assets/icon.png" sizes="32x32" />
@@ -5097,7 +5118,7 @@ async def public_index_page():
   <link rel="icon" href="/assets/icon.png" sizes="192x192" />
   <link rel="icon" href="/assets/icon.png" sizes="512x512" />
   <link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
-  <title>Lightning Payments</title>
+  <title data-i18n="page.title">Lightning Payments</title>
   <style>
     body {{
       margin: 0;
@@ -5203,61 +5224,27 @@ async def public_index_page():
 <main class="card">
 <div id="landingToast" class="landingToast"></div>
   <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
-    <div style="
-      display:inline-flex;
-      gap:4px;
-      padding:4px;
-      border-radius:16px;
-      border:1px solid #26324a;
-      background:rgba(19,28,46,.92);
-    ">
-      <button id="landingLangDe"
-        style="
-          min-width:36px;
-          height:26px;
-          padding:0 8px;
-          border-radius:10px;
-          border:none;
-          background:transparent;
-          color:#a7b0c3;
-          font-size:.78rem;
-          font-weight:700;
-        "
-      >DE</button>
-
-      <button id="landingLangEn"
-        style="
-          min-width:36px;
-          height:26px;
-          padding:0 8px;
-          border-radius:10px;
-          font-size:.78rem;
-          border:none;
-          background:#3a4254;
-          color:#eef2ff;
-          font-weight:700;
-        "
-      >EN</button>
-    </div>
+    <select data-i18n-language data-i18n-aria-label="nav.language" aria-label="Language"
+      style="padding:6px 10px;border-radius:10px;border:1px solid #26324a;background:#131c2e;color:#eef2ff"></select>
   </div>
 <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px;">
-  <a href="{HOME_URL}" aria-label="Back to homepage" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+  <a href="{HOME_URL}" data-i18n-aria-label="nav.home" aria-label="Back to homepage" data-i18n-title="nav.home" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
     <img
       src="/assets/icon.png"
-      alt="BOLT12 Pay Server Logo"
+      data-i18n-alt="brand.logo" alt="BOLT12 Pay Server logo"
       style="width:72px;height:72px;object-fit:contain;display:block;cursor:pointer;filter:drop-shadow(0 0 3px rgba(255,200,0,0.35));"
     >
   </a>
-<h1 id="landingTitle" style="margin:0;">⚡ Lightning Payments</h1>
+<h1 id="landingTitle" data-i18n="page.heading" style="margin:0;">⚡ Lightning Payments</h1>
 </div>
 <div class="sub">
-  <span id="landingSubtitle">Public payment pages on</span> <span class="mono">{get_lnurl_base_domain()}</span><br />
-  <span id="landingSubline" style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 fallback</span>
+  <span id="landingSubtitle" data-i18n="page.subtitle">Public payment pages on</span> <span class="mono">{escape(get_lnurl_base_domain())}</span><br />
+  <span id="landingSubline" data-i18n="page.subline" style="font-size:.92rem;">BOLT12 • Lightning Address • BOLT11 fallback</span>
 </div>
     <div class="row" style="margin-bottom: 18px;">
-<button id="landingOpenApp" class="secondary" onclick="window.location.href='/app'">Open App</button>
-<button id="landingOpenPay" class="secondary" onclick="window.location.href='/pay'">Open Pay</button>
-<button id="landingSetup" class="secondary" onclick="window.location.href='/app?setup=1'">Setup Wizard</button>
+<button id="landingOpenApp" data-i18n="action.app" class="secondary" onclick="window.location.href='/app'">Open App</button>
+<button id="landingOpenPay" data-i18n="action.pay" class="secondary" onclick="window.location.href='/pay'">Open Pay</button>
+<button id="landingSetup" data-i18n="action.setup" class="secondary" onclick="window.location.href='/app?setup=1'">Setup Wizard</button>
     </div>
     <div class="aliasList">
       {items_html}
@@ -5265,147 +5252,24 @@ async def public_index_page():
   </main>
 <script>
 (function () {{
-  const T = {{
-    en: {{
-      title: "⚡ Lightning Payments",
-      subtitle: "Public payment pages on",
-      subline: "BOLT12 • Lightning Address • BOLT11 fallback",
-      openApp: "Open App",
-      openPay: "Open Pay",
-      setup: "Setup Wizard",
-      empty: "No public aliases available yet.",
-      copyAddress: "Copy address",
-      addressCopied: "Address copied.",
-      copyFailed: "Copy failed."
-    }},
-    de: {{
-      title: "⚡ Lightning Zahlungen",
-      subtitle: "Öffentliche Zahlungsseiten auf",
-      subline: "BOLT12 • Lightning Address • BOLT11 Fallback",
-      openApp: "App öffnen",
-      openPay: "Bezahlen öffnen",
-      setup: "Setup Assistent",
-      empty: "Noch keine öffentlichen Aliase vorhanden.",
-      copyAddress: "Adresse kopieren",
-      addressCopied: "Adresse kopiert.",
-      copyFailed: "Kopieren fehlgeschlagen."
-    }}
-  }};
-function getLang() {{
-  const stored = localStorage.getItem("app_lang");
-  if (stored) return stored;
-
-  const nav = navigator.language || "";
-  if (nav.startsWith("de")) return "de";
-
-  return "en";
-}}
-
-
-  window.setLang = function (lang) {{
-    localStorage.setItem("app_lang", lang);
-    applyLang();
-  }};
-
-  function setActive(lang) {{
-    const deBtn = document.getElementById("landingLangDe");
-    const enBtn = document.getElementById("landingLangEn");
-    if (!deBtn || !enBtn) return;
-
-    const activeBg = "#3a4254";
-    const activeColor = "#eef2ff";
-    const idleBg = "transparent";
-    const idleColor = "#a7b0c3";
-
-    [deBtn, enBtn].forEach((btn) => {{
-      btn.style.boxShadow = "none";
-      btn.style.border = "none";
-    }});
-
-    if (lang === "de") {{
-      deBtn.style.background = activeBg;
-      deBtn.style.color = activeColor;
-      enBtn.style.background = idleBg;
-      enBtn.style.color = idleColor;
-    }} else {{
-      enBtn.style.background = activeBg;
-      enBtn.style.color = activeColor;
-      deBtn.style.background = idleBg;
-      deBtn.style.color = idleColor;
-    }}
+  function showLandingToast(key, kind) {{
+    const toast = document.getElementById("landingToast");
+    toast.dataset.i18n = key;
+    toast.textContent = window.__t(key);
+    toast.className = "landingToast show " + kind;
+    toast.style.display = "block";
+    clearTimeout(window.__landingToastTimer);
+    window.__landingToastTimer = setTimeout(() => {{
+      delete toast.dataset.i18n;
+      toast.className = "landingToast";
+      toast.style.display = "none";
+      toast.textContent = "";
+    }}, 1800);
   }}
 
- function applyLang() {{
-  const lang = getLang();
-  const t = T[lang] || T.en;
-
-  const title = document.getElementById("landingTitle");
-  const subtitle = document.getElementById("landingSubtitle");
-  const subline = document.getElementById("landingSubline");
-  const openApp = document.getElementById("landingOpenApp");
-  const openPay = document.getElementById("landingOpenPay");
-  const setup = document.getElementById("landingSetup");
-
-  if (title) title.textContent = t.title;
-  if (subtitle) subtitle.textContent = t.subtitle;
-  if (subline) subline.textContent = t.subline;
-  if (openApp) openApp.textContent = t.openApp;
-  if (openPay) openPay.textContent = t.openPay;
-  if (setup) setup.textContent = t.setup;
-
-  const aliasList = document.querySelector(".aliasList");
-  const emptyCard = aliasList ? aliasList.querySelector('[data-empty-alias-list="1"]') : null;
-  if (emptyCard) {{
-    emptyCard.innerHTML = '<div class="aliasMeta">' + t.empty + '</div>';
-  }}
-
-  document.querySelectorAll("[data-copy-address]").forEach((btn) => {{
-    btn.textContent = t.copyAddress;
-  }});
-
-document.querySelectorAll(".amount-label").forEach((el) => {{
-  el.textContent = lang === "de" ? "Betrag" : "Amount";
-}});
-
-setActive(lang);
-}}
-
-function showLandingToast(message, kind) {{
-  const toast = document.getElementById("landingToast");
-  if (!toast) return;
-
-  const toastKind = kind || "ok";
-
-  toast.textContent = message || "";
-  toast.className = "landingToast show " + toastKind;
-  toast.style.display = "block";
-
-  clearTimeout(window.__landingToastTimer);
-
-  window.__landingToastTimer = setTimeout(() => {{
-    toast.className = "landingToast";
-    toast.textContent = "";
-    toast.style.display = "none";
-  }}, 1800);
-}}
-function showLandingToast(message, kind) {{
-  const toast = document.getElementById("landingToast");
-  if (!toast) return;
-
-  toast.textContent = message || "";
-  toast.style.display = "block";
-
-  clearTimeout(window.__landingToastTimer);
-
-  window.__landingToastTimer = setTimeout(() => {{
-    toast.style.display = "none";
-    toast.textContent = "";
-  }}, 1800);
-}}
-async function copyLandingText(text) {{
+  async function copyLandingText(text) {{
     const value = String(text || "").trim();
-    const t = T[getLang()] || T.en;
-    if (!value) return alert(t.copyFailed);
+    if (!value) return alert(window.__t("error.copy"));
 
     try {{
       if (navigator.clipboard && window.isSecureContext) {{
@@ -5424,47 +5288,18 @@ async function copyLandingText(text) {{
         document.body.removeChild(textarea);
         if (!ok) throw new Error("copy failed");
       }}
-        showLandingToast(t.addressCopied, "ok");
+        showLandingToast("toast.address_copied", "ok");
     }} catch (e) {{
-        showLandingToast(t.copyFailed, "error");
+        showLandingToast("error.copy", "error");
     }}
   }}
-  function applyAliasTooltips() {{
-    const t = T[getLang()] || T.en;
-    [
-      "aliasBip353String",
-      "aliasOfferString",
-      "aliasLnurlString",
-      "aliasBolt11String"
-    ].forEach((id) => {{
-      const el = document.getElementById(id);
-      if (el) el.title = t.tapToCopy;
-    }});
-    [
-      "aliasBip353Qr",
-      "aliasOfferQr",
-      "aliasLnurlQr",
-      "aliasBolt11Qr"
-    ].forEach((id) => {{
-      const el = document.getElementById(id);
-      if (el) el.title = t.tapQrToCopy;
-    }});
-  }}
-
   window.addEventListener("load", function () {{
-    const deBtn = document.getElementById("landingLangDe");
-    const enBtn = document.getElementById("landingLangEn");
-
-    if (deBtn) deBtn.onclick = function () {{ window.setLang("de"); }};
-    if (enBtn) enBtn.onclick = function () {{ window.setLang("en"); }};
-
     document.querySelectorAll("[data-copy-address]").forEach((btn) => {{
       btn.onclick = function () {{
         copyLandingText(btn.dataset.copyAddress);
       }};
     }});
 
-    applyLang();
   }});
 }})();
 </script>
@@ -6063,13 +5898,21 @@ async def public_alias_page(alias_name: str):
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
+    not_found_html = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/assets/i18n/runtime.js"></script>
+<script src="/assets/i18n/alias.js"></script>
+<script>window.Bolt12I18n.use("alias");</script>
+<title data-i18n="error.not_found">Alias not found</title></head>
+<body><select data-i18n-language data-i18n-aria-label="nav.language" aria-label="Language"></select>
+<h1 data-i18n="error.not_found">Alias not found</h1></body></html>"""
     try:
         alias_name = _normalize_alias_name(alias_name)
     except HTTPException:
-        return HTMLResponse("<h1>Alias not found</h1>", status_code=404)
+        return HTMLResponse(not_found_html, status_code=404)
 
     if alias_name not in aliases:
-        return HTMLResponse("<h1>Alias not found</h1>", status_code=404)
+        return HTMLResponse(not_found_html, status_code=404)
 
 
     alias = aliases[alias_name]
@@ -6083,9 +5926,9 @@ async def public_alias_page(alias_name: str):
     bip353_address = f"{alias_name}@{bip353_domain}"
     lnurl_address = f"{alias_name}@{lnurl_domain}"
 
-    description = alias.get("description") or "Lightning payment"
+    description_html = _public_description_html(alias.get("description"))
     amount_sat = alias.get("amount_sat")
-    amount_label = f"{amount_sat} sats" if amount_sat else "variable amount"
+    amount_html = _public_amount_html(amount_sat)
 
     last_offer = alias.get("last_offer") or ""
 
@@ -6096,6 +5939,7 @@ async def public_alias_page(alias_name: str):
     except Exception:
         lnurl_fallback = ""
 
+    subline_key = "page.private_subline" if privacy_mode else "page.subline"
     subline = (
         "BOLT12 only"
         if privacy_mode
@@ -6105,16 +5949,16 @@ async def public_alias_page(alias_name: str):
     if last_offer:
         offer_section = f"""
         <div class="section">
-          <div id="aliasOfferTitle" class="sectionTitle">BOLT12 Offer (primary)</div>
+          <div id="aliasOfferTitle" data-i18n="offer.title" class="sectionTitle">BOLT12 Offer (primary)</div>
           <div class="qr">
-            <img id="aliasOfferQr" class="copyable" src="/api/qr/{last_offer}" width="260" height="260" alt="BOLT12 Offer QR" title="Tap to copy QR content">
+            <img id="aliasOfferQr" class="copyable" src="/api/qr/{escape(last_offer)}" width="260" height="260" data-i18n-alt="qr.offer" alt="BOLT12 Offer QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
           </div>
-          <div id="aliasOfferString" class="mono copyable" title="Tap to copy">{last_offer}</div>
+          <div id="aliasOfferString" class="mono copyable" data-i18n-title="hint.copy" title="Tap to copy">{escape(last_offer)}</div>
           <div class="row">
-          <button id="aliasOfferWalletBtn" onclick="window.location.href='lightning:{last_offer}'">Open with wallet</button>
-          <button id="aliasCopyOfferBtn" class="secondary">Copy offer</button>
+          <button id="aliasOfferWalletBtn" data-i18n="action.wallet" data-wallet-target="{escape(last_offer)}" onclick="window.location.href='lightning:'+this.dataset.walletTarget">Open with wallet</button>
+          <button id="aliasCopyOfferBtn" data-i18n="action.copy_offer" class="secondary">Copy offer</button>
           </div>
-          <div id="aliasOfferHint" class="hint">
+          <div id="aliasOfferHint" data-i18n="offer.hint" class="hint">
           Primary payment method. Wallets with BOLT12 support should use this.
           </div>
         </div>
@@ -6126,7 +5970,7 @@ async def public_alias_page(alias_name: str):
             max_amount_sat = max(1, LNURL_MAX_SENDABLE_MSAT // 1000)
             bolt11_amount_input = f"""
           <div class="bolt11AmountField">
-            <label id="aliasBolt11AmountLabel" for="aliasBolt11AmountInput">Amount in sats</label>
+            <label id="aliasBolt11AmountLabel" data-i18n="invoice.amount" for="aliasBolt11AmountInput">Amount in sats</label>
             <input
               id="aliasBolt11AmountInput"
               type="number"
@@ -6134,30 +5978,30 @@ async def public_alias_page(alias_name: str):
               min="1"
               max="{max_amount_sat}"
               step="1"
-              placeholder="Enter amount"
+              placeholder="Enter amount" data-i18n-placeholder="invoice.amount_placeholder"
             >
           </div>
             """
         bolt11_section = f"""
         <div class="section">
-          <div id="aliasBolt11Title" class="sectionTitle">Optional BOLT11 fallback</div>
-          <div id="aliasBolt11Hint" class="hint">
+          <div id="aliasBolt11Title" data-i18n="invoice.title" class="sectionTitle">Optional BOLT11 fallback</div>
+          <div id="aliasBolt11Hint" data-i18n="invoice.hint" class="hint">
           Most wallets can use the Lightning Address or LNURL above. Generate a one-time BOLT11 invoice only for an older wallet that needs it.
           </div>
           {bolt11_amount_input}
           <div class="row">
-            <button id="aliasGenerateBolt11Btn">Generate BOLT11 fallback invoice</button>
+            <button id="aliasGenerateBolt11Btn" data-i18n="invoice.generate">Generate BOLT11 fallback invoice</button>
           </div>
           <div id="aliasBolt11Result" hidden>
             <div class="qr">
-              <img id="aliasBolt11Qr" class="copyable" width="220" height="220" alt="BOLT11 Invoice QR" title="Tap to copy QR content">
+              <img id="aliasBolt11Qr" class="copyable" width="220" height="220" data-i18n-alt="qr.invoice" alt="BOLT11 Invoice QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
             </div>
-            <div id="aliasBolt11String" class="mono copyable" title="Tap to copy"></div>
+            <div id="aliasBolt11String" class="mono copyable" data-i18n-title="hint.copy" title="Tap to copy"></div>
             <div class="row">
-              <button id="aliasBolt11WalletBtn">WebLN / Wallet</button>
-              <button id="aliasCopyInvoiceBtn" class="secondary">Copy invoice</button>
+              <button id="aliasBolt11WalletBtn" data-i18n="action.wallet">WebLN / Wallet</button>
+              <button id="aliasCopyInvoiceBtn" data-i18n="action.copy_invoice" class="secondary">Copy invoice</button>
             </div>
-            <div id="aliasBolt11ExpiryHint" class="hint">
+            <div id="aliasBolt11ExpiryHint" data-i18n="invoice.expiry" class="hint">
               This invoice is valid for one hour. Generate another only if it expires.
             </div>
           </div>
@@ -6168,16 +6012,16 @@ async def public_alias_page(alias_name: str):
     if lnurl_fallback and not privacy_mode:
         lnurl_section = f"""
         <div class="section">
-          <div id="aliasLnurlTitle" class="sectionTitle">LNURL Fallback</div>
-          <div id="aliasLnurlString" class="mono copyable" title="Tap to copy">{lnurl_address}</div>
+          <div id="aliasLnurlTitle" data-i18n="lnurl.title" class="sectionTitle">LNURL Fallback</div>
+          <div id="aliasLnurlString" class="mono copyable" data-i18n-title="hint.copy" title="Tap to copy">{escape(lnurl_address)}</div>
           <div class="qr">
-            <img id="aliasLnurlQr" class="copyable" src="/api/qr/{lnurl_fallback}" width="220" height="220" alt="LNURL QR" title="Tap to copy QR content">
+            <img id="aliasLnurlQr" data-copy-target="{escape(lnurl_fallback)}" class="copyable" src="/api/qr/{escape(lnurl_fallback)}" width="220" height="220" data-i18n-alt="qr.lnurl" alt="LNURL QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
           </div>
           <div class="row">
-          <button id="aliasCopyLnurlBtn">Copy LNURL</button>
-          <button id="aliasLnurlWalletBtn" class="secondary" onclick="window.location.href='lightning:{lnurl_address}'">Open fallback with wallet</button>
+          <button id="aliasCopyLnurlBtn" data-i18n="action.copy_lnurl">Copy LNURL</button>
+          <button id="aliasLnurlWalletBtn" data-i18n="lnurl.wallet" class="secondary" data-wallet-target="{escape(lnurl_address)}" onclick="window.location.href='lightning:'+this.dataset.walletTarget">Open fallback with wallet</button>
           </div>
-          <div id="aliasLnurlHint" class="hint">
+          <div id="aliasLnurlHint" data-i18n="lnurl.hint" class="hint">
           For wallets without BOLT12 support. QR contains the LNURL, wallet button uses Lightning Address.
          </div>
         </div>
@@ -6185,15 +6029,19 @@ async def public_alias_page(alias_name: str):
 
     html = f"""
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
+<script src="/assets/i18n/runtime.js"></script>
+<script src="/assets/i18n/alias.js"></script>
+<script>window.Bolt12I18n.use("alias");</script>
+
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="icon" href="/assets/icon.png" sizes="32x32" />
 <link rel="icon" href="/assets/icon.png" sizes="192x192" />
 <link rel="icon" href="/assets/icon.png" sizes="512x512" />
 <link rel="apple-touch-icon" href="/assets/icon.png" sizes="180x180" />
-<title>{bip353_address}</title>
+<title>{escape(bip353_address)}</title>
 
 <style>
 body {{
@@ -6381,74 +6229,40 @@ button:hover {{
 <main class="card">
 
   <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
-    <div style="
-      display:inline-flex;
-      gap:4px;
-      padding:4px;
-      border-radius:16px;
-      border:1px solid #26324a;
-      background:rgba(19,28,46,.92);
-    ">
-      <button id="aliasLangDe"
-        style="
-          min-width:38px;
-          height:28px;
-          padding:0 8px;
-          border-radius:10px;
-          border:none;
-          background:transparent;
-          color:#a7b0c3;
-          font-size:.8rem;
-          font-weight:700;
-        "
-      >DE</button>
-
-      <button id="aliasLangEn"
-        style="
-          min-width:38px;
-          height:28px;
-          padding:0 8px;
-          border-radius:10px;
-          border:none;
-          background:#3a4254;
-          color:#eef2ff;
-          font-size:.8rem;
-          font-weight:700;
-        "
-      >EN</button>
-    </div>
+    <select data-i18n-language data-i18n-aria-label="nav.language" aria-label="Language"
+      style="padding:6px 10px;border-radius:10px;border:1px solid #26324a;background:#131c2e;color:#eef2ff"></select>
   </div>
-<h1 id="aliasTitle">⚡ Lightning Payment</h1>
+<h1 id="aliasTitle" data-i18n="page.heading">⚡ Lightning Payment</h1>
 <div style="text-align:center;margin:0 0 16px 0;">
-  <a href="{HOME_URL}" aria-label="Back to homepage" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+  <a href="{HOME_URL}" data-i18n-aria-label="nav.home" aria-label="Back to homepage" data-i18n-title="nav.home" title="Back to homepage" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
     <img
       src="/assets/icon.png"
-      alt="BOLT12 Pay Server Logo"
+      data-i18n-alt="brand.logo" alt="BOLT12 Pay Server logo"
       style="width:64px;height:64px;object-fit:contain;display:block;margin:0 auto;cursor:pointer;filter:drop-shadow(0 0 2px rgba(255,200,0,0.30));"
     >
   </a>
 </div>
-<div id="aliasBip353String" class="mono copyable" title="Tap to copy">{bip353_address}</div>
+<div id="aliasBip353String" class="mono copyable" data-i18n-title="hint.copy" title="Tap to copy">{escape(bip353_address)}</div>
 
 <div class="sub">
-<span id="aliasDescription">{description}</span><br/>
-<span id="aliasAmountLabel">Amount</span>: <span id="aliasAmountValue">{amount_label}</span><br/>
-<span id="aliasSubline" style="font-size:.92rem;">{subline}</span>
+<span id="aliasDescription">{description_html}</span><br/>
+<span id="aliasAmountLabel" data-i18n="amount.label">Amount</span>: <span id="aliasAmountValue">{amount_html}</span><br/>
+<span id="aliasSubline" data-i18n="{subline_key}" style="font-size:.92rem;">{subline}</span>
 </div>
 
 {offer_section}
 
 <div class="section">
-<div id="aliasBip353Title" class="sectionTitle">BIP353 Address</div>
-  <div class="mono">{bip353_address}</div>
+<div id="aliasBip353Title" data-i18n="bip353.title" class="sectionTitle">BIP353 Address</div>
+  <div class="mono">{escape(bip353_address)}</div>
   <div class="qr">
-    <img id="aliasBip353Qr" class="copyable" src="/api/qr/{bip353_address}" width="220" height="220" alt="BIP353 QR" title="Tap to copy QR content">
+    <img id="aliasBip353Qr" class="copyable" src="/api/qr/{escape(bip353_address)}" width="220" height="220" data-i18n-alt="qr.bip353" alt="BIP353 QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
   </div>
   <div class="row">
-   <button id="aliasCopyAddressBtn">Copy address</button>
-   <button id="aliasOpenWalletBtn" class="secondary" onclick="window.location.href='lightning:{bip353_address}'">Open with wallet</button>
+   <button id="aliasCopyAddressBtn" data-i18n="action.copy_address">Copy address</button>
+   <button id="aliasOpenWalletBtn" data-i18n="action.wallet" class="secondary" data-wallet-target="{escape(bip353_address)}" onclick="window.location.href='lightning:'+this.dataset.walletTarget">Open with wallet</button>
   </div>
-  <div id="aliasBip353Hint" class="hint">
+  <div id="aliasBip353Hint" data-i18n="bip353.hint" class="hint">
   Human-readable address for this payment page.
   </div>
 </div>
@@ -6481,212 +6295,32 @@ async function payBolt11Invoice() {{
 </script>
 <script>
 (function () {{
-  const T = {{
-    en: {{
-      title: "⚡ Lightning Payment",
-      amount: "Amount",
-      subline: "BOLT12 first · LNURL and BOLT11 as fallback",
-      bip353Title: "BIP353 Address",
-      copyAddress: "Copy address",
-      openWallet: "Open with wallet",
-      bip353Hint: "Human-readable address for this payment page.",
-      offerTitle: "BOLT12 Offer (primary)",
-      copyOffer: "Copy offer",
-      offerHint: "Primary payment method. Wallets with BOLT12 support should use this.",
-      lnurlTitle: "LNURL Fallback",
-      copyLnurl: "Copy LNURL",
-      lnurlWallet: "Open fallback with wallet",
-      lnurlHint: "For wallets without BOLT12 support. QR contains the LNURL, wallet button uses Lightning Address.",
-      bolt11Title: "Optional BOLT11 fallback",
-      bolt11Amount: "Amount in sats",
-      bolt11AmountPlaceholder: "Enter amount",
-      invoiceAmountRequired: "Enter an amount before generating the invoice.",
-      generateInvoice: "Generate BOLT11 fallback invoice",
-      generatingInvoice: "Generating invoice...",
-      copyInvoice: "Copy invoice",
-      bolt11Hint: "Most wallets can use the Lightning Address or LNURL above. Generate a one-time BOLT11 invoice only for an older wallet that needs it.",
-      bolt11Expiry: "This invoice is valid for one hour. Generate another only if it expires.",
-      invoiceCreated: "BOLT11 fallback invoice created.",
-      invoiceFailed: "The BOLT11 fallback invoice could not be created.",
-      copiedAddress: "Address copied.",
-      copiedOffer: "Offer copied.",
-      copiedLnurl: "LNURL copied.",
-      copiedInvoice: "Invoice copied.",
-      copyFailed: "Copy failed.",
-      tapToCopy: "Tap to copy",
-      tapQrToCopy: "Tap to copy QR content"
-    }},
-    de: {{
-      title: "⚡ Lightning Zahlung",
-      amount: "Betrag",
-      subline: "BOLT12 zuerst · LNURL und BOLT11 nur als Fallback",
-      bip353Title: "BIP353 Adresse",
-      copyAddress: "Adresse kopieren",
-      openWallet: "Mit Wallet öffnen",
-      bip353Hint: "Menschenlesbare Adresse für diese Zahlungsseite.",
-      offerTitle: "BOLT12 Offer (primär)",
-      copyOffer: "Offer kopieren",
-      offerHint: "Primärer Zahlungsweg dieser Seite. Wallets mit BOLT12-Support sollten diesen Pfad verwenden.",
-      lnurlTitle: "LNURL Fallback",
-      copyLnurl: "LNURL kopieren",
-      lnurlWallet: "Fallback mit Wallet öffnen",
-      lnurlHint: "Für Wallets ohne BOLT12-Unterstützung. QR enthält den LNURL-String, der Wallet-Button nutzt die Lightning Address.",
-      bolt11Title: "Optionaler BOLT11-Fallback",
-      bolt11Amount: "Betrag in Sats",
-      bolt11AmountPlaceholder: "Betrag eingeben",
-      invoiceAmountRequired: "Gib zuerst einen Betrag ein.",
-      generateInvoice: "BOLT11-Fallback-Invoice erzeugen",
-      generatingInvoice: "Invoice wird erzeugt...",
-      copyInvoice: "Invoice kopieren",
-      bolt11Hint: "Fast alle Wallets können die Lightning Address oder LNURL oben verwenden. Erzeuge nur für eine ältere Wallet bei Bedarf eine einmalige BOLT11-Invoice.",
-      bolt11Expiry: "Diese Invoice ist eine Stunde gültig. Erzeuge nur nach Ablauf eine neue.",
-      invoiceCreated: "BOLT11-Fallback-Invoice erzeugt.",
-      invoiceFailed: "Die BOLT11-Fallback-Invoice konnte nicht erzeugt werden.",
-      copiedAddress: "Adresse kopiert.",
-      copiedOffer: "Offer kopiert.",
-      copiedLnurl: "LNURL kopiert.",
-      copiedInvoice: "Invoice kopiert.",
-      copyFailed: "Kopieren fehlgeschlagen.",
-      tapToCopy: "Zum Kopieren antippen",
-      tapQrToCopy: "Zum Kopieren antippen (QR-Inhalt)"
-    }}
-  }};
-
-  function getLang() {{
-    return localStorage.getItem("app_lang") || "en";
-  }}
-
-  window.setAliasLang = function (lang) {{
-    localStorage.setItem("app_lang", lang);
-    applyAliasLang();
-  }};
-
-  function setActive(lang) {{
-    const deBtn = document.getElementById("aliasLangDe");
-    const enBtn = document.getElementById("aliasLangEn");
-    if (!deBtn || !enBtn) return;
-
-    const activeBg = "#3a4254";
-    const activeColor = "#eef2ff";
-    const idleBg = "transparent";
-    const idleColor = "#a7b0c3";
-
-    if (lang === "de") {{
-      deBtn.style.background = activeBg;
-      deBtn.style.color = activeColor;
-      enBtn.style.background = idleBg;
-      enBtn.style.color = idleColor;
-    }} else {{
-      enBtn.style.background = activeBg;
-      enBtn.style.color = activeColor;
-      deBtn.style.background = idleBg;
-      deBtn.style.color = idleColor;
-    }}
-  }}
-
-  function applyAliasTooltips() {{
-    const t = T[getLang()] || T.en;
-    [
-      "aliasBip353String",
-      "aliasOfferString",
-      "aliasLnurlString",
-      "aliasBolt11String"
-    ].forEach((id) => {{
-      const el = document.getElementById(id);
-      if (el) el.title = t.tapToCopy;
-    }});
-    [
-      "aliasBip353Qr",
-      "aliasOfferQr",
-      "aliasLnurlQr",
-      "aliasBolt11Qr"
-    ].forEach((id) => {{
-      const el = document.getElementById(id);
-      if (el) el.title = t.tapQrToCopy;
-    }});
-  }}
-
-  function applyAliasLang() {{
-    const lang = getLang();
-    const t = T[lang] || T.en;
-
-    const title = document.getElementById("aliasTitle");
-    const amount = document.getElementById("aliasAmountLabel");
-    const subline = document.getElementById("aliasSubline");
-    const bip353Title = document.getElementById("aliasBip353Title");
-    const copyAddress = document.getElementById("aliasCopyAddressBtn");
-    const openWallet = document.getElementById("aliasOpenWalletBtn");
-    const bip353Hint = document.getElementById("aliasBip353Hint");
-    const offerTitle = document.getElementById("aliasOfferTitle");
-    const copyOffer = document.getElementById("aliasCopyOfferBtn");
-    const offerWallet = document.getElementById("aliasOfferWalletBtn");
-    const offerHint = document.getElementById("aliasOfferHint");
-    const lnurlTitle = document.getElementById("aliasLnurlTitle");
-    const copyLnurl = document.getElementById("aliasCopyLnurlBtn");
-    const lnurlWallet = document.getElementById("aliasLnurlWalletBtn");
-    const lnurlHint = document.getElementById("aliasLnurlHint");
-    const bolt11Title = document.getElementById("aliasBolt11Title");
-    const bolt11AmountLabel = document.getElementById("aliasBolt11AmountLabel");
-    const bolt11AmountInput = document.getElementById("aliasBolt11AmountInput");
-    const generateInvoice = document.getElementById("aliasGenerateBolt11Btn");
-    const bolt11Wallet = document.getElementById("aliasBolt11WalletBtn");
-    const copyInvoice = document.getElementById("aliasCopyInvoiceBtn");
-    const bolt11Hint = document.getElementById("aliasBolt11Hint");
-    const bolt11Expiry = document.getElementById("aliasBolt11ExpiryHint");
-
-    if (title) title.textContent = t.title;
-    if (amount) amount.textContent = t.amount;
-    if (subline) subline.textContent = t.subline;
-    if (bip353Title) bip353Title.textContent = t.bip353Title;
-    if (copyAddress) copyAddress.textContent = t.copyAddress;
-    if (openWallet) openWallet.textContent = t.openWallet;
-    if (bip353Hint) bip353Hint.textContent = t.bip353Hint;
-    if (offerTitle) offerTitle.textContent = t.offerTitle;
-    if (copyOffer) copyOffer.textContent = t.copyOffer;
-    if (offerWallet) offerWallet.textContent = t.openWallet;
-    if (offerHint) offerHint.textContent = t.offerHint;
-    if (lnurlTitle) lnurlTitle.textContent = t.lnurlTitle;
-    if (copyLnurl) copyLnurl.textContent = t.copyLnurl;
-    if (lnurlWallet) lnurlWallet.textContent = t.lnurlWallet;
-    if (lnurlHint) lnurlHint.textContent = t.lnurlHint;
-    if (bolt11Title) bolt11Title.textContent = t.bolt11Title;
-    if (bolt11AmountLabel) bolt11AmountLabel.textContent = t.bolt11Amount;
-    if (bolt11AmountInput) bolt11AmountInput.placeholder = t.bolt11AmountPlaceholder;
-    if (generateInvoice && !generateInvoice.disabled) {{
-      generateInvoice.textContent = t.generateInvoice;
-    }}
-    if (bolt11Wallet) bolt11Wallet.textContent = t.openWallet;
-    if (copyInvoice) copyInvoice.textContent = t.copyInvoice;
-    if (bolt11Hint) bolt11Hint.textContent = t.bolt11Hint;
-    if (bolt11Expiry) bolt11Expiry.textContent = t.bolt11Expiry;
-
-    applyAliasTooltips();
-    setActive(lang);
-  }}
-
-  function showAliasToast(message, kind) {{
+  function showAliasToast(key, kind, params = {{}}) {{
     const toast = document.getElementById("aliasToast");
     if (!toast) return;
 
     const toastKind = kind || "ok";
-    toast.textContent = message || "";
+    toast.dataset.i18n = key;
+    toast.dataset.i18nParams = JSON.stringify(params);
+    toast.textContent = window.__t(key, params);
     toast.className = "statusBar show " + toastKind;
     toast.style.display = "block";
 
     clearTimeout(window.__aliasToastTimer);
     window.__aliasToastTimer = setTimeout(() => {{
+      delete toast.dataset.i18n;
+      delete toast.dataset.i18nParams;
       toast.className = "statusBar";
       toast.textContent = "";
       toast.style.display = "none";
     }}, 1800);
   }}
 
-  async function copyWithToast(text, message) {{
+  async function copyWithToast(text, messageKey) {{
     const value = String(text || "").trim();
-    const t = T[getLang()] || T.en;
 
     if (!value) {{
-      showAliasToast(t.copyFailed, "error");
+      showAliasToast("error.copy", "error");
       return;
     }}
 
@@ -6696,7 +6330,7 @@ async function payBolt11Invoice() {{
       }} else {{
         throw new Error("Clipboard API unavailable");
       }}
-      showAliasToast(message, "ok");
+      showAliasToast(messageKey, "ok");
       return;
     }} catch (err) {{
       try {{
@@ -6719,16 +6353,15 @@ async function payBolt11Invoice() {{
           throw new Error("execCommand copy failed");
         }}
 
-        showAliasToast(message, "ok");
+        showAliasToast(messageKey, "ok");
         return;
       }} catch (fallbackErr) {{
-        showAliasToast(t.copyFailed, "error");
+        showAliasToast("error.copy", "error");
       }}
     }}
   }}
 
   async function generateBolt11Fallback() {{
-    const t = T[getLang()] || T.en;
     const button = document.getElementById("aliasGenerateBolt11Btn");
     const result = document.getElementById("aliasBolt11Result");
     const invoiceString = document.getElementById("aliasBolt11String");
@@ -6739,7 +6372,7 @@ async function payBolt11Invoice() {{
     if (amountInput) {{
       requestedAmount = Number(amountInput.value);
       if (!Number.isInteger(requestedAmount) || requestedAmount < 1) {{
-        showAliasToast(t.invoiceAmountRequired, "error");
+        showAliasToast("error.amount_required", "error");
         amountInput.focus();
         return;
       }}
@@ -6747,7 +6380,8 @@ async function payBolt11Invoice() {{
 
     if (button) {{
       button.disabled = true;
-      button.textContent = t.generatingInvoice;
+      button.dataset.i18n = "invoice.generating";
+      button.textContent = window.__t("invoice.generating");
     }}
 
     try {{
@@ -6768,33 +6402,35 @@ async function payBolt11Invoice() {{
         data = {{ detail: bodyText }};
       }}
       if (!response.ok) {{
-        throw new Error(data.detail || t.invoiceFailed);
+        throw new Error(data.detail || "");
       }}
 
       currentAliasBolt11Invoice = String(data.payment_request || "").trim();
       if (!currentAliasBolt11Invoice) {{
-        throw new Error(t.invoiceFailed);
+        throw new Error();
       }}
       if (invoiceString) invoiceString.textContent = currentAliasBolt11Invoice;
       if (invoiceQr) {{
         invoiceQr.src = "/api/qr/" + encodeURIComponent(currentAliasBolt11Invoice);
       }}
       if (result) result.hidden = false;
-      showAliasToast(t.invoiceCreated, "ok");
+      showAliasToast("toast.invoice_created", "ok");
     }} catch (error) {{
-      showAliasToast(error?.message || t.invoiceFailed, "error");
+      if (error?.message) {{
+        showAliasToast("error.invoice_detail", "error", {{ detail: error.message }});
+      }} else {{
+        showAliasToast("error.invoice", "error");
+      }}
     }} finally {{
       if (button) {{
         button.disabled = false;
-        button.textContent = (T[getLang()] || T.en).generateInvoice;
+        button.dataset.i18n = "invoice.generate";
+        button.textContent = window.__t("invoice.generate");
       }}
     }}
   }}
 
   window.addEventListener("load", function () {{
-    const deBtn = document.getElementById("aliasLangDe");
-    const enBtn = document.getElementById("aliasLangEn");
-
     const copyAddressBtn = document.getElementById("aliasCopyAddressBtn");
     const copyOfferBtn = document.getElementById("aliasCopyOfferBtn");
     const copyLnurlBtn = document.getElementById("aliasCopyLnurlBtn");
@@ -6812,51 +6448,48 @@ async function payBolt11Invoice() {{
     const lnurlQr = document.getElementById("aliasLnurlQr");
     const bolt11Qr = document.getElementById("aliasBolt11Qr");
 
-    if (deBtn) deBtn.onclick = function () {{ window.setAliasLang("de"); }};
-    if (enBtn) enBtn.onclick = function () {{ window.setAliasLang("en"); }};
     if (generateInvoiceBtn) generateInvoiceBtn.onclick = generateBolt11Fallback;
     if (bolt11WalletBtn) bolt11WalletBtn.onclick = payBolt11Invoice;
 
     if (copyAddressBtn) copyAddressBtn.onclick = function () {{
-      copyWithToast("{bip353_address}", (T[getLang()] || T.en).copiedAddress);
+      copyWithToast(bip353String.textContent, "toast.address_copied");
     }};
     if (copyOfferBtn) copyOfferBtn.onclick = function () {{
-      copyWithToast("{last_offer}", (T[getLang()] || T.en).copiedOffer);
+      copyWithToast(offerString.textContent, "toast.offer_copied");
     }};
     if (copyLnurlBtn) copyLnurlBtn.onclick = function () {{
-      copyWithToast("{lnurl_fallback}", (T[getLang()] || T.en).copiedLnurl);
+      copyWithToast(lnurlQr.dataset.copyTarget, "toast.lnurl_copied");
     }};
     if (copyInvoiceBtn) copyInvoiceBtn.onclick = function () {{
-      copyWithToast(currentAliasBolt11Invoice, (T[getLang()] || T.en).copiedInvoice);
+      copyWithToast(currentAliasBolt11Invoice, "toast.invoice_copied");
     }};
 
     if (bip353String) bip353String.onclick = function () {{
-      copyWithToast("{bip353_address}", (T[getLang()] || T.en).copiedAddress);
+      copyWithToast(bip353String.textContent, "toast.address_copied");
     }};
     if (offerString) offerString.onclick = function () {{
-      copyWithToast("{last_offer}", (T[getLang()] || T.en).copiedOffer);
+      copyWithToast(offerString.textContent, "toast.offer_copied");
     }};
     if (lnurlString) lnurlString.onclick = function () {{
-      copyWithToast("{lnurl_address}", (T[getLang()] || T.en).copiedAddress);
+      copyWithToast(lnurlString.textContent, "toast.address_copied");
     }};
     if (bolt11String) bolt11String.onclick = function () {{
-      copyWithToast(currentAliasBolt11Invoice, (T[getLang()] || T.en).copiedInvoice);
+      copyWithToast(currentAliasBolt11Invoice, "toast.invoice_copied");
     }};
 
     if (bip353Qr) bip353Qr.onclick = function () {{
-      copyWithToast("{bip353_address}", (T[getLang()] || T.en).copiedAddress);
+      copyWithToast(bip353String.textContent, "toast.address_copied");
     }};
     if (offerQr) offerQr.onclick = function () {{
-      copyWithToast("{last_offer}", (T[getLang()] || T.en).copiedOffer);
+      copyWithToast(offerString.textContent, "toast.offer_copied");
     }};
     if (lnurlQr) lnurlQr.onclick = function () {{
-      copyWithToast("{lnurl_fallback}", (T[getLang()] || T.en).copiedLnurl);
+      copyWithToast(lnurlQr.dataset.copyTarget, "toast.lnurl_copied");
     }};
     if (bolt11Qr) bolt11Qr.onclick = function () {{
-      copyWithToast(currentAliasBolt11Invoice, (T[getLang()] || T.en).copiedInvoice);
+      copyWithToast(currentAliasBolt11Invoice, "toast.invoice_copied");
     }};
 
-    applyAliasLang();
   }});
 }})();
 </script>

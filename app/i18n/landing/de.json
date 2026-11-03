@@ -1,0 +1,21 @@
+{
+  "action.app": "App öffnen",
+  "action.copy_address": "Adresse kopieren",
+  "action.open": "Öffnen",
+  "action.pay": "Zahlungsformular öffnen",
+  "action.setup": "Einrichtungsassistent",
+  "alias.empty": "Noch keine öffentlichen Aliase vorhanden.",
+  "amount.fixed": "{amount} Sats",
+  "amount.label": "Betrag",
+  "amount.variable": "variabler Betrag",
+  "brand.logo": "Logo des BOLT12 Pay Servers",
+  "error.copy": "Kopieren fehlgeschlagen.",
+  "nav.home": "Zur Startseite",
+  "nav.language": "Sprache",
+  "page.heading": "⚡ Lightning-Zahlungen",
+  "page.subline": "BOLT12 • Lightning-Adresse • BOLT11 als Alternative",
+  "page.subtitle": "Öffentliche Zahlungsseiten auf",
+  "page.title": "Lightning-Zahlungen",
+  "payment.default_description": "Lightning-Zahlung",
+  "toast.address_copied": "Adresse kopiert."
+}

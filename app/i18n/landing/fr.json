@@ -1,0 +1,21 @@
+{
+  "action.app": "Ouvrir l’application",
+  "action.copy_address": "Copier l’adresse",
+  "action.open": "Ouvrir",
+  "action.pay": "Ouvrir le formulaire de paiement",
+  "action.setup": "Assistant de configuration",
+  "alias.empty": "Aucun alias public pour le moment.",
+  "amount.fixed": "{amount} sats",
+  "amount.label": "Montant",
+  "amount.variable": "montant variable",
+  "brand.logo": "Logo du serveur BOLT12 Pay",
+  "error.copy": "Échec de la copie.",
+  "nav.home": "Retour à l’accueil",
+  "nav.language": "Langue",
+  "page.heading": "⚡ Paiements Lightning",
+  "page.subline": "BOLT12 • Adresse Lightning • BOLT11 en solution de repli",
+  "page.subtitle": "Pages de paiement publiques sur",
+  "page.title": "Paiements Lightning",
+  "payment.default_description": "Paiement Lightning",
+  "toast.address_copied": "Adresse copiée."
+}

@@ -1,0 +1,21 @@
+{
+  "action.app": "Abrir la aplicación",
+  "action.copy_address": "Copiar dirección",
+  "action.open": "Abrir",
+  "action.pay": "Abrir el formulario de pago",
+  "action.setup": "Asistente de configuración",
+  "alias.empty": "Aún no hay alias públicos.",
+  "amount.fixed": "{amount} sats",
+  "amount.label": "Importe",
+  "amount.variable": "importe variable",
+  "brand.logo": "Logotipo de BOLT12 Pay Server",
+  "error.copy": "No se pudo copiar.",
+  "nav.home": "Volver al inicio",
+  "nav.language": "Idioma",
+  "page.heading": "⚡ Pagos Lightning",
+  "page.subline": "BOLT12 • Dirección Lightning • BOLT11 como alternativa",
+  "page.subtitle": "Páginas públicas de pago en",
+  "page.title": "Pagos Lightning",
+  "payment.default_description": "Pago Lightning",
+  "toast.address_copied": "Dirección copiada."
+}
