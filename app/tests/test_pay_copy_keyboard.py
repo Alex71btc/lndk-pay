@@ -224,6 +224,34 @@ assert.deepEqual(copies, []);
         self.assertIn('data-i18n-title="clipboard.edit_target"', button.group(0))
         self.assertIn('data-i18n-aria-label="clipboard.edit_target"', button.group(0))
 
+    def test_edit_control_is_mobile_only_and_grouped_with_input_actions(self):
+        self.assertRegex(
+            self.html,
+            r"#editPayTargetBtn\s*\{\s*display:\s*none;\s*\}",
+        )
+        self.assertRegex(
+            self.html,
+            r"(?s)@media \(hover: none\) and \(pointer: coarse\).*?"
+            r"#editPayTargetBtn\s*\{\s*display:\s*grid;",
+        )
+        actions = re.search(
+            r'<div class="payInputActions">(.*?)</div>', self.html, re.DOTALL
+        )
+        self.assertIsNotNone(actions)
+        self.assertIn('id="editPayTargetBtn"', actions.group(1))
+
+    def test_mobile_target_actions_stack_below_the_input(self):
+        self.assertRegex(
+            self.html,
+            r"(?s)@media \(max-width: 560px\).*?\.payInputRow\s*\{"
+            r"\s*grid-template-columns:\s*minmax\(0, 1fr\);",
+        )
+        self.assertRegex(
+            self.html,
+            r"(?s)@media \(max-width: 560px\).*?\.payInputActions\s*\{"
+            r".*?justify-content:\s*flex-end;.*?flex-wrap:\s*wrap;",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

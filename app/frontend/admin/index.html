@@ -328,15 +328,32 @@
         margin-bottom: 0;
       }
 
-      .payTargetLabelRow .payInputAction {
-        width: 34px;
-        height: 34px;
+      #editPayTargetBtn {
+        display: none;
+      }
+
+      @media (hover: none) and (pointer: coarse) {
+        #editPayTargetBtn {
+          display: grid;
+        }
       }
 
       .payInputActions {
         display: flex;
         align-items: center;
         gap: 6px;
+      }
+
+      /* Mobile payment target layout */
+      @media (max-width: 560px) {
+        .payInputRow {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .payInputActions {
+          justify-content: flex-end;
+          flex-wrap: wrap;
+        }
       }
 
       .payInputAction {
@@ -1264,29 +1281,6 @@
                 >Offer, Invoice oder Lightning Address</span
               ></label
             >
-            <button
-              id="editPayTargetBtn"
-              class="secondary payInputAction"
-              type="button"
-              title="Zahlungsziel bearbeiten"
-              aria-label="Zahlungsziel bearbeiten"
-              data-i18n-title="clipboard.edit_target"
-              data-i18n-aria-label="clipboard.edit_target"
-            >
-              <svg
-                class="payInputActionIcon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="m16 3 5 5-12 12H4v-5L16 3Z"></path>
-                <path d="m13 6 5 5"></path>
-              </svg>
-            </button>
           </div>
           <div class="payInputRow">
             <input
@@ -1298,6 +1292,29 @@
             />
 
             <div class="payInputActions">
+              <button
+                id="editPayTargetBtn"
+                class="secondary payInputAction"
+                type="button"
+                title="Zahlungsziel bearbeiten"
+                aria-label="Zahlungsziel bearbeiten"
+                data-i18n-title="clipboard.edit_target"
+                data-i18n-aria-label="clipboard.edit_target"
+              >
+                <svg
+                  class="payInputActionIcon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m16 3 5 5-12 12H4v-5L16 3Z"></path>
+                  <path d="m13 6 5 5"></path>
+                </svg>
+              </button>
               <button
                 id="scanToPayBtn"
                 class="secondary payInputAction"
