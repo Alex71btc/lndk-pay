@@ -1,11 +1,14 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BOLT12 Pay Login</title>
+  <title data-i18n="login.title">BOLT12 Pay Login</title>
   <meta http-equiv="Cache-Control" content="no-store" />
   <link rel="icon" type="image/png" href="/assets/icon.png" />
+  <script src="/assets/i18n/runtime.js"></script>
+  <script src="/assets/i18n/login.js"></script>
+  <script>Bolt12I18n.use("login");</script>
   <style>
     html {
       min-height: 100%;
@@ -64,6 +67,17 @@
       opacity: .7;
       cursor: wait;
     }
+    .languagePicker {
+      display: block;
+      max-width: 100%;
+      margin: 0 0 16px auto;
+      padding: 8px;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #eef2ff;
+      font: inherit;
+    }
     /* Blink/Chrome detects autofill even when no input/change event fires. */
     @keyframes bolt12PasswordAutofill {
       from { opacity: 1; }
@@ -84,16 +98,18 @@
 </head>
 <body>
   <main class="card">
+    <select class="languagePicker" data-i18n-language
+      data-i18n-aria-label="login.language" aria-label="Language"></select>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-      <img src="/assets/icon.png" alt="Logo" style="width:48px;height:48px;border-radius:12px;">
+      <img src="/assets/icon.png" alt="BOLT12 Pay" style="width:48px;height:48px;border-radius:12px;">
       <div>
         <div style="font-size:1.25rem;font-weight:800;">⚡ BOLT12 Pay</div>
-        <div class="muted">Protected Pay Area</div>
+        <div class="muted" data-i18n="login.protectedArea">Protected Pay Area</div>
       </div>
     </div>
 
     <form id="loginForm" action="/api/auth/login" method="post" novalidate>
-      <label for="password" id="passwordLabel">Password</label>
+      <label for="password" id="passwordLabel" data-i18n="login.passwordLabel">Password</label>
       <input
         id="password"
         name="password"
@@ -101,6 +117,7 @@
         autocomplete="current-password"
         enterkeyhint="go"
         placeholder="Enter password"
+        data-i18n-placeholder="login.passwordPlaceholder"
         aria-describedby="msg"
         required
       />
@@ -117,52 +134,25 @@
     const msgEl = document.getElementById("msg");
     let loginInProgress = false;
     let loginLockInterval = null;
+    let renderLoginMessage = null;
+    let renderLoginLockout = null;
 
-    const LOGIN_TEXT = {
-      de: {
-        passwordLabel: "Passwort",
-        passwordPlaceholder: "Passwort eingeben",
-        login: "Login",
-        loggingIn: "Login...",
-        emptyPassword: "Bitte Passwort eingeben.",
-        invalidPassword: "Ungültiges Passwort",
-        requestFailed: "Login-Anfrage fehlgeschlagen",
-        tooManyAttempts: (seconds) =>
-          `Zu viele Versuche. Bitte in ${seconds}s erneut versuchen.`,
-        wait: (seconds) => `Warte ${seconds}s`
-      },
-      en: {
-        passwordLabel: "Password",
-        passwordPlaceholder: "Enter password",
-        login: "Login",
-        loggingIn: "Login...",
-        emptyPassword: "Please enter a password.",
-        invalidPassword: "Invalid password",
-        requestFailed: "Login request failed",
-        tooManyAttempts: (seconds) =>
-          `Too many attempts. Try again in ${seconds}s`,
-        wait: (seconds) => `Wait ${seconds}s`
-      }
-    };
-
-    function getLoginLanguage() {
-      const stored = localStorage.getItem("app_lang");
-      if (stored === "de" || stored === "en") return stored;
-      const browserLanguage = navigator.language || navigator.userLanguage || "en";
-      return browserLanguage.toLowerCase().startsWith("de") ? "de" : "en";
+    function loginText(key, seconds) {
+      return window.__t(`login.${key}`, { seconds });
     }
 
-    function loginText(key, ...args) {
-      const value = LOGIN_TEXT[getLoginLanguage()][key];
-      return typeof value === "function" ? value(...args) : value;
+    function showLoginMessage(render = null) {
+      renderLoginMessage = render;
+      msgEl.textContent = render ? render() : "";
     }
 
     function applyLoginI18n() {
-      document.documentElement.lang = getLoginLanguage();
-      document.getElementById("passwordLabel").textContent =
-        loginText("passwordLabel");
-      passwordEl.placeholder = loginText("passwordPlaceholder");
-      loginBtn.textContent = loginText("login");
+      if (renderLoginLockout) {
+        renderLoginLockout();
+      } else {
+        loginBtn.textContent = loginText(loginInProgress ? "loggingIn" : "login");
+        if (renderLoginMessage) msgEl.textContent = renderLoginMessage();
+      }
     }
 
     function normalizeLoginError(data) {
@@ -188,10 +178,11 @@
 
       let remaining = Math.max(1, seconds);
       const render = () => {
-        msgEl.textContent = loginText("tooManyAttempts", remaining);
+        showLoginMessage(() => loginText("tooManyAttempts", remaining));
         loginBtn.textContent = loginText("wait", remaining);
       };
 
+      renderLoginLockout = render;
       loginBtn.disabled = true;
       render();
       loginLockInterval = setInterval(() => {
@@ -199,7 +190,8 @@
         if (remaining <= 0) {
           clearInterval(loginLockInterval);
           loginLockInterval = null;
-          msgEl.textContent = "";
+          renderLoginLockout = null;
+          showLoginMessage();
           restoreLoginButton();
           passwordEl.focus();
           return;
@@ -228,13 +220,13 @@
 
       const password = passwordEl.value || "";
       if (!password) {
-        msgEl.textContent = loginText("emptyPassword");
+        showLoginMessage(() => loginText("emptyPassword"));
         passwordEl.focus();
         return;
       }
 
       loginInProgress = true;
-      msgEl.textContent = "";
+      showLoginMessage();
       loginBtn.disabled = true;
       loginBtn.textContent = loginText("loggingIn");
       let restoreButton = true;
@@ -263,7 +255,7 @@
             }
           }
 
-          msgEl.textContent = normalizeLoginError(data);
+          showLoginMessage(() => normalizeLoginError(data));
           passwordEl.select();
           return;
         }
@@ -271,7 +263,7 @@
         restoreButton = false;
         window.location.assign(getSafeNextPath());
       } catch (err) {
-        msgEl.textContent = loginText("requestFailed");
+        showLoginMessage(() => loginText("requestFailed"));
         passwordEl.select();
       } finally {
         loginInProgress = false;
@@ -358,6 +350,8 @@
       void doLogin();
     });
 
+    window.addEventListener("i18n:language-changed", applyLoginI18n);
+    window.applyTranslations();
     applyLoginI18n();
     passwordEl.focus();
   </script>

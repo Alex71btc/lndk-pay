@@ -1,0 +1,7 @@
+{
+  "intent.title": "Abrir en BOLT12 Pay",
+  "intent.opening": "Abriendo el formulario de pago…",
+  "intent.openForm": "Abrir formulario de pago",
+  "intent.invalid": "Enlace de pago Lightning no compatible o no válido.",
+  "intent.handoffFailed": "No se ha podido transferir el enlace de pago a BOLT12 Pay."
+}
