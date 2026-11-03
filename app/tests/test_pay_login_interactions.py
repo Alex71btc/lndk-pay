@@ -16,7 +16,10 @@ class PayLoginInteractionTests(unittest.TestCase):
             '<form id="loginForm" action="/api/auth/login" method="post" novalidate>',
             self.html,
         )
-        self.assertIn('<button id="loginBtn" type="submit">', self.html)
+        self.assertIn(
+            '<button id="loginBtn" type="submit" data-i18n="login.login">',
+            self.html,
+        )
         self.assertIn('loginForm.addEventListener("submit", (event) => {', self.html)
         self.assertIn("event.preventDefault();", self.html)
         self.assertIn("void doLogin();", self.html)
