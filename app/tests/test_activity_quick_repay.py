@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -46,8 +47,12 @@ class ActivityQuickRepayTests(unittest.TestCase):
         self.assertNotIn('payForm.requestSubmit(', fragment)
 
     def test_translations_exist(self):
-        self.assertEqual(self.html.count('"history.reuse_target":'), 2)
-        self.assertEqual(self.html.count('"toast.activity_target_to_pay":'), 2)
+        for language in ("en", "de", "es", "fr", "pl"):
+            path = ROOT / "app" / "i18n" / "pay" / f"{language}.json"
+            catalog = json.loads(path.read_text(encoding="utf-8"))
+            with self.subTest(language=language):
+                self.assertTrue(catalog["history.reuse_target"].strip())
+                self.assertTrue(catalog["toast.activity_target_to_pay"].strip())
 
 
 if __name__ == "__main__":

@@ -220,8 +220,15 @@ class Bolt12IncomingPayerNoteUiTests(unittest.TestCase):
         self.assertIn('class="txPayerNote"', self.html)
         self.assertIn(".txPayerNote {", self.html)
         self.assertIn("white-space: pre-wrap", self.html)
-        self.assertIn('"history.payer_note": "Payer-Notiz"', self.html)
-        self.assertIn('"history.payer_note": "Payer note"', self.html)
+        self.assertIn('window.__t("history.payer_note")', self.html)
+        labels = {
+            "en": "Payer note", "de": "Payer-Notiz", "es": "Nota del pagador",
+            "fr": "Note du payeur", "pl": "Notatka płatnika",
+        }
+        for language, label in labels.items():
+            path = Path(__file__).resolve().parents[1] / "i18n" / "pay" / f"{language}.json"
+            with self.subTest(language=language):
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["history.payer_note"], label)
 
 
 if __name__ == "__main__":

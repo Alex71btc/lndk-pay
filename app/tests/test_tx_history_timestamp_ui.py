@@ -1,3 +1,6 @@
+import json
+import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -13,13 +16,25 @@ class TxHistoryTimestampUiTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
     def test_formats_activity_timestamp_in_selected_language(self):
-        self.assertIn("function formatTxTimestamp(item)", self.html)
-        self.assertIn(
-            'document.documentElement.lang === "de" ? "de-DE" : "en-US"',
-            self.html,
-        )
-        self.assertIn('dateStyle: "medium"', self.html)
-        self.assertIn('timeStyle: "short"', self.html)
+        script = """
+const assert = require("node:assert/strict");
+let language;
+const window = { getLang: () => language };
+"""
+        for name in ("parseTxTimestamp", "formatTxTimestamp"):
+            script += re.search(
+                rf"^      function {name}\(.*?^      \}}", self.html, re.S | re.M
+            ).group(0) + "\n"
+        script += """
+const item = {created_at: "2026-11-03T10:15:00Z"};
+for (language of ["en", "de", "es", "fr", "pl"]) {
+  const date = new Date(item.created_at);
+  const expected = new Intl.DateTimeFormat(language, {dateStyle: "medium", timeStyle: "short"}).format(date);
+  assert.deepEqual(formatTxTimestamp(item), {text: expected, iso: date.toISOString()});
+}
+"""
+        result = subprocess.run(["node", "-"], input=script, text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('class="txTimestamp"', self.html)
 
     def test_supports_legacy_timestamp_shapes_and_missing_values(self):
@@ -34,9 +49,16 @@ class TxHistoryTimestampUiTests(unittest.TestCase):
             self.html,
         )
 
-    def test_has_german_and_english_missing_timestamp_labels(self):
-        self.assertIn("Datum und Uhrzeit nicht verfügbar", self.html)
-        self.assertIn("Date and time unavailable", self.html)
+    def test_has_localized_missing_timestamp_labels(self):
+        labels = set()
+        for language in ("en", "de", "es", "fr", "pl"):
+            path = PROJECT_ROOT / "app" / "i18n" / "pay" / f"{language}.json"
+            text = json.loads(path.read_text(encoding="utf-8"))["history.timestamp_unavailable"]
+            self.assertTrue(text.strip())
+            labels.add(text)
+        self.assertEqual(len(labels), 5)
+        self.assertIn("Date and time unavailable", labels)
+        self.assertIn("Datum und Uhrzeit nicht verfügbar", labels)
 
     def test_timestamp_layout_is_responsive(self):
         self.assertIn(".txTimestamp {", self.html)
