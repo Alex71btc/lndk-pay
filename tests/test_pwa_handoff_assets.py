@@ -103,11 +103,15 @@ class PwaInstallAssetsTest(unittest.TestCase):
         self.assertIn('(display-mode: standalone)', controller)
 
     def test_install_help_explains_firefox_linux_limit(self):
-        pay_html = (ADMIN / "index.html").read_text()
-        console_html = (PUBLIC / "index.html").read_text()
-
-        self.assertIn("Firefox unter Linux", pay_html)
-        self.assertIn("Firefox unter Linux", console_html)
+        for scope, key in (("pay", "nav.install_manual"), ("console", "console.install_manual")):
+            with self.subTest(scope=scope):
+                catalogs = ROOT / "app" / "i18n" / scope
+                german = json.loads((catalogs / "de.json").read_text())
+                self.assertIn("Firefox unter Linux", german[key])
+                for lang in ("en", "es", "fr", "pl"):
+                    help_text = json.loads((catalogs / f"{lang}.json").read_text())[key]
+                    self.assertIn("Firefox", help_text)
+                    self.assertIn("Linux", help_text)
 
     def test_android_companion_download_is_android_only(self):
         pay_html = (ADMIN / "index.html").read_text()

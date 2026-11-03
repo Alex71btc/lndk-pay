@@ -75,14 +75,6 @@
     });
   }
 
-  function translated(key, fallback) {
-    if (typeof window.__t === "function") {
-      const value = window.__t(key);
-      if (value && value !== key) return value;
-    }
-    return fallback;
-  }
-
   function setButtonState(state) {
     const button = document.getElementById("installBtn");
     const label = button?.querySelector("[data-i18n]") || button;
@@ -92,15 +84,9 @@
     button.hidden = state === "installed" || state === "standalone";
     button.disabled = state === "checking";
 
-    const labels = {
-      ready: [LABEL_KEYS.ready, "Install app"],
-      checking: [LABEL_KEYS.checking, "Checking installation…"],
-      help: [LABEL_KEYS.help, "Installation help"],
-      insecure: [LABEL_KEYS.insecure, "Open HTTPS to install"],
-    };
-    const [key, fallback] = labels[state] || labels.help;
+    const key = LABEL_KEYS[state] || LABEL_KEYS.help;
     label.dataset.i18n = key;
-    label.textContent = translated(key, fallback);
+    label.textContent = window.__t(key);
   }
 
   function resolvePromptWaiters() {
@@ -212,12 +198,7 @@
 
   async function handleInstallClick() {
     if (!window.isSecureContext) {
-      window.alert(
-        translated(
-          LABEL_KEYS.insecureHelp,
-          "This address does not use HTTPS. Open BOLT12 Pay through your configured HTTPS address before installing the PWA in Chrome. Chrome treats the HTTP and HTTPS addresses as separate apps.",
-        ),
-      );
+      window.alert(window.__t(LABEL_KEYS.insecureHelp));
       return;
     }
 
@@ -240,15 +221,7 @@
     }
 
     setButtonState("help");
-    const message = isIos()
-      ? translated(
-          "nav.install_manual_ios",
-          "Open this page in Safari, tap Share, and choose ‘Add to Home Screen’. Press OK to reload now.",
-        )
-      : translated(
-          LABEL_KEYS.manual,
-          "This browser is not offering the direct install dialog right now. Firefox on Linux does not currently support this direct PWA installation; use Chromium or Chrome there. Incognito or Private mode is also unsupported. Open the page in a normal browser tab, interact with it once, and reload once after uninstalling. Alternatively, use the browser menu and choose ‘Install app’ or ‘Add to Home screen’. Press OK to reload now.",
-        );
+    const message = window.__t(isIos() ? "nav.install_manual_ios" : LABEL_KEYS.manual);
     if (window.confirm(message)) window.location.reload();
   }
 

@@ -26,8 +26,15 @@ jobs:
           cache-dependency-path: app/requirements.txt
       - run: pip install -r requirements.txt
         working-directory: app
+      - name: Install UI text checker
+        run: npm ci --prefix scripts/ui-text-lint
+      - name: Validate translation catalogs and generated assets
+        run: python scripts/build_i18n.py --check
+      - name: Reject untranslated UI text and unknown keys
+        run: python scripts/check_ui_text.py
       - run: python -m unittest discover -s tests -p 'test_*.py'
         working-directory: app
+      - run: python -m unittest discover -s tests -p 'test_*.py'
 
   build_and_format:
     name: LNDK Rust Build
