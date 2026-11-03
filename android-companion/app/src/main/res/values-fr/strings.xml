@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BOLT12 Pay</string>
+    <string name="setup_title">Connecter BOLT12 Pay</string>
+    <string name="setup_explanation">Saisissez l’adresse HTTPS publique de votre application web BOLT12 Pay existante. L’application complémentaire reçoit les liens BOLT11/BOLT12, les adresses Lightning et les transferts BIP321 d’Amethyst, puis les ouvre dans cette application pour vérification.</string>
+    <string name="server_url_hint">https://pay.example.com</string>
+    <string name="server_url_help">Utilisez l’adresse HTTPS de base exacte à laquelle votre application BOLT12 Pay actuelle et /pay-intent sont accessibles.</string>
+    <string name="server_url_error">Saisissez une adresse HTTPS sans chemin, identifiants, paramètres de requête ni fragment.</string>
+    <string name="server_save_error">L’adresse du serveur n’a pas pu être enregistrée de manière permanente.</string>
+    <string name="save_server">Enregistrer le serveur</string>
+    <string name="save_and_continue">Enregistrer et ouvrir le formulaire de paiement</string>
+    <string name="server_saved">Adresse du serveur enregistrée</string>
+    <string name="pending_payment">Un lien Lightning est en attente. L’enregistrement ouvre uniquement le formulaire de paiement.</string>
+    <string name="safety_note">Aucun paiement n’est effectué automatiquement. BOLT12 Pay affiche d’abord le destinataire et le montant dans le formulaire de paiement web existant.</string>
+    <string name="invalid_link_title">Lien non pris en charge</string>
+    <string name="invalid_link_message">Les liens lightning: contenant une facture BOLT11, une offre BOLT12 ou une adresse Lightning sont acceptés, ainsi que les transferts BIP321 d’Amethyst. Les LNURL et les paiements exclusivement en Bitcoin ne sont pas transmis.</string>
+    <string name="no_browser_title">Aucun navigateur disponible</string>
+    <string name="no_browser_message">Aucun navigateur n’a été trouvé pour le transfert sécurisé vers l’application web BOLT12 Pay.</string>
+</resources>

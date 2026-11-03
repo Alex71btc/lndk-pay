@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BOLT12 Pay</string>
+    <string name="setup_title">Conectar BOLT12 Pay</string>
+    <string name="setup_explanation">Introduce la dirección HTTPS pública de tu aplicación web BOLT12 Pay existente. La aplicación complementaria recibe enlaces BOLT11/BOLT12, direcciones Lightning y transferencias BIP321 de Amethyst, y los abre allí para revisarlos.</string>
+    <string name="server_url_hint">https://pay.example.com</string>
+    <string name="server_url_help">Usa la dirección HTTPS base exacta en la que están disponibles tu aplicación BOLT12 Pay actual y /pay-intent.</string>
+    <string name="server_url_error">Introduce una dirección HTTPS sin ruta, credenciales, consulta ni fragmento.</string>
+    <string name="server_save_error">No se ha podido guardar la dirección del servidor de forma permanente.</string>
+    <string name="save_server">Guardar servidor</string>
+    <string name="save_and_continue">Guardar y abrir formulario de pago</string>
+    <string name="server_saved">Dirección del servidor guardada</string>
+    <string name="pending_payment">Hay un enlace Lightning pendiente. Al guardar solo se abrirá el formulario de pago.</string>
+    <string name="safety_note">Nunca se realizan pagos automáticamente. BOLT12 Pay muestra primero el destino y el importe en el formulario de pago web existente.</string>
+    <string name="invalid_link_title">Enlace no compatible</string>
+    <string name="invalid_link_message">Se aceptan enlaces lightning: que contengan una factura BOLT11, una oferta BOLT12 o una dirección Lightning, así como transferencias BIP321 de Amethyst. No se reenvían LNURL ni pagos exclusivamente en Bitcoin.</string>
+    <string name="no_browser_title">No hay ningún navegador disponible</string>
+    <string name="no_browser_message">No se ha encontrado ningún navegador para transferir los datos de forma segura a la aplicación web BOLT12 Pay.</string>
+</resources>
