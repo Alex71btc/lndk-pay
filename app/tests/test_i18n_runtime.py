@@ -101,6 +101,22 @@ assert.equal(window.__t('count', {count: 0}), '0/0 {missing}');
 assert.equal(window.__t('count', {count: '$&'}), '$&/$& {missing}');
 """)
 
+    def test_nested_translation_parameters_follow_language_changes(self):
+        self.run_js(r"""
+i18n.register('nested', {
+  en: {outer: 'Problem: {detail}', detail: 'Unexpected response (HTTP {status})'},
+  de: {outer: 'Problem: {detail}', detail: 'Unerwartete Antwort (HTTP {status})'},
+});
+i18n.use('nested');
+const params = {detail: i18n.ref('detail', {status: 404})};
+const status = node({'data-i18n': 'outer', 'data-i18n-params': JSON.stringify(params)});
+nodes.push(status);
+window.applyTranslations();
+assert.equal(status.textContent, 'Problem: Unexpected response (HTTP 404)');
+window.setLang('de');
+assert.equal(status.textContent, 'Problem: Unerwartete Antwort (HTTP 404)');
+""")
+
     def test_dom_translation_uses_text_and_preserves_editable_values(self):
         self.run_js(r"""
 const title = node({'data-i18n': 'unsafe', 'data-i18n-params': '{"name":"<img src=x>"}'});

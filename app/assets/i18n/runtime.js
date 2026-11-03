@@ -28,6 +28,17 @@
 
   let language = detectLanguage();
 
+  function ref(key, values = {}) {
+    return { i18nKey: String(key), values };
+  }
+
+  function resolveValue(value, namespace) {
+    if (value && typeof value === "object" && Object.hasOwn(value, "i18nKey")) {
+      return translate(value.i18nKey, value.values || {}, namespace);
+    }
+    return value;
+  }
+
   function translate(key, values = {}, namespace = scope) {
     const catalog = catalogs[namespace] || {};
     const localized = catalog[language] || {};
@@ -35,7 +46,9 @@
     const template = (Object.hasOwn(localized, key) && localized[key]) ||
       (Object.hasOwn(english, key) && english[key]) || key;
     return String(template).replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (match, name) =>
-      values && Object.hasOwn(values, name) ? String(values[name]) : match,
+      values && Object.hasOwn(values, name)
+        ? String(resolveValue(values[name], namespace))
+        : match,
     );
   }
 
@@ -114,7 +127,7 @@
   }
 
   global.Bolt12I18n = Object.freeze({
-    register, use, t: translate, apply, setLanguage,
+    register, use, t: translate, ref, apply, setLanguage,
     getLanguage: () => language, languages, normalize,
   });
   global.document.addEventListener("DOMContentLoaded", () => { if (scope) apply(); });
