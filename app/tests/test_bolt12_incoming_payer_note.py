@@ -158,6 +158,18 @@ class Bolt12IncomingPayerNoteTests(unittest.TestCase):
         self.assertEqual(item["payer_note"], payer_note)
         self.assertEqual(item["memo"], "Public description")
         self.assertEqual(item["method"], "bolt12")
+        with sqlite3.connect(app_module.DB_PATH) as conn:
+            events = conn.execute(
+                "SELECT payload FROM companion_push_events"
+            ).fetchall()
+        self.assertEqual(len(events), 1)
+        push_payload = json.loads(events[0][0])
+        self.assertEqual(push_payload["method"], "bolt12")
+        self.assertEqual(
+            push_payload["comment"],
+            app_module.companion_push._sanitize_payment_comment(payer_note),
+        )
+        self.assertEqual(push_payload["comment_source"], "payer_note")
 
     def test_fetches_exact_unicode_notes_from_lndk_cli(self):
         payment_hash = "44" * 32
@@ -202,6 +214,48 @@ class Bolt12IncomingPayerNoteTests(unittest.TestCase):
         self.assertEqual(item["method"], "keysend")
         self.assertEqual(item["memo"], message)
         self.assertIsNone(item["payer_note"])
+
+    def test_keysend_message_is_queued_as_sender_supplied_text(self):
+        app_module.init_db()
+        message = "Keysend hello 📨"
+        incoming = invoice("88" * 32, memo="")
+        incoming["is_keysend"] = True
+        incoming["htlcs"] = [{
+            "custom_records": {
+                app_module.KEYSEND_MESSAGE_RECORD: base64.b64encode(
+                    message.encode("utf-8")
+                ).decode("ascii"),
+            },
+        }]
+
+        self.assertTrue(app_module._upsert_invoice_history(incoming, {}))
+        with sqlite3.connect(app_module.DB_PATH) as conn:
+            payload = json.loads(conn.execute(
+                "SELECT payload FROM companion_push_events"
+            ).fetchone()[0])
+
+        self.assertEqual(payload["method"], "keysend")
+        self.assertEqual(payload["comment"], message)
+        self.assertEqual(payload["comment_source"], "keysend_message")
+
+    def test_alias_fallback_queues_formatted_invoice_description(self):
+        app_module.init_db()
+        address = "ocean@test.alex71btc.com"
+        description = "Coffee beans"
+        incoming = invoice(
+            "99" * 32,
+            memo=f"BOLT11 alias fallback: {address} · {description}",
+        )
+
+        self.assertTrue(app_module._upsert_invoice_history(incoming, {}))
+        with sqlite3.connect(app_module.DB_PATH) as conn:
+            payload = json.loads(conn.execute(
+                "SELECT payload FROM companion_push_events"
+            ).fetchone()[0])
+
+        self.assertEqual(payload["method"], "bolt11_alias_fallback")
+        self.assertEqual(payload["comment"], f"{address} · {description}")
+        self.assertEqual(payload["comment_source"], "invoice_description")
 
 
 class Bolt12IncomingPayerNoteUiTests(unittest.TestCase):

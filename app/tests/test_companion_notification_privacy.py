@@ -39,8 +39,15 @@ class CompanionNotificationPrivacyTests(unittest.TestCase):
         self.assertIn("push_private_title", public_version)
         self.assertIn("push_private_body", public_version)
         self.assertNotIn("comment", public_version)
+        self.assertIn("setVisibility(Notification.VISIBILITY_PUBLIC)", public_version)
         self.assertIn("setVisibility(Notification.VISIBILITY_PRIVATE)", self.push_service)
         self.assertIn("setPublicVersion(publicVersion)", self.push_service)
+
+    def test_public_channel_setting_suppresses_sensitive_text(self):
+        self.assertIn("manager.getNotificationChannel(CHANNEL_ID)", self.push_service)
+        self.assertIn("channel.getLockscreenVisibility()", self.push_service)
+        self.assertIn("== Notification.VISIBILITY_PUBLIC", self.push_service)
+        self.assertIn('? ""\n                        : comment;', self.push_service)
 
     def test_lnurl_comment_text_is_not_written_to_server_logs(self):
         self.assertNotIn("comment={comment!r}", self.backend)

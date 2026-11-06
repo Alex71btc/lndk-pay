@@ -36,15 +36,20 @@ For a newly settled incoming payment, the server queues this versioned payload:
   "amount_sat": 2100,
   "method": "bolt12",
   "payment_type": "offer",
-  "comment": "Thanks for the coffee"
+  "comment": "Thanks for the coffee",
+  "comment_source": "payer_note"
 }
 ```
 
-`comment` is optional. It is sourced only from a real BOLT12 payer note or the
-comment attached to an incoming Lightning Address/LNURL payment. The server
-normalizes whitespace, removes control characters and limits it to 160 Unicode
-characters. Automatically generated memos, offer descriptions and technical
-invoice labels are not used.
+`comment` and `comment_source` are optional. Eligible sources are a real BOLT12
+payer note (`payer_note`), an incoming Keysend TLV message (`keysend_message`),
+a Lightning Address/LNURL comment (`lnurl_comment`), or the merchant-generated
+description of a BOLT11 alias-fallback invoice created by this app
+(`invoice_description`). The alias-fallback's technical prefix is removed, but
+the alias and description remain visible. Arbitrary BOLT11 memos, offer
+descriptions and other technical labels are not treated as payer comments. The
+server normalizes whitespace, removes control characters and limits displayed
+text to 160 Unicode characters.
 
 The payload does not include the payment hash, invoice, raw memo or payer-note
 field, counterparty, Nostr event or NWC connection. Web Push encrypts it for the
@@ -52,7 +57,16 @@ paired app before it leaves BOLT12 Pay. The selected distributor can still
 observe delivery metadata such as timing, the opaque endpoint, source IP and
 ciphertext size; it cannot read the encrypted payload. The Android switch
 controls local display. Regardless of that switch, the public lockscreen version
-remains the generic **Incoming Lightning payment** notice.
+remains the generic **Incoming Lightning payment** notice. If the existing Android
+notification channel is configured as public, the Companion omits the comment
+from the notification entirely.
+
+Android uses the private notification while the device is trusted or unlocked
+and the generic public version on a secure lockscreen. The app cannot override an
+existing channel's settings after creation, and the user or device vendor retains
+ultimate control over lockscreen display. An open-lock icon can therefore mean
+that biometric or trusted-device authentication has already unlocked private
+content even though the lockscreen UI is still visible.
 
 The VAPID private key is stored in the existing LND-bound encrypted secret
 store. Push endpoints must use HTTPS. Literal and DNS-resolved private,
@@ -62,6 +76,10 @@ delivery does not follow HTTP redirects.
 ## Reliability
 
 - Payment hashes deduplicate the server queue, but are never sent to Android.
+- A newly settled, still-unclassified BOLT11/BOLT12 event waits up to 15 seconds
+  for payer-note reconciliation. The same persisted event and event ID are
+  updated only before its first delivery attempt; it is never sent a second time
+  merely because metadata arrived late.
 - Failed deliveries use bounded exponential retries with at most 12 attempts;
   accepted Web Push messages have a 24-hour distributor TTL.
 - Invalid or expired endpoints are disabled automatically.

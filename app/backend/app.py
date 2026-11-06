@@ -7746,9 +7746,13 @@ def _upsert_invoice_history(
         and item.get("status") == "settled"
         and (not existing or existing.get("status") != "settled")
     )
-    if became_settled:
+    if item.get("direction") == "incoming" and item.get("status") == "settled":
         try:
-            if companion_push.queue_settled_payment(DB_PATH, item):
+            if companion_push.queue_settled_payment(
+                DB_PATH,
+                item,
+                allow_create=became_settled,
+            ):
                 COMPANION_PUSH_WAKE_EVENT.set()
         except Exception as exc:
             print(

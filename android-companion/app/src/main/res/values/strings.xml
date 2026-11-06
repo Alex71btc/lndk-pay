@@ -47,7 +47,7 @@
     <string name="push_status_disabled">Not connected</string>
     <string name="push_privacy_note">Optional and Google-free: WebPush encrypts payment alerts end to end. Your chosen distributor sees only timing and encrypted data.</string>
     <string name="push_show_comments">Show payment comments</string>
-    <string name="push_show_comments_note">Off by default. When enabled, genuine BOLT12 payer notes and Lightning Address or LNURL comments can appear in the private notification. Technical invoice descriptions are never shown.</string>
+    <string name="push_show_comments_note">Off by default. When enabled, genuine BOLT12 payer notes, Keysend messages, Lightning Address or LNURL comments, and descriptions from alias fallback invoices created by this app can appear in the private notification. Other technical invoice text is not shown.</string>
     <string name="push_disable">Disable notifications</string>
     <string name="push_retry">Retry pairing</string>
     <string name="push_open_setup">Open notification setup</string>

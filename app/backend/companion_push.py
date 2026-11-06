@@ -24,6 +24,7 @@ PUSH_TTL_SECONDS = 24 * 60 * 60
 MAX_PUSH_ATTEMPTS = 12
 VAPID_PRIVATE_KEY_FIELD = "companion_vapid_private_key"
 MAX_PUSH_COMMENT_CHARS = 160
+PUSH_ENRICHMENT_DELAY_SECONDS = 15
 
 
 class UnsafePushEndpointError(ValueError):
@@ -433,30 +434,33 @@ def _sanitize_payment_comment(value: Any) -> str:
     return comment.rstrip("\u200d")
 
 
-def _payment_comment(item: dict[str, Any]) -> str:
+def _payment_comment_details(item: dict[str, Any]) -> tuple[str, str]:
     payer_note = _sanitize_payment_comment(item.get("payer_note"))
     if payer_note:
-        return payer_note
+        return payer_note, "payer_note"
 
     method = str(item.get("method") or "").strip().lower()
     if method in {"lightning_address", "lnurl"}:
-        return _sanitize_payment_comment(item.get("memo"))
-    return ""
+        comment = _sanitize_payment_comment(item.get("memo"))
+        return (comment, "lnurl_comment") if comment else ("", "")
+    if method == "keysend":
+        comment = _sanitize_payment_comment(item.get("memo"))
+        return (comment, "keysend_message") if comment else ("", "")
+    if method == "bolt11_alias_fallback":
+        memo = str(item.get("memo") or "")
+        prefix = "BOLT11 alias fallback:"
+        if memo.startswith(prefix):
+            description = _sanitize_payment_comment(memo[len(prefix):])
+            if description:
+                return description, "invoice_description"
+    return "", ""
 
 
-def queue_settled_payment(
-    db_path: Path | str,
-    item: dict[str, Any],
-    *,
-    now: int | None = None,
-) -> bool:
-    if item.get("direction") != "incoming" or item.get("status") != "settled":
-        return False
-    payment_hash = str(item.get("payment_hash") or "").strip()
-    if not payment_hash:
-        return False
-    timestamp = int(time.time()) if now is None else int(now)
-    event_id = secrets.token_urlsafe(16)
+def _payment_comment(item: dict[str, Any]) -> str:
+    return _payment_comment_details(item)[0]
+
+
+def _payment_payload(event_id: str, item: dict[str, Any]) -> str:
     payload_data = {
         "version": 1,
         "event_id": event_id,
@@ -465,26 +469,84 @@ def queue_settled_payment(
         "method": str(item.get("method") or "lightning")[:40],
         "payment_type": str(item.get("type") or "payment")[:40],
     }
-    comment = _payment_comment(item)
+    comment, comment_source = _payment_comment_details(item)
     if comment:
         payload_data["comment"] = comment
-    payload = json.dumps(
+        payload_data["comment_source"] = comment_source
+    return json.dumps(
         payload_data,
         separators=(",", ":"),
         ensure_ascii=False,
     )
+
+
+def _initial_dispatch_delay(item: dict[str, Any]) -> int:
+    method = str(item.get("method") or "").strip().lower()
+    if not _payment_comment(item) and method in {"bolt11", "bolt12"}:
+        return PUSH_ENRICHMENT_DELAY_SECONDS
+    return 0
+
+
+def queue_settled_payment(
+    db_path: Path | str,
+    item: dict[str, Any],
+    *,
+    now: int | None = None,
+    allow_create: bool = True,
+) -> bool:
+    if item.get("direction") != "incoming" or item.get("status") != "settled":
+        return False
+    payment_hash = str(item.get("payment_hash") or "").strip()
+    if not payment_hash:
+        return False
+    timestamp = int(time.time()) if now is None else int(now)
+    event_id = secrets.token_urlsafe(16)
     with _connect(db_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
-        cursor = connection.execute(
+        existing = connection.execute(
             """
-            INSERT OR IGNORE INTO companion_push_events(
+            SELECT id, payload FROM companion_push_events
+            WHERE payment_hash = ?
+            """,
+            (payment_hash,),
+        ).fetchone()
+        if existing is not None:
+            event_id = str(existing["id"])
+            payload = _payment_payload(event_id, item)
+            if payload == existing["payload"]:
+                return False
+            cursor = connection.execute(
+                """
+                UPDATE companion_push_events
+                SET payload = ?
+                WHERE id = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM companion_push_deliveries
+                      WHERE companion_push_deliveries.event_id = companion_push_events.id
+                        AND (
+                            status != 'pending'
+                            OR attempts != 0
+                            OR next_attempt_at <= ?
+                        )
+                  )
+                """,
+                (payload, event_id, timestamp),
+            )
+            return cursor.rowcount > 0
+
+        if not allow_create:
+            return False
+
+        payload = _payment_payload(event_id, item)
+        connection.execute(
+            """
+            INSERT INTO companion_push_events(
                 id, payment_hash, payload, created_at
             ) VALUES (?, ?, ?, ?)
             """,
             (event_id, payment_hash, payload, timestamp),
         )
-        if cursor.rowcount == 0:
-            return False
+        next_attempt_at = timestamp + _initial_dispatch_delay(item)
         connection.execute(
             """
             INSERT OR IGNORE INTO companion_push_deliveries(
@@ -494,7 +556,7 @@ def queue_settled_payment(
             FROM companion_devices
             WHERE enabled = 1
             """,
-            (event_id, timestamp),
+            (event_id, next_attempt_at),
         )
         connection.execute(
             """

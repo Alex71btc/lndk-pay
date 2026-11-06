@@ -74,28 +74,42 @@ public final class PushServiceImpl extends PushService {
             String paymentType,
             String comment) {
         NotificationManager manager = getSystemService(NotificationManager.class);
-        NotificationChannel channel =
-                new NotificationChannel(
-                        CHANNEL_ID,
-                        getString(R.string.push_channel_name),
-                        NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription(getString(R.string.push_channel_description));
-        channel.enableVibration(true);
-        channel.setLightColor(Color.rgb(247, 147, 26));
-        channel.enableLights(true);
-        channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
-        manager.createNotificationChannel(channel);
+        NotificationChannel channel = manager.getNotificationChannel(CHANNEL_ID);
+        if (channel == null) {
+            channel =
+                    new NotificationChannel(
+                            CHANNEL_ID,
+                            getString(R.string.push_channel_name),
+                            NotificationManager.IMPORTANCE_HIGH);
+            channel.setDescription(getString(R.string.push_channel_description));
+            channel.enableVibration(true);
+            channel.setLightColor(Color.rgb(247, 147, 26));
+            channel.enableLights(true);
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+            manager.createNotificationChannel(channel);
+            channel = manager.getNotificationChannel(CHANNEL_ID);
+        }
+
+        // Android does not let an app overwrite an existing channel's privacy
+        // behavior. If the user or OEM made this channel public, omit the
+        // sensitive text entirely instead of relying on lockscreen redaction.
+        String privateComment =
+                channel != null
+                                && channel.getLockscreenVisibility()
+                                        == Notification.VISIBILITY_PUBLIC
+                        ? ""
+                        : comment;
 
         String amount = NumberFormat.getIntegerInstance().format(amountSat);
         String title = getString(R.string.push_payment_received_title, amount);
         String paymentDescription = describePayment(method, paymentType);
         String body =
-                comment.isEmpty()
+                privateComment.isEmpty()
                         ? paymentDescription
                         : getString(
                                 R.string.push_payment_with_comment,
                                 paymentDescription,
-                                comment);
+                                privateComment);
         String serverUrl = new ServerSettings(this).load();
         Intent open =
                 new Intent(
@@ -113,6 +127,7 @@ public final class PushServiceImpl extends PushService {
                         .setSmallIcon(R.drawable.ic_notification_bolt)
                         .setContentTitle(getString(R.string.push_private_title))
                         .setContentText(getString(R.string.push_private_body))
+                        .setVisibility(Notification.VISIBILITY_PUBLIC)
                         .build();
         Notification.Builder notificationBuilder =
                 new Notification.Builder(this, CHANNEL_ID)
@@ -124,7 +139,7 @@ public final class PushServiceImpl extends PushService {
                         .setVisibility(Notification.VISIBILITY_PRIVATE)
                         .setPublicVersion(publicVersion)
                         .setContentIntent(pendingIntent);
-        if (!comment.isEmpty()) {
+        if (!privateComment.isEmpty()) {
             notificationBuilder.setStyle(new Notification.BigTextStyle().bigText(body));
         }
         manager.notify(eventId.hashCode(), notificationBuilder.build());

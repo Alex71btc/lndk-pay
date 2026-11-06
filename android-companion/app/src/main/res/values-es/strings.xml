@@ -47,7 +47,7 @@
     <string name="push_status_disabled">Sin conexión</string>
     <string name="push_privacy_note">Opcional y sin Google: WebPush cifra los avisos de pago de extremo a extremo. Tu distribuidor solo ve el momento y datos cifrados.</string>
     <string name="push_show_comments">Mostrar comentarios de pago</string>
-    <string name="push_show_comments_note">Desactivado de forma predeterminada. Al activarlo, las notas reales del pagador BOLT12 y los comentarios de direcciones Lightning o LNURL pueden aparecer en la notificación privada. Nunca se muestran descripciones técnicas de facturas.</string>
+    <string name="push_show_comments_note">Desactivado de forma predeterminada. Al activarlo, pueden aparecer en la notificación privada notas reales del pagador BOLT12, mensajes Keysend, comentarios de direcciones Lightning o LNURL y descripciones de facturas de respaldo de alias generadas por esta app. No se muestran otros textos técnicos de facturas.</string>
     <string name="push_disable">Desactivar notificaciones</string>
     <string name="push_retry">Reintentar vinculación</string>
     <string name="push_open_setup">Abrir configuración de notificaciones</string>

@@ -103,38 +103,69 @@ class CompanionPushTests(unittest.TestCase):
         self.assertEqual(payload["amount_sat"], 2100)
         self.assertEqual(payload["method"], "bolt12")
         self.assertEqual(payload["comment"], "First line Second line")
+        self.assertEqual(payload["comment_source"], "payer_note")
         self.assertNotIn("payment_hash", payload)
         self.assertNotIn("memo", payload)
         self.assertNotIn("payer_note", payload)
         self.assertEqual(delivery_count, 1)
 
-    def test_comment_sources_exclude_technical_and_unrelated_memos(self):
+    def test_comment_sources_distinguish_sender_text_from_invoice_description(self):
         self.assertEqual(
-            companion_push._payment_comment(
+            companion_push._payment_comment_details(
                 {
                     "method": "bolt12",
                     "payer_note": "payer note",
                     "memo": "offer description",
                 }
             ),
-            "payer note",
+            ("payer note", "payer_note"),
         )
         for method in ("lightning_address", "lnurl"):
             with self.subTest(method=method):
                 self.assertEqual(
-                    companion_push._payment_comment(
+                    companion_push._payment_comment_details(
                         {"method": method, "memo": "LNURL comment"}
                     ),
-                    "LNURL comment",
+                    ("LNURL comment", "lnurl_comment"),
                 )
-        for method in ("bolt12", "bolt11", "bolt11_alias_fallback", "keysend", "zap"):
+        self.assertEqual(
+            companion_push._payment_comment_details(
+                {"method": "keysend", "memo": "Keysend message"}
+            ),
+            ("Keysend message", "keysend_message"),
+        )
+        self.assertEqual(
+            companion_push._payment_comment_details(
+                {
+                    "method": "bolt11_alias_fallback",
+                    "memo": (
+                        "BOLT11 alias fallback: ocean@test.alex71btc.com"
+                        " · Coffee beans"
+                    ),
+                }
+            ),
+            (
+                "ocean@test.alex71btc.com · Coffee beans",
+                "invoice_description",
+            ),
+        )
+        for method in ("bolt12", "bolt11", "zap"):
             with self.subTest(method=method):
                 self.assertEqual(
-                    companion_push._payment_comment(
+                    companion_push._payment_comment_details(
                         {"method": method, "memo": "automatically generated memo"}
                     ),
-                    "",
+                    ("", ""),
                 )
+        self.assertEqual(
+            companion_push._payment_comment_details(
+                {
+                    "method": "bolt11_alias_fallback",
+                    "memo": "unverified external invoice description",
+                }
+            ),
+            ("", ""),
+        )
 
     def test_comment_is_sanitized_and_bounded(self):
         raw = "  hello\n\tworld\x00\u202e " + "🚀" * 200
@@ -144,6 +175,31 @@ class CompanionPushTests(unittest.TestCase):
         self.assertNotIn("\x00", comment)
         self.assertNotIn("\u202e", comment)
         self.assertLessEqual(len(comment), companion_push.MAX_PUSH_COMMENT_CHARS)
+
+    def test_reconcile_only_does_not_create_a_historical_event(self):
+        self.assertFalse(
+            companion_push.queue_settled_payment(
+                self.db_path,
+                {
+                    "payment_hash": "cc" * 32,
+                    "direction": "incoming",
+                    "status": "settled",
+                    "amount_sat": 1,
+                    "method": "bolt12",
+                    "type": "offer",
+                    "payer_note": "late note",
+                },
+                now=200,
+                allow_create=False,
+            )
+        )
+        with sqlite3.connect(self.db_path) as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM companion_push_events"
+                ).fetchone()[0],
+                0,
+            )
 
     def test_subscription_update_cannot_take_another_device_endpoint(self):
         _pairing_token, first_device = self.pair_device()
@@ -246,6 +302,127 @@ class CompanionPushDispatchTests(unittest.IsolatedAsyncioTestCase):
         device = companion_push.list_devices(self.db_path)[0]
         self.assertFalse(device["enabled"])
         self.assertEqual(device["last_error"], "GoneError")
+
+
+class CompanionPushEnrichmentTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.db_path = Path(self.temp.name) / "companion.db"
+        companion_push.init_db(self.db_path)
+        pairing_token, _ = companion_push.create_pairing_token(self.db_path, now=100)
+        companion_push.register_device(
+            self.db_path,
+            pairing_token=pairing_token,
+            name="Pixel Test",
+            now=101,
+            **SUBSCRIPTION,
+        )
+
+    async def test_bolt12_note_reconciles_same_delayed_event_once(self):
+        payment_hash = "dd" * 32
+        initial = {
+            "payment_hash": payment_hash,
+            "direction": "incoming",
+            "status": "settled",
+            "amount_sat": 22,
+            "method": "bolt11",
+            "type": "invoice",
+            "memo": "Public offer description",
+        }
+        self.assertTrue(
+            companion_push.queue_settled_payment(self.db_path, initial, now=200)
+        )
+
+        calls = []
+
+        async def sender(**kwargs):
+            calls.append(kwargs)
+            return object()
+
+        delivered = await companion_push.dispatch_due(
+            self.db_path,
+            vapid_private_key=companion_push.generate_vapid_private_key(),
+            vapid_subject="https://pay.example.com",
+            sender=sender,
+            now=214,
+        )
+        self.assertEqual(delivered, 0)
+        self.assertEqual(calls, [])
+
+        with sqlite3.connect(self.db_path) as connection:
+            event_id, original_payload = connection.execute(
+                "SELECT id, payload FROM companion_push_events"
+            ).fetchone()
+            original_due = connection.execute(
+                "SELECT next_attempt_at FROM companion_push_deliveries"
+            ).fetchone()[0]
+        self.assertNotIn("comment", json.loads(original_payload))
+        self.assertEqual(original_due, 215)
+
+        enriched = {
+            **initial,
+            "method": "bolt12",
+            "type": "offer",
+            "payer_note": "real payer note",
+        }
+        self.assertTrue(
+            companion_push.queue_settled_payment(
+                self.db_path,
+                enriched,
+                now=214,
+                allow_create=False,
+            )
+        )
+        self.assertFalse(
+            companion_push.queue_settled_payment(
+                self.db_path,
+                enriched,
+                now=214,
+                allow_create=False,
+            )
+        )
+
+        with sqlite3.connect(self.db_path) as connection:
+            reconciled_id, reconciled_payload = connection.execute(
+                "SELECT id, payload FROM companion_push_events"
+            ).fetchone()
+            delivery_count, reconciled_due = connection.execute(
+                "SELECT COUNT(*), MIN(next_attempt_at) FROM companion_push_deliveries"
+            ).fetchone()
+        self.assertEqual(reconciled_id, event_id)
+        self.assertEqual(delivery_count, 1)
+        self.assertEqual(reconciled_due, original_due)
+        self.assertEqual(json.loads(reconciled_payload)["comment"], "real payer note")
+        self.assertEqual(
+            json.loads(reconciled_payload)["comment_source"],
+            "payer_note",
+        )
+
+        delivered = await companion_push.dispatch_due(
+            self.db_path,
+            vapid_private_key=companion_push.generate_vapid_private_key(),
+            vapid_subject="https://pay.example.com",
+            sender=sender,
+            now=215,
+        )
+        self.assertEqual(delivered, 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(json.loads(calls[0]["data"])["event_id"], event_id)
+        self.assertEqual(
+            json.loads(calls[0]["data"])["comment"],
+            "real payer note",
+        )
+
+        changed_after_delivery = {**enriched, "payer_note": "too late"}
+        self.assertFalse(
+            companion_push.queue_settled_payment(
+                self.db_path,
+                changed_after_delivery,
+                now=216,
+                allow_create=False,
+            )
+        )
 
 
 class PublicOnlyResolverTests(unittest.IsolatedAsyncioTestCase):

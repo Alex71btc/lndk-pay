@@ -47,7 +47,7 @@
     <string name="push_status_disabled">Niepołączone</string>
     <string name="push_privacy_note">Opcjonalne i bez Google: WebPush szyfruje alerty o płatnościach kompleksowo. Wybrany dystrybutor widzi tylko czas i zaszyfrowane dane.</string>
     <string name="push_show_comments">Pokazuj komentarze do płatności</string>
-    <string name="push_show_comments_note">Domyślnie wyłączone. Po włączeniu prawdziwe notatki płatnika BOLT12 oraz komentarze adresu Lightning lub LNURL mogą pojawić się w prywatnym powiadomieniu. Techniczne opisy faktur nigdy nie są wyświetlane.</string>
+    <string name="push_show_comments_note">Domyślnie wyłączone. Po włączeniu w prywatnym powiadomieniu mogą pojawić się prawdziwe notatki płatnika BOLT12, wiadomości Keysend, komentarze adresu Lightning lub LNURL oraz opisy faktur awaryjnych aliasu utworzonych przez tę aplikację. Inne techniczne teksty faktur nie są wyświetlane.</string>
     <string name="push_disable">Wyłącz powiadomienia</string>
     <string name="push_retry">Ponów parowanie</string>
     <string name="push_open_setup">Otwórz konfigurację powiadomień</string>
