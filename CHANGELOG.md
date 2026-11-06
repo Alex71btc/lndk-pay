@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.21] - 2026-11-06
+
+### Added
+
+- Introduce optional end-to-end encrypted Android payment notifications
+  through UnifiedPush, supporting self-hosted notification distributors.
+- Ship Android Companion v1.1.0 with device pairing, revocation and
+  notification settings.
+- Support optional private payment comments from BOLT12 payer notes,
+  Lightning Address payments, Keysend messages and supported BOLT11
+  alias-fallback invoice descriptions.
+- Add public payment-target discovery for supported aliases.
+
+### Improved
+
+- Open Android notification settings and Lightning Activity directly
+  from the Companion, preserving the intended destination after login.
+- Add dedicated SVG icons for Zap and Android notifications.
+- Preserve device pairing and pending notifications across restarts.
+- Deliver payment notifications without artificial waiting time while
+  retaining delivery retries and duplicate protection.
+
+### Fixed
+
+- Reuse valid Pay sessions when navigating from Android notifications
+  by using SameSite=Lax for the authentication cookie.
+- Hide the empty Android Companion pairing QR container.
+- Improve payment-comment classification and reconciliation without
+  sending duplicate notifications.
+
 ## [0.3.20] - 2026-11-03
 
 ### Added
