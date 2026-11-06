@@ -1191,6 +1191,12 @@
         color: var(--text);
         cursor: pointer;
       }
+
+      /* Hide the pairing QR until a code has been generated. */
+      #companionPairingQr[hidden] {
+        display: none !important;
+      }
+
     </style>
 
     <style id="compact-language-switch">
@@ -1802,7 +1808,11 @@
 
       <details id="android-notifications" class="section">
         <summary>
-          🔔 <span data-i18n="companion.title">Android-Zahlungsbenachrichtigungen</span>
+          <span class="sectionTitle">
+            <img src="/assets/icons/android-notifications.svg"
+                 class="sectionIcon" style="width: 26px; height: 26px; flex-shrink: 0;" alt="" aria-hidden="true" />
+            <span data-i18n="companion.title">Android-Zahlungsbenachrichtigungen</span>
+          </span>
         </summary>
         <div class="hint" data-i18n="companion.privacy_hint">
           Optionales UnifiedPush ohne eingebauten Google-Dienst. Der gewählte
@@ -1953,7 +1963,11 @@
 
       <details class="section">
       <summary>
-        🔔 <span data-i18n="title.notification_keys">Zap-Benachrichtigungen</span>
+        <span class="sectionTitle">
+          <img src="/assets/icons/zap-notifications.svg"
+               class="sectionIcon" style="width: 28px; height: 28px; flex-shrink: 0;" alt="" aria-hidden="true" />
+          <span data-i18n="title.notification_keys">Zap-Benachrichtigungen</span>
+        </span>
       </summary>
 
         <div class="hint" data-i18n="hint.notification_initialize">
@@ -6087,7 +6101,7 @@
         }
 
         if (window.location.hash) {
-          history.replaceState(null, "", window.location.pathname);
+          history.replaceState(null, "", window.location.pathname + window.location.search);
         }
 
         const normalized = normalizePaymentInput(incoming);
@@ -9344,6 +9358,27 @@
         }
       });
 
+
+      function openRequestedPayView() {
+        const view = new URLSearchParams(window.location.search).get("view");
+
+        const sectionId =
+          view === "notifications" ? "android-notifications" :
+          view === "activity" ? "txHistorySection" :
+          window.location.hash === "#android-notifications"
+            ? "android-notifications" : null;
+
+        if (!sectionId) return;
+
+        const section = document.getElementById(sectionId);
+        if (!section) return;
+
+        section.open = true;
+        setTimeout(() => {
+          section.scrollIntoView({ behavior: "auto", block: "start" });
+        }, 200);
+      }
+
       function initAdminPageUi() {
         createCompanionPairingBtn?.addEventListener(
           "click",
@@ -9369,10 +9404,7 @@
             setStatus(errorToMessage(error), "error", true);
           }
         });
-        if (window.location.hash === "#android-notifications" && companionPushSection) {
-          companionPushSection.open = true;
-          setTimeout(() => companionPushSection.scrollIntoView({block: "start"}), 50);
-        }
+        openRequestedPayView();
           initNwcUi();
 
           setCurrentOffer("");
@@ -9511,10 +9543,10 @@
           });
           const data = await readJsonOrThrow(res);
           if (data.enabled && !data.ok) {
-            window.location.href = "/pay-login";
+            window.location.assign("/pay-login?next=" + encodeURIComponent(window.location.pathname + window.location.search));
           }
         } catch {
-          window.location.href = "/pay-login";
+          window.location.assign("/pay-login?next=" + encodeURIComponent(window.location.pathname + window.location.search));
         }
       }
 

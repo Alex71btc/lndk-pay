@@ -5962,7 +5962,7 @@ def api_auth_login(payload: PayLoginRequest, request: StarletteRequest):
         max_age=PAY_UI_SESSION_TTL,
         httponly=True,
         secure=PAY_UI_COOKIE_SECURE,
-        samesite="strict",
+        samesite="lax",
         path="/",
     )
     return resp

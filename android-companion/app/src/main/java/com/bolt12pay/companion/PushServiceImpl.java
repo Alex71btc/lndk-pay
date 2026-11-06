@@ -87,7 +87,7 @@ public final class PushServiceImpl extends PushService {
         Intent open =
                 new Intent(
                         Intent.ACTION_VIEW,
-                        Uri.parse((serverUrl == null ? "https://localhost" : serverUrl) + "/pay"));
+                        Uri.parse((serverUrl == null ? "https://localhost" : serverUrl) + "/pay?view=activity"));
         PendingIntent pendingIntent =
                 PendingIntent.getActivity(
                         this,

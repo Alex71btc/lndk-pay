@@ -357,7 +357,7 @@ public final class MainActivity extends Activity {
             return;
         }
         Intent browserIntent =
-                new Intent(Intent.ACTION_VIEW, Uri.parse(serverUrl + "/pay#android-notifications"));
+                new Intent(Intent.ACTION_VIEW, Uri.parse(serverUrl + "/pay?view=notifications"));
         browserIntent.addCategory(Intent.CATEGORY_BROWSABLE);
         try {
             startActivity(browserIntent);
