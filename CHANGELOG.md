@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.22] - 2026-11-07
+
+### Fixed
+
+- Replace the outdated bundled Android Companion APK with the signed
+  Android Companion v1.1.0 (versionCode 13).
+- Ensure the in-app Android Companion download includes encrypted
+  payment notifications, pairing and optional payment comments.
+- Update the published APK checksum and document the requirement
+  for an installed UnifiedPush distributor on Android.
+
 ## [0.3.21] - 2026-11-06
 
 ### Added

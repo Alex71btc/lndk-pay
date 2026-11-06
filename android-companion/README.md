@@ -1,5 +1,11 @@
 # BOLT12 Pay Android Companion
 
+**Push notification prerequisite:** Install a UnifiedPush distributor such
+as ntfy or Sunup on your Android phone. You can use ntfy.sh or your own
+ntfy server. A server alone is not sufficient without an Android distributor.
+The Companion reports a missing distributor during pairing.
+
+
 This is a deliberately small Android intent receiver, not a wallet. It registers for
 `lightning:` links containing BOLT11 invoices, BOLT12 offers, or Lightning addresses
 and for Amethyst's BIP321 handoff. It passes only a validated Lightning target to the

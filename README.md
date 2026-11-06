@@ -70,6 +70,13 @@ BOLT12 Pay is officially available on:
 
 ## Android Companion
 
+**Android push notifications require a UnifiedPush distributor app**, such as
+[ntfy](https://unifiedpush.org/users/distributors/ntfy/) or Sunup, installed
+on the phone. The public ntfy.sh server or a self-hosted ntfy server alone
+is not sufficient. The Companion detects a missing distributor during pairing
+and displays an installation hint.
+
+
 The optional **BOLT12 Pay Companion** lets Android hand BOLT11 invoices,
 BOLT12 offers, Lightning Addresses and Amethyst BIP321 links to your existing
 self-hosted BOLT12 Pay instance. The Companion never starts a payment
@@ -99,7 +106,7 @@ can be installed normally and preserve the saved server address.
 SHA256 checksum of the published signed APK:
 
 ```text
-6839268cd9487ec115cdb67125a06c11ce08ffd60b5e22b6785afdd5cb3447d8  bolt12-pay-companion.apk
+e0319e7f84edd233fc43ec1a95d1907bbb189c95a1bb1fdf872999aef512ffc1  bolt12-pay-companion.apk
 ```
 
 Verify the downloaded file on Linux:
