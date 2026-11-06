@@ -72,7 +72,7 @@ const timers = [];
 const elements = new Map();
 function element(id) {
   if (!elements.has(id)) elements.set(id, {
-    value: '', textContent: '', innerHTML: '', handlers: {},
+    value: '', textContent: '', innerHTML: '', handlers: {}, dataset: {},
     addEventListener(event, handler) { this.handlers[event] = handler; },
   });
   return elements.get(id);
@@ -129,6 +129,8 @@ assert.deepEqual(drawn, ['configured@merchant.test']);
 assert.equal(element('defaultAddressHint').textContent, 'configured@merchant.test');
 assert.equal(offerPreviewBox.textContent, 'configured@merchant.test');
 assert.equal(getActiveValue(), 'configured@merchant.test');
+assert.equal(qrModeBadge.dataset.paymentType, 'payment_address');
+assert.equal(offerQrBox.dataset.paymentType, 'payment_address');
 assert.deepEqual(requests, [{url: '/api/setup/config', options: {cache: 'no-store'}}]);
 """)
 
@@ -149,6 +151,8 @@ element('makeOfferQrBtn').handlers.click();
 assert.deepEqual(drawn, ['lno1activeoffer', 'lno1activeoffer']);
 assert.equal(offerPreviewBox.textContent, 'lno1activeoffer');
 assert.equal(getCurrentOffer(), 'lno1activeoffer');
+assert.equal(qrModeBadge.dataset.paymentType, 'bolt12_offer');
+assert.equal(offerQrBox.dataset.paymentType, 'bolt12_offer');
 assert.equal(element('defaultAddressHint').textContent, 'configured@merchant.test');
 """)
 

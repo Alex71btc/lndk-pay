@@ -17,7 +17,8 @@ Self-hosted Lightning payment and identity server with next-generation BOLT12 su
 - 🧾 Optional BOLT11 fallback invoices, created only on request
 - 🧠 Nostr identity (NIP-05 + Zaps)
 - 📱 QR-based payments
-- 🤖 Android Companion for BOLT11, BOLT12, Lightning Addresses and Amethyst BIP321 links
+- 🤖 Android Companion for BOLT11, BOLT12, Lightning Addresses, Amethyst BIP321 links and optional encrypted payment notifications
+- 🔎 Versioned payment-target discovery JSON for wallets and automated clients
 - ☁️ Optional Cloudflare DNS automation
 - 🌐 Automatic Cloudflare DNS provisioning for BIP353 and LNURL
 - 🟢 Available in the official Start9 Community Registry
@@ -75,6 +76,13 @@ self-hosted BOLT12 Pay instance. The Companion never starts a payment
 automatically: it opens the normal BOLT12 Pay payment screen, where the target
 and amount can be reviewed and the payment must be confirmed explicitly.
 
+Payment notifications are optional and use a UnifiedPush distributor selected
+by the user. BOLT12 Pay encrypts the notification for the paired device and
+sends only the payment amount and method; payment hashes, payer notes and memos
+are not included. No Google/Firebase service is built into the Companion.
+See [Android payment notifications](docs/android-payment-notifications.md) for
+setup, privacy and reliability details.
+
 On Android, the mobile BOLT12 Pay page offers the signed APK for download. The
 Companion is available in German and English and keeps the configured server
 address during normal app updates.
@@ -98,6 +106,21 @@ sha256sum bolt12-pay-companion.apk
 ```
 
 Compare the output with the checksum above before installing. This checksum applies to the current APK release and must be updated when the APK changes.
+
+## Payment target discovery
+
+Wallets and automated clients can inspect a public alias without guessing which
+payment methods it supports:
+
+```text
+GET /.well-known/bolt12-pay/<alias>
+```
+
+The versioned response distinguishes reusable BOLT12 offers, Lightning
+Addresses and LNURL-pay, including amount limits, comments and Zap support.
+Displayed and server-rendered QR codes also expose a stable machine-readable
+type. See [Payment target discovery](docs/payment-target-discovery.md) for the
+schema and compatibility rules.
 
 ---
 

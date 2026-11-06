@@ -1069,9 +1069,9 @@ protocol.custom-init=39</pre>
 
     <section class="section">
       <div class="qrWrap">
-        <div id="qrModeBadge" class="modeBadge" data-i18n="console.badge.qr_bolt12_address"></div>
-        <div id="qrBox" class="qrBox" data-i18n-title="ui.copy_qr"></div>
-        <div id="qrValueText" class="tiny mono" data-i18n="console.loading_qr"></div>
+        <div id="qrModeBadge" class="modeBadge" data-payment-type="payment_address" data-i18n="console.badge.qr_bolt12_address"></div>
+        <div id="qrBox" class="qrBox" data-payment-type="payment_address" data-i18n-title="ui.copy_qr"></div>
+        <div id="qrValueText" class="tiny mono" data-payment-type="payment_address" data-i18n="console.loading_qr"></div>
       </div>
     </section>
 
@@ -1449,6 +1449,14 @@ function getCookie(name) {
       return keys[mode] || keys.address;
     }
 
+    function getQrPaymentType(mode) {
+      const types = {
+        invoice: 'bolt11_invoice', offer: 'bolt12_offer', fallback: 'lnurl',
+        address: 'payment_address'
+      };
+      return types[mode] || types.address;
+    }
+
     function renderQrForValue(value, mode) {
       qrBox.innerHTML = '';
 
@@ -1460,6 +1468,10 @@ function getCookie(name) {
       setActiveBox(mode);
       setLabel(qrModeBadge, getQrModeBadgeKey(mode));
       setValueOrLabel(qrValueText, value);
+      const paymentType = getQrPaymentType(mode);
+      qrModeBadge.dataset.paymentType = paymentType;
+      qrBox.dataset.paymentType = paymentType;
+      qrValueText.dataset.paymentType = paymentType;
 
       new QRCode(qrBox, {
         text: value,

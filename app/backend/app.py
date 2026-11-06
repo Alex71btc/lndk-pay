@@ -36,6 +36,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, Field
 from backend.config import load_config, save_config
+from backend import companion_push
 from backend.nwc import (
     list_nwc_connections,
     create_nwc_connection,
@@ -178,6 +179,9 @@ PUBLIC_ALIAS_INVOICE_RATE_LIMIT_WINDOW_SECONDS = int(
 PUBLIC_ALIAS_INVOICE_RATE_LIMIT_MAX_REQUESTS = int(
     os.getenv("PUBLIC_ALIAS_INVOICE_RATE_LIMIT_MAX_REQUESTS", "3")
 )
+PUBLIC_ALIAS_INVOICE_GLOBAL_RATE_LIMIT_MAX_REQUESTS = int(
+    os.getenv("PUBLIC_ALIAS_INVOICE_GLOBAL_RATE_LIMIT_MAX_REQUESTS", "30")
+)
 _PUBLIC_ALIAS_INVOICE_RATE_LIMITS: dict[str, list[float]] = {}
 
 def _check_cloudflare_rate_limit(request: StarletteRequest):
@@ -201,15 +205,32 @@ def _check_public_alias_invoice_rate_limit(
     request: StarletteRequest,
     alias_name: str,
 ) -> None:
-    key = f"{_client_ip(request)}:{alias_name}"
     now = time.time()
-    attempts = _PUBLIC_ALIAS_INVOICE_RATE_LIMITS.get(key, [])
-    attempts = [
-        timestamp
-        for timestamp in attempts
-        if (now - timestamp) <= PUBLIC_ALIAS_INVOICE_RATE_LIMIT_WINDOW_SECONDS
-    ]
-    if len(attempts) >= PUBLIC_ALIAS_INVOICE_RATE_LIMIT_MAX_REQUESTS:
+    for stored_key, stored_attempts in list(_PUBLIC_ALIAS_INVOICE_RATE_LIMITS.items()):
+        active_attempts = [
+            timestamp
+            for timestamp in stored_attempts
+            if (now - timestamp) <= PUBLIC_ALIAS_INVOICE_RATE_LIMIT_WINDOW_SECONDS
+        ]
+        if active_attempts:
+            _PUBLIC_ALIAS_INVOICE_RATE_LIMITS[stored_key] = active_attempts
+        else:
+            _PUBLIC_ALIAS_INVOICE_RATE_LIMITS.pop(stored_key, None)
+
+    keys_and_limits = (
+        (
+            f"alias:{alias_name}",
+            max(1, PUBLIC_ALIAS_INVOICE_GLOBAL_RATE_LIMIT_MAX_REQUESTS),
+        ),
+        (
+            f"client:{_client_ip(request)}:{alias_name}",
+            max(1, PUBLIC_ALIAS_INVOICE_RATE_LIMIT_MAX_REQUESTS),
+        ),
+    )
+    for key, limit in keys_and_limits:
+        if len(_PUBLIC_ALIAS_INVOICE_RATE_LIMITS.get(key, [])) < limit:
+            continue
+        attempts = _PUBLIC_ALIAS_INVOICE_RATE_LIMITS[key]
         retry_after = max(
             1,
             int(
@@ -221,8 +242,9 @@ def _check_public_alias_invoice_rate_limit(
             status_code=429,
             detail=f"Too many fallback invoices. Try again in {retry_after}s.",
         )
-    attempts.append(now)
-    _PUBLIC_ALIAS_INVOICE_RATE_LIMITS[key] = attempts
+
+    for key, _limit in keys_and_limits:
+        _PUBLIC_ALIAS_INVOICE_RATE_LIMITS.setdefault(key, []).append(now)
 
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
@@ -438,6 +460,7 @@ TX_HISTORY_SYNC_MAX_BACKOFF = max(
 )
 TX_HISTORY_SYNC_LOCK = asyncio.Lock()
 TX_HISTORY_LAST_COMPLETED_MONOTONIC = 0.0
+COMPANION_PUSH_WAKE_EVENT = asyncio.Event()
 # --- Nostr / Zap Config ----------------------------------------------
 
 # === CONFIG SYSTEM (file + env fallback) ===
@@ -446,7 +469,11 @@ CONFIG_DIR = APP_DATA_DIR / "config"
 CONFIG_JSON_PATH = Path(os.getenv("CONFIG_JSON_PATH", str(APP_DATA_DIR / "config.json")))
 SECRETS_JSON_PATH = Path(os.getenv("SECRETS_JSON_PATH", str(CONFIG_DIR / "secrets.json")))
 DB_PATH = APP_DATA_DIR / "bolt12pay.db"
-NOSTR_SECRET_FIELDS = ("nostr_server_privkey", "nostr_notify_nsec")
+NOSTR_SECRET_FIELDS = (
+    "nostr_server_privkey",
+    "nostr_notify_nsec",
+    companion_push.VAPID_PRIVATE_KEY_FIELD,
+)
 NOSTR_SECRET_STORE_VERSION = 1
 NOSTR_SECRET_STORE_PROVIDER = "lnd-ecdh-v1"
 NOSTR_SECRET_STORE_INFO = b"bolt12-pay:nostr-secret-store:v1"
@@ -587,6 +614,7 @@ def init_db():
         pass
     conn.commit()
     conn.close()
+    companion_push.init_db(DB_PATH)
 
 def _db_conn():
     conn = sqlite3.connect(DB_PATH)
@@ -1592,6 +1620,7 @@ class LnurlPayMetadataResponse(BaseModel):
     commentAllowed: int = 0
     allowsNostr: bool = True
     nostrPubkey: str = ""
+    bolt12PayDiscovery: str = ""
 
 
 class CloudflareBIP353Request(BaseModel):
@@ -1635,6 +1664,20 @@ class AliasUpdateRequest(BaseModel):
 class PayLoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=300)
     totp_code: Optional[str] = Field(default="")
+
+
+class CompanionPairRequest(BaseModel):
+    pairing_token: str = Field(min_length=32, max_length=200)
+    device_name: str = Field(default="Android Companion", max_length=80)
+    endpoint: str = Field(min_length=12, max_length=1000)
+    p256dh: str = Field(min_length=40, max_length=200)
+    auth: str = Field(min_length=16, max_length=200)
+
+
+class CompanionSubscriptionRequest(BaseModel):
+    endpoint: str = Field(min_length=12, max_length=1000)
+    p256dh: str = Field(min_length=40, max_length=200)
+    auth: str = Field(min_length=16, max_length=200)
 
 from typing import Literal
 
@@ -2472,6 +2515,164 @@ def _resolve_lnurl_alias(username: str) -> dict[str, Any]:
 
 def _lnurl_callback_url(username: str) -> str:
     return f"{get_lnurl_base_url()}/api/lnurl/callback/{username}"
+
+
+def _classify_qr_value(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized.startswith("lightning:"):
+        normalized = normalized.removeprefix("lightning:").lstrip("//")
+    normalized = normalized.split("?", 1)[0]
+
+    if normalized.startswith("lno1"):
+        return "bolt12_offer"
+    if normalized.startswith("lni1"):
+        return "bolt12_invoice"
+    if normalized.startswith("lnr1"):
+        return "bolt12_invoice_request"
+    if re.match(r"^ln(?:bc|tb|bcrt|sb)(?:[0-9]+[munp]?)?1", normalized):
+        return "bolt11_invoice"
+    if normalized.startswith("lnurl1"):
+        return "lnurl"
+    if HRN_RE.fullmatch(normalized):
+        return "payment_address"
+    return "unknown"
+
+
+def _payment_target_discovery(username: str) -> dict[str, Any]:
+    user = _normalize_lnurl_username(username)
+    cfg = load_config()
+    configured_alias = (cfg.get("aliases", {}) or {}).get(user)
+    lnurl_domain = get_lnurl_base_domain()
+    bip353_domain = get_bip353_base_domain()
+    if isinstance(configured_alias, dict):
+        if lnurl_domain:
+            identifier = f"{user}@{lnurl_domain}"
+        elif bip353_domain:
+            identifier = f"{user}@{bip353_domain}"
+        else:
+            identifier = user
+        description = str(
+            configured_alias.get("description") or LNURL_DEFAULT_DESCRIPTION
+        ).strip()
+        fixed_amount_sat = configured_alias.get("amount_sat")
+        offer = str(configured_alias.get("last_offer") or "").strip()
+    else:
+        alias = _resolve_lnurl_alias(user)
+        identifier = alias["identifier"]
+        description = alias["description"]
+        fixed_amount_sat = alias["fixed_amount_sat"]
+        offer = ""
+
+    fixed_amount_msat = (
+        int(fixed_amount_sat) * 1000
+        if fixed_amount_sat is not None
+        else None
+    )
+    lnurl_min_msat = fixed_amount_msat or LNURL_MIN_SENDABLE_MSAT
+    lnurl_max_msat = fixed_amount_msat or LNURL_MAX_SENDABLE_MSAT
+    methods: list[dict[str, Any]] = []
+
+    if offer.startswith("lno"):
+        methods.append(
+            {
+                "type": "bolt12_offer",
+                "reusable": True,
+                "offer": offer,
+                "amount": {
+                    "fixed_msat": fixed_amount_msat,
+                    "min_msat": fixed_amount_msat or 1000,
+                    "max_msat": fixed_amount_msat,
+                },
+                "payer_note": {
+                    "supported": True,
+                    "max_chars": None,
+                },
+                "zap": {"supported": False},
+            }
+        )
+
+    lnurl_base_url = get_lnurl_base_url()
+    lnurl_enabled = bool(
+        not privacy_mode_enabled()
+        and lnurl_domain
+        and lnurl_base_url.startswith("https://")
+    )
+    identity = _get_nostr_identity_for_name(user) if lnurl_enabled else {}
+    nostr_pubkey = str(identity.get("nostr_pubkey") or "").strip()
+    zap_supported = bool(
+        lnurl_enabled
+        and identity.get("zap_enabled")
+        and nostr_pubkey
+        and _nostr_server_pubkey_hex()
+    )
+    if lnurl_enabled:
+        common_lnurl_capabilities = {
+            "amount": {
+                "fixed_msat": fixed_amount_msat,
+                "min_msat": lnurl_min_msat,
+                "max_msat": lnurl_max_msat,
+            },
+            "comment": {
+                "supported": LNURL_COMMENT_ALLOWED > 0,
+                "max_chars": max(0, LNURL_COMMENT_ALLOWED),
+            },
+            "zap": {
+                "supported": zap_supported,
+                "nostr_pubkey": nostr_pubkey if zap_supported else None,
+            },
+        }
+        methods.append(
+            {
+                "type": "lightning_address",
+                "reusable": True,
+                "address": identifier,
+                "resolves_to": "lnurl_pay",
+                **common_lnurl_capabilities,
+            }
+        )
+        methods.append(
+            {
+                "type": "lnurl_pay",
+                "reusable": True,
+                "endpoint": f"{lnurl_base_url}/.well-known/lnurlp/{user}",
+                **common_lnurl_capabilities,
+            }
+        )
+
+    bip353_address = f"{user}@{bip353_domain}" if bip353_domain else None
+    if offer.startswith("lno"):
+        primary_qr = {"type": "bolt12_offer", "value": offer}
+    elif lnurl_enabled:
+        primary_qr = {"type": "lightning_address", "value": identifier}
+    else:
+        primary_qr = None
+    fallback_endpoint = (
+        f"/api/alias/{user}/bolt11-fallback"
+        if isinstance(configured_alias, dict) and not privacy_mode_enabled()
+        else None
+    )
+    return {
+        "schema": "bolt12-pay/payment-target-discovery",
+        "version": 1,
+        "identifier": identifier,
+        "description": description,
+        "addresses": {
+            "lightning": identifier if lnurl_enabled else None,
+            "bip353": bip353_address if offer.startswith("lno") else None,
+        },
+        "methods": methods,
+        "qr": {
+            "primary": primary_qr,
+            "bolt11_fallback": {
+                "type": "bolt11_invoice",
+                "reusable": False,
+                "generated_on_demand": True,
+                "endpoint": fallback_endpoint,
+            }
+            if fallback_endpoint
+            else None,
+        },
+    }
 
 
 def _read_macaroon_hex(path: str) -> str:
@@ -3966,6 +4167,23 @@ def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
         commentAllowed=max(0, LNURL_COMMENT_ALLOWED),
         allowsNostr=bool(receipt_signer_pubkey),
         nostrPubkey=receipt_signer_pubkey,
+        bolt12PayDiscovery=(
+            f"{get_lnurl_base_url()}/.well-known/bolt12-pay/{alias['username']}"
+            if get_lnurl_base_url()
+            else f"/.well-known/bolt12-pay/{alias['username']}"
+        ),
+    )
+
+
+@app.get("/.well-known/bolt12-pay/{username}")
+def payment_target_discovery(username: str):
+    payload = _payment_target_discovery(username)
+    return JSONResponse(
+        payload,
+        headers={
+            "Cache-Control": "public, max-age=60, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -4821,7 +5039,15 @@ async def qr_code(value: str):
     buf = BytesIO()
     img.save(buf, format="PNG")
 
-    return Response(buf.getvalue(), media_type="image/png")
+    return Response(
+        buf.getvalue(),
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=300",
+            "X-BOLT12-Pay-QR-Type": _classify_qr_value(value),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 @app.post("/api/alias", response_model=AliasResponse)
 def create_alias(payload: AliasCreateRequest, request: StarletteRequest):
@@ -5415,6 +5641,14 @@ def require_pay_auth(request: StarletteRequest) -> None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
 
+def _companion_bearer_token(request: StarletteRequest) -> str:
+    authorization = str(request.headers.get("authorization") or "")
+    scheme, separator, token = authorization.partition(" ")
+    if not separator or scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status_code=401, detail="Companion authorization required")
+    return token.strip()
+
+
 def _issue_nwc_session() -> tuple[str, int]:
     now = int(time.time())
     token = secrets.token_urlsafe(32)
@@ -5771,6 +6005,111 @@ def api_auth_logout(request: StarletteRequest):
     return resp
 
 
+@app.get("/api/admin/companion/devices")
+def api_admin_companion_devices(request: StarletteRequest):
+    require_pay_auth(request)
+    private_key = _companion_vapid_private_key(create=False)
+    return JSONResponse(
+        {
+            "devices": companion_push.list_devices(DB_PATH),
+            "vapid_ready": bool(private_key),
+        },
+        headers=_no_store_headers(),
+    )
+
+
+@app.post("/api/admin/companion/pairing-token")
+def api_admin_companion_pairing_token(request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+    try:
+        private_key = _companion_vapid_private_key(create=True)
+        public_key = companion_push.vapid_public_key(private_key)
+    except NostrSecretStoreLockedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Companion notification keys are unavailable",
+        ) from exc
+    token, expires_at = companion_push.create_pairing_token(DB_PATH)
+    return JSONResponse(
+        {
+            "pairing_token": token,
+            "expires_at": expires_at,
+            "vapid_public_key": public_key,
+        },
+        headers=_no_store_headers(),
+    )
+
+
+@app.delete("/api/admin/companion/devices/{device_id}")
+def api_admin_companion_device_delete(
+    device_id: str,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    _require_csrf(request)
+    if not companion_push.revoke_device(DB_PATH, device_id):
+        raise HTTPException(status_code=404, detail="Companion device not found")
+    return JSONResponse({"ok": True}, headers=_no_store_headers())
+
+
+@app.post("/api/companion/pair")
+def api_companion_pair(payload: CompanionPairRequest):
+    try:
+        device = companion_push.register_device(
+            DB_PATH,
+            pairing_token=payload.pairing_token,
+            name=payload.device_name,
+            endpoint=payload.endpoint,
+            p256dh=payload.p256dh,
+            auth=payload.auth,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse(
+        {"ok": True, "device": device},
+        headers=_no_store_headers(),
+    )
+
+
+@app.put("/api/companion/subscription")
+def api_companion_subscription_update(
+    payload: CompanionSubscriptionRequest,
+    request: StarletteRequest,
+):
+    try:
+        device = companion_push.update_device_subscription(
+            DB_PATH,
+            device_token=_companion_bearer_token(request),
+            endpoint=payload.endpoint,
+            p256dh=payload.p256dh,
+            auth=payload.auth,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse(
+        {"ok": True, "device": device},
+        headers=_no_store_headers(),
+    )
+
+
+@app.delete("/api/companion/subscription")
+def api_companion_subscription_delete(request: StarletteRequest):
+    removed = companion_push.unregister_device_token(
+        DB_PATH,
+        _companion_bearer_token(request),
+    )
+    if not removed:
+        raise HTTPException(status_code=401, detail="Unknown companion device")
+    return JSONResponse({"ok": True}, headers=_no_store_headers())
+
+
 
 @app.get("/public.webmanifest")
 def public_manifest() -> FileResponse:
@@ -5951,7 +6290,7 @@ async def public_alias_page(alias_name: str):
         <div class="section">
           <div id="aliasOfferTitle" data-i18n="offer.title" class="sectionTitle">BOLT12 Offer (primary)</div>
           <div class="qr">
-            <img id="aliasOfferQr" class="copyable" src="/api/qr/{escape(last_offer)}" width="260" height="260" data-i18n-alt="qr.offer" alt="BOLT12 Offer QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
+            <img id="aliasOfferQr" class="copyable" src="/api/qr/{escape(last_offer)}" width="260" height="260" data-payment-type="bolt12_offer" data-i18n-alt="qr.offer" alt="BOLT12 Offer QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
           </div>
           <div id="aliasOfferString" class="mono copyable" data-i18n-title="hint.copy" title="Tap to copy">{escape(last_offer)}</div>
           <div class="row">
@@ -5994,7 +6333,7 @@ async def public_alias_page(alias_name: str):
           </div>
           <div id="aliasBolt11Result" hidden>
             <div class="qr">
-              <img id="aliasBolt11Qr" class="copyable" width="220" height="220" data-i18n-alt="qr.invoice" alt="BOLT11 Invoice QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
+              <img id="aliasBolt11Qr" class="copyable" width="220" height="220" data-payment-type="bolt11_invoice" data-i18n-alt="qr.invoice" alt="BOLT11 Invoice QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
             </div>
             <div id="aliasBolt11String" class="mono copyable" data-i18n-title="hint.copy" title="Tap to copy"></div>
             <div class="row">
@@ -6015,7 +6354,7 @@ async def public_alias_page(alias_name: str):
           <div id="aliasLnurlTitle" data-i18n="lnurl.title" class="sectionTitle">LNURL Fallback</div>
           <div id="aliasLnurlString" class="mono copyable" data-i18n-title="hint.copy" title="Tap to copy">{escape(lnurl_address)}</div>
           <div class="qr">
-            <img id="aliasLnurlQr" data-copy-target="{escape(lnurl_fallback)}" class="copyable" src="/api/qr/{escape(lnurl_fallback)}" width="220" height="220" data-i18n-alt="qr.lnurl" alt="LNURL QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
+            <img id="aliasLnurlQr" data-copy-target="{escape(lnurl_fallback)}" data-payment-type="lnurl" class="copyable" src="/api/qr/{escape(lnurl_fallback)}" width="220" height="220" data-i18n-alt="qr.lnurl" alt="LNURL QR" data-i18n-title="hint.copy_qr" title="Tap to copy QR content">
           </div>
           <div class="row">
           <button id="aliasCopyLnurlBtn" data-i18n="action.copy_lnurl">Copy LNURL</button>
@@ -7402,6 +7741,20 @@ def _upsert_invoice_history(
         counterparty=item.get("counterparty", ""),
         origin=item.get("origin", "web"),
     )
+    became_settled = (
+        item.get("direction") == "incoming"
+        and item.get("status") == "settled"
+        and (not existing or existing.get("status") != "settled")
+    )
+    if became_settled:
+        try:
+            if companion_push.queue_settled_payment(DB_PATH, item):
+                COMPANION_PUSH_WAKE_EVENT.set()
+        except Exception as exc:
+            print(
+                f"[Companion push] queue failed: {type(exc).__name__}",
+                flush=True,
+            )
     return True
 
 
@@ -7941,6 +8294,31 @@ async def _zap_publisher_loop():
         except asyncio.TimeoutError:
             pass
 
+
+async def _companion_push_loop():
+    while True:
+        COMPANION_PUSH_WAKE_EVENT.clear()
+        try:
+            private_key = _companion_vapid_private_key(create=False)
+            if private_key:
+                await companion_push.dispatch_due(
+                    DB_PATH,
+                    vapid_private_key=private_key,
+                    vapid_subject=_companion_vapid_subject(),
+                )
+        except Exception as exc:
+            print(
+                f"[Companion push] delivery loop failed: {type(exc).__name__}",
+                flush=True,
+            )
+        try:
+            await asyncio.wait_for(
+                COMPANION_PUSH_WAKE_EVENT.wait(),
+                timeout=5,
+            )
+        except asyncio.TimeoutError:
+            pass
+
 @app.on_event("startup")
 async def startup_background_tasks():
     init_db()
@@ -7951,6 +8329,7 @@ async def startup_background_tasks():
         _nostr_secret_store_unlock_loop()
     )
     app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
+    app.state.companion_push_task = asyncio.create_task(_companion_push_loop())
     app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
     app.state.public_bip353_status = {
         "status": "checking",
@@ -7964,6 +8343,7 @@ async def startup_background_tasks():
     )
 
     print("zap publisher loop started", flush=True)
+    print("[Companion push] delivery loop started", flush=True)
     print("[Nostr keys] automatic LND unlock scheduled", flush=True)
     print("[NWC] startup task scheduled", flush=True)
     print("[BIP353 check] startup check scheduled", flush=True)
@@ -8578,6 +8958,33 @@ def save_secrets(data: dict) -> None:
         NOSTR_SECRET_STORE_KEY,
     )
     _write_secret_store_raw(stored)
+
+
+def _companion_vapid_private_key(*, create: bool = False) -> str:
+    field = companion_push.VAPID_PRIVATE_KEY_FIELD
+    private_key = str(
+        _get_secret("COMPANION_VAPID_PRIVATE_KEY", field, default="") or ""
+    ).strip()
+    if private_key or not create:
+        return private_key
+    if NOSTR_SECRET_STORE_KEY is None:
+        raise NostrSecretStoreLockedError(
+            "Waiting for LND to unlock encrypted companion keys"
+        )
+    private_key = companion_push.generate_vapid_private_key()
+    secrets_data = load_secrets()
+    secrets_data[field] = private_key
+    save_secrets(secrets_data)
+    return private_key
+
+
+def _companion_vapid_subject() -> str:
+    candidate = str(get_lnurl_base_url() or "").strip()
+    parsed = urlparse(candidate)
+    if parsed.scheme == "https" and parsed.hostname:
+        port = f":{parsed.port}" if parsed.port else ""
+        return f"https://{parsed.hostname}{port}"
+    return "mailto:admin@localhost"
 
 
 async def _request_lnd_nostr_shared_key(ephemeral_pubkey: bytes) -> bytes:

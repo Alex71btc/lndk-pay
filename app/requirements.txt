@@ -8,3 +8,5 @@ coincurve==20.0.0
 websockets==12.0
 bolt11==2.0.0
 pycryptodome
+pywebpush==2.5.0
+aiohttp>=3.10,<4

@@ -1621,6 +1621,7 @@
             <div
               id="qrModeBadge"
               class="modeBadge"
+              data-payment-type="payment_address"
               data-i18n="badge.qr_default"
             >
               QR: Standardadresse
@@ -1628,6 +1629,7 @@
             <div
               id="offerQrBox"
               class="qrBox"
+              data-payment-type="payment_address"
               data-i18n-title="hint.tap_copy_active" title="Antippen = aktiven Inhalt kopieren"
             ></div>
             <div class="hint">
@@ -1796,6 +1798,55 @@
           hidden
         ></div>
         <div id="historyList" class="historyList"></div>
+      </details>
+
+      <details id="android-notifications" class="section">
+        <summary>
+          🔔 <span data-i18n="companion.title">Android-Zahlungsbenachrichtigungen</span>
+        </summary>
+        <div class="hint" data-i18n="companion.privacy_hint">
+          Optionales UnifiedPush ohne eingebauten Google-Dienst. Der gewählte
+          Distributor erhält nur Ende-zu-Ende-verschlüsselte WebPush-Daten; die
+          Geräteberechtigung kann hier jederzeit widerrufen werden.
+        </div>
+        <div
+          id="companionPushStatus"
+          class="valueBox"
+          style="margin-top: 12px"
+          aria-live="polite"
+          data-i18n="companion.status_loading"
+        >
+          Geräte werden geladen…
+        </div>
+        <div class="row" style="margin-top: 12px">
+          <button id="createCompanionPairingBtn" type="button">
+            <span data-i18n="companion.create_pairing">Gerät koppeln</span>
+          </button>
+          <button
+            id="openCompanionPairingLink"
+            class="secondary"
+            type="button"
+            hidden
+          >
+            <span data-i18n="companion.open_app">Im Android Companion öffnen</span>
+          </button>
+        </div>
+        <div
+          id="companionPairingQr"
+          class="qrBox"
+          style="margin-top: 12px"
+          hidden
+          aria-label="Android Companion pairing QR"
+        ></div>
+        <div class="hint" style="margin-top: 10px" data-i18n="companion.pairing_hint">
+          Öffne den Link auf dem Android-Gerät oder scanne den QR-Code. Der
+          Kopplungscode ist zehn Minuten gültig und kann nur einmal verwendet
+          werden. Ein UnifiedPush-Distributor muss auf dem Gerät eingerichtet sein.
+        </div>
+        <div class="label" style="margin-top: 16px" data-i18n="companion.devices">
+          Gekoppelte Geräte
+        </div>
+        <div id="companionDevicesList" class="historyList"></div>
       </details>
 
       <details class="section">
@@ -3261,6 +3312,27 @@
         "saveEditContactBtn",
       );
 
+      const companionPushSection = document.getElementById(
+        "android-notifications",
+      );
+      const companionPushStatus = document.getElementById(
+        "companionPushStatus",
+      );
+      const createCompanionPairingBtn = document.getElementById(
+        "createCompanionPairingBtn",
+      );
+      const openCompanionPairingLink = document.getElementById(
+        "openCompanionPairingLink",
+      );
+      const companionPairingQr = document.getElementById(
+        "companionPairingQr",
+      );
+      const companionDevicesList = document.getElementById(
+        "companionDevicesList",
+      );
+      let companionDevicesCache = [];
+      let companionPairingExpiryTimer = null;
+
       // ------------------------------------------------------------------
       // NWC DOM references
       // ------------------------------------------------------------------
@@ -3883,6 +3955,145 @@
       }
 
       // ------------------------------------------------------------------
+      // Android Companion notifications
+      // ------------------------------------------------------------------
+
+      function renderCompanionDevices(items) {
+        if (!companionDevicesList) return;
+        const devices = Array.isArray(items) ? items : [];
+        if (!devices.length) {
+          companionDevicesList.innerHTML = `<div class="emptyState" data-i18n="companion.no_devices">${window.__t("companion.no_devices")}</div>`;
+          return;
+        }
+        companionDevicesList.innerHTML = devices
+          .map((device) => {
+            const state = device.enabled
+              ? window.__t("companion.enabled")
+              : window.__t("companion.disabled");
+            const lastSuccess = device.last_success_at
+              ? formatHistoryDate(Number(device.last_success_at) * 1000)
+              : window.__t("companion.never");
+            return `
+              <div class="historyItem">
+                <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                  <div>
+                    <div style="font-weight:700;">${escapeContactHtml(device.name || window.__t("companion.default_name"))}</div>
+                    <div class="historyMeta">${state} • ${escapeContactHtml(device.push_service || "")}</div>
+                  </div>
+                  <div class="historyMeta">${window.__t("companion.last_delivery")}: ${escapeContactHtml(lastSuccess)}</div>
+                </div>
+                ${device.last_error ? `<div class="hint" style="margin-top:8px;">${window.__t("companion.last_error")}: ${escapeContactHtml(device.last_error)}</div>` : ""}
+                <div class="historyActions">
+                  <button class="danger" type="button" data-companion-revoke="${escapeContactHtml(device.id || "")}">
+                    ${window.__t("companion.revoke")}
+                  </button>
+                </div>
+              </div>`;
+          })
+          .join("");
+      }
+
+      async function loadCompanionDevices() {
+        if (!companionDevicesList) return [];
+        const response = await fetch("/api/admin/companion/devices", {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        const data = await readJsonOrThrow(response);
+        if (!response.ok) {
+          throw new Error(data.detail || window.__t("companion.load_failed"));
+        }
+        companionDevicesCache = data.devices || [];
+        renderCompanionDevices(companionDevicesCache);
+        if (companionPushStatus) {
+          const key = data.vapid_ready
+            ? "companion.status_ready"
+            : "companion.status_not_initialized";
+          companionPushStatus.dataset.i18n = key;
+          companionPushStatus.textContent = window.__t(key);
+        }
+        return companionDevicesCache;
+      }
+
+      async function createCompanionPairing() {
+        if (!createCompanionPairingBtn) return;
+        createCompanionPairingBtn.disabled = true;
+        try {
+          const response = await fetch("/api/admin/companion/pairing-token", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "X-CSRF-Token": getCookie("csrf_token") || "",
+            },
+          });
+          const data = await readJsonOrThrow(response);
+          if (!response.ok) {
+            throw new Error(data.detail || window.__t("companion.pairing_failed"));
+          }
+          const query = new URLSearchParams({
+            server: window.location.origin,
+            token: data.pairing_token,
+            vapid: data.vapid_public_key,
+          });
+          const pairingUri = `bolt12pay://pair?${query.toString()}`;
+          openCompanionPairingLink.dataset.pairingUri = pairingUri;
+          openCompanionPairingLink.hidden = false;
+          companionPairingQr.hidden = false;
+          companionPairingQr.innerHTML = "";
+          new QRCode(companionPairingQr, {
+            text: pairingUri,
+            width: 220,
+            height: 220,
+            correctLevel: QRCode.CorrectLevel.M,
+          });
+          if (companionPairingExpiryTimer) {
+            clearTimeout(companionPairingExpiryTimer);
+          }
+          const expiresInMs = Math.max(
+            0,
+            Number(data.expires_at || 0) * 1000 - Date.now(),
+          );
+          companionPairingExpiryTimer = setTimeout(() => {
+            delete openCompanionPairingLink.dataset.pairingUri;
+            openCompanionPairingLink.hidden = true;
+            companionPairingQr.hidden = true;
+            companionPairingQr.innerHTML = "";
+          }, expiresInMs);
+          if (companionPushStatus) {
+            companionPushStatus.dataset.i18n = "companion.status_pairing_created";
+            companionPushStatus.textContent = window.__t(
+              "companion.status_pairing_created",
+            );
+          }
+        } catch (error) {
+          setStatus(errorToMessage(error), "error", true);
+        } finally {
+          createCompanionPairingBtn.disabled = false;
+        }
+      }
+
+      async function revokeCompanionDevice(deviceId) {
+        if (!deviceId) return;
+        if (!confirm(window.__t("companion.confirm_revoke"))) return;
+        const response = await fetch(
+          `/api/admin/companion/devices/${encodeURIComponent(deviceId)}`,
+          {
+            method: "DELETE",
+            credentials: "same-origin",
+            headers: {
+              "X-CSRF-Token": getCookie("csrf_token") || "",
+            },
+          },
+        );
+        const data = await readJsonOrThrow(response);
+        if (!response.ok) {
+          throw new Error(data.detail || window.__t("companion.revoke_failed"));
+        }
+        await loadCompanionDevices();
+        setStatus(window.__t("companion.revoked"));
+      }
+
+      // ------------------------------------------------------------------
       // NWC helpers
       // ------------------------------------------------------------------
 
@@ -4203,6 +4414,7 @@
       function rerenderDynamicUi() {
         renderOfferHistoryItems(offerHistoryItems);
         renderTxHistoryItems(txHistoryItems);
+        renderCompanionDevices(companionDevicesCache);
         if (nwcUnlocked) renderNwcConnections(nwcConnectionsCache);
         if (contactsList?.dataset.view === "contacts") renderContacts(loadedContacts);
         refreshPayContactStatus();
@@ -6106,7 +6318,11 @@
 
       function setCurrentOffer(value) {
         const offer = String(value || "").trim();
+        const paymentType = offer ? "bolt12_offer" : "payment_address";
         offerInput.value = offer;
+        qrModeBadge.dataset.paymentType = paymentType;
+        offerQrBox.dataset.paymentType = paymentType;
+        offerPreviewBox.dataset.paymentType = paymentType;
 
         if (offer) {
           offerPreviewBox.textContent = offer;
@@ -6119,6 +6335,12 @@
 
       function renderOfferQr(value) {
         const qrValue = String(value || "").trim() || DEFAULT_ADDRESS;
+        const paymentType = qrValue.toLowerCase().startsWith("lno1")
+          ? "bolt12_offer"
+          : "payment_address";
+        qrModeBadge.dataset.paymentType = paymentType;
+        offerQrBox.dataset.paymentType = paymentType;
+        offerPreviewBox.dataset.paymentType = paymentType;
 
         if (typeof QRCode === "undefined") {
           console.warn("QRCode not ready yet, retrying...");
@@ -9123,6 +9345,34 @@
       });
 
       function initAdminPageUi() {
+        createCompanionPairingBtn?.addEventListener(
+          "click",
+          createCompanionPairing,
+        );
+        openCompanionPairingLink?.addEventListener("click", () => {
+          const pairingUri = openCompanionPairingLink.dataset.pairingUri || "";
+          if (pairingUri) window.location.href = pairingUri;
+        });
+        window.addEventListener("focus", () => {
+          if (companionPushSection?.open) {
+            loadCompanionDevices().catch((error) =>
+              console.error("Companion device refresh failed", error),
+            );
+          }
+        });
+        companionDevicesList?.addEventListener("click", async (event) => {
+          const button = event.target.closest("[data-companion-revoke]");
+          if (!button) return;
+          try {
+            await revokeCompanionDevice(button.dataset.companionRevoke || "");
+          } catch (error) {
+            setStatus(errorToMessage(error), "error", true);
+          }
+        });
+        if (window.location.hash === "#android-notifications" && companionPushSection) {
+          companionPushSection.open = true;
+          setTimeout(() => companionPushSection.scrollIntoView({block: "start"}), 50);
+        }
           initNwcUi();
 
           setCurrentOffer("");
@@ -9225,6 +9475,17 @@
           );
           if (repairNotice) {
             sessionStorage.removeItem("public_bip353_repair_notice");
+          }
+
+          try {
+            await loadCompanionDevices();
+          } catch (error) {
+            if (companionPushStatus) {
+              companionPushStatus.textContent = window.__t(
+                "companion.load_failed",
+              );
+            }
+            console.error("Companion device load failed", error);
           }
 
           // NWC-Daten nach erfolgreicher Auth laden

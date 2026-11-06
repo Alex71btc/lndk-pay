@@ -1,13 +1,16 @@
 package com.bolt12pay.companion;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -19,14 +22,21 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.unifiedpush.android.connector.UnifiedPush;
+
+import static org.unifiedpush.android.connector.ConstantsKt.INSTANCE_DEFAULT;
+
 public final class MainActivity extends Activity {
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 71;
     private ServerSettings serverSettings;
+    private PushSettings pushSettings;
     private String pendingTarget;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         serverSettings = new ServerSettings(this);
+        pushSettings = new PushSettings(this);
         handleIntent(getIntent());
     }
 
@@ -38,6 +48,25 @@ public final class MainActivity extends Activity {
     }
 
     private void handleIntent(Intent intent) {
+        PairingLink pairingLink =
+                intent == null || intent.getData() == null
+                        ? null
+                        : PairingLink.parse(intent.getData().toString());
+        if (pairingLink != null) {
+            if (!serverSettings.save(pairingLink.serverUrl)) {
+                showMessageScreen(
+                        getString(R.string.push_pairing_failed_title),
+                        getString(R.string.server_save_error));
+                return;
+            }
+            pushSettings.savePending(
+                    pairingLink.pairingToken,
+                    pairingLink.vapidPublicKey,
+                    Build.MANUFACTURER + " " + Build.MODEL);
+            beginPushRegistration();
+            return;
+        }
+
         pendingTarget = extractLightningTarget(intent);
         boolean isPaymentIntent =
                 Intent.ACTION_VIEW.equals(intent.getAction())
@@ -58,6 +87,79 @@ public final class MainActivity extends Activity {
         }
 
         showSettingsScreen(serverUrl == null ? "" : serverUrl);
+        refreshExistingPushRegistration();
+    }
+
+    private void beginPushRegistration() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[] {Manifest.permission.POST_NOTIFICATIONS},
+                    NOTIFICATION_PERMISSION_REQUEST);
+            return;
+        }
+        registerWithUnifiedPush();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            registerWithUnifiedPush();
+        } else {
+            pushSettings.setLastError(getString(R.string.push_permission_denied));
+            showMessageScreen(
+                    getString(R.string.push_pairing_failed_title),
+                    getString(R.string.push_permission_denied));
+        }
+    }
+
+    private void registerWithUnifiedPush() {
+        String vapid = pushSettings.vapidPublicKey();
+        if (vapid.isEmpty()) {
+            showMessageScreen(
+                    getString(R.string.push_pairing_failed_title),
+                    getString(R.string.push_pairing_link_invalid));
+            return;
+        }
+        UnifiedPush.tryUseCurrentOrDefaultDistributor(
+                this,
+                success -> {
+                    if (Boolean.TRUE.equals(success)) {
+                        UnifiedPush.register(
+                                this,
+                                INSTANCE_DEFAULT,
+                                getString(R.string.push_distributor_registration),
+                                vapid);
+                        showMessageScreen(
+                                getString(R.string.push_pairing_started_title),
+                                getString(R.string.push_pairing_started_message));
+                    } else {
+                        pushSettings.setLastError(getString(R.string.push_no_distributor));
+                        showMessageScreen(
+                                getString(R.string.push_pairing_failed_title),
+                                getString(R.string.push_no_distributor));
+                    }
+                    return null;
+                });
+    }
+
+    private void refreshExistingPushRegistration() {
+        if (!pushSettings.isPaired() || pushSettings.vapidPublicKey().isEmpty()) return;
+        try {
+            UnifiedPush.register(
+                    this,
+                    INSTANCE_DEFAULT,
+                    getString(R.string.push_distributor_registration),
+                    pushSettings.vapidPublicKey());
+        } catch (Exception error) {
+            pushSettings.setLastError(getString(R.string.push_registration_failed));
+        }
     }
 
     private String extractLightningTarget(Intent intent) {
@@ -154,6 +256,72 @@ public final class MainActivity extends Activity {
         buttonParams.topMargin = dp(16);
         content.addView(saveButton, buttonParams);
 
+        TextView pushTitle = text(getString(R.string.push_settings_title), 20, Color.WHITE);
+        pushTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        pushTitle.setPadding(0, dp(28), 0, dp(8));
+        content.addView(pushTitle);
+
+        String pushStatus;
+        int pushStatusColor;
+        if (!pushSettings.lastError().isEmpty()) {
+            pushStatus = getString(R.string.push_status_error, pushSettings.lastError());
+            pushStatusColor = Color.rgb(255, 170, 120);
+        } else if (pushSettings.isPaired()) {
+            pushStatus = getString(R.string.push_status_enabled);
+            pushStatusColor = Color.rgb(110, 220, 160);
+        } else if (pushSettings.isPairing()) {
+            pushStatus = getString(R.string.push_status_pairing);
+            pushStatusColor = Color.rgb(247, 147, 26);
+        } else {
+            pushStatus = getString(R.string.push_status_disabled);
+            pushStatusColor = Color.rgb(170, 180, 198);
+        }
+        TextView pushStatusView = text(pushStatus, 14, pushStatusColor);
+        pushStatusView.setLineSpacing(0, 1.1f);
+        content.addView(pushStatusView);
+
+        TextView pushPrivacy = text(getString(R.string.push_privacy_note), 13, Color.rgb(170, 180, 198));
+        pushPrivacy.setPadding(0, dp(8), 0, dp(8));
+        content.addView(pushPrivacy);
+
+        Button pushButton = new Button(this);
+        pushButton.setText(
+                pushSettings.isPaired()
+                        ? R.string.push_disable
+                        : pushSettings.isPairing()
+                                ? R.string.push_retry
+                                : R.string.push_open_setup);
+        pushButton.setTextColor(Color.WHITE);
+        pushButton.setTextSize(15);
+        GradientDrawable pushButtonBackground = new GradientDrawable();
+        pushButtonBackground.setColor(Color.rgb(40, 55, 78));
+        pushButtonBackground.setCornerRadius(dp(14));
+        pushButton.setBackground(pushButtonBackground);
+        pushButton.setOnClickListener(
+                ignored -> {
+                    if (pushSettings.isPaired()) {
+                        UnifiedPush.unregister(this, INSTANCE_DEFAULT);
+                        PushApi.unregister(
+                                this,
+                                () -> {
+                                    Toast.makeText(
+                                                    this,
+                                                    R.string.push_disabled,
+                                                    Toast.LENGTH_SHORT)
+                                            .show();
+                                    showSettingsScreen(
+                                            serverSettings.load() == null
+                                                    ? ""
+                                                    : serverSettings.load());
+                                });
+                    } else if (pushSettings.isPairing()) {
+                        beginPushRegistration();
+                    } else {
+                        openNotificationSetup(currentServerUrl);
+                    }
+                });
+        content.addView(pushButton);
+
         TextView safety = text(getString(R.string.safety_note), 14, Color.rgb(170, 180, 198));
         safety.setPadding(0, dp(18), 0, 0);
         content.addView(safety);
@@ -180,6 +348,22 @@ public final class MainActivity extends Activity {
         message.setLineSpacing(0, 1.12f);
         content.addView(message);
         setContentView(content);
+    }
+
+    private void openNotificationSetup(String currentServerUrl) {
+        String serverUrl = ServerUrl.normalize(currentServerUrl);
+        if (serverUrl == null) {
+            Toast.makeText(this, R.string.push_save_server_first, Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent browserIntent =
+                new Intent(Intent.ACTION_VIEW, Uri.parse(serverUrl + "/pay#android-notifications"));
+        browserIntent.addCategory(Intent.CATEGORY_BROWSABLE);
+        try {
+            startActivity(browserIntent);
+        } catch (ActivityNotFoundException error) {
+            Toast.makeText(this, R.string.no_browser_message, Toast.LENGTH_LONG).show();
+        }
     }
 
     private void openPaymentForm(String serverUrl, String target) {

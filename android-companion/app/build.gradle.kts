@@ -40,8 +40,8 @@ android {
         applicationId = "com.bolt12pay.companion"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.0.1"
+        versionCode = 13
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
     }
@@ -81,5 +81,6 @@ android {
 }
 
 dependencies {
+    implementation("org.unifiedpush.android:connector:3.3.5")
     testImplementation("junit:junit:4.13.2")
 }
