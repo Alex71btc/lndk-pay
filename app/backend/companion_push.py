@@ -8,6 +8,7 @@ import secrets
 import socket
 import sqlite3
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import urlparse
@@ -22,6 +23,7 @@ PAIRING_TTL_SECONDS = 10 * 60
 PUSH_TTL_SECONDS = 24 * 60 * 60
 MAX_PUSH_ATTEMPTS = 12
 VAPID_PRIVATE_KEY_FIELD = "companion_vapid_private_key"
+MAX_PUSH_COMMENT_CHARS = 160
 
 
 class UnsafePushEndpointError(ValueError):
@@ -408,6 +410,40 @@ def revoke_device(db_path: Path | str, device_id: str) -> bool:
     return cursor.rowcount > 0
 
 
+def _sanitize_payment_comment(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+
+    cleaned: list[str] = []
+    pending_space = False
+    for character in unicodedata.normalize("NFC", value):
+        if character.isspace():
+            pending_space = bool(cleaned)
+            continue
+        if unicodedata.category(character).startswith("C") and character != "\u200d":
+            continue
+        if pending_space:
+            cleaned.append(" ")
+            pending_space = False
+        cleaned.append(character)
+
+    comment = "".join(cleaned).strip()
+    if len(comment) > MAX_PUSH_COMMENT_CHARS:
+        comment = comment[:MAX_PUSH_COMMENT_CHARS].rstrip()
+    return comment.rstrip("\u200d")
+
+
+def _payment_comment(item: dict[str, Any]) -> str:
+    payer_note = _sanitize_payment_comment(item.get("payer_note"))
+    if payer_note:
+        return payer_note
+
+    method = str(item.get("method") or "").strip().lower()
+    if method in {"lightning_address", "lnurl"}:
+        return _sanitize_payment_comment(item.get("memo"))
+    return ""
+
+
 def queue_settled_payment(
     db_path: Path | str,
     item: dict[str, Any],
@@ -421,15 +457,19 @@ def queue_settled_payment(
         return False
     timestamp = int(time.time()) if now is None else int(now)
     event_id = secrets.token_urlsafe(16)
+    payload_data = {
+        "version": 1,
+        "event_id": event_id,
+        "type": "payment_received",
+        "amount_sat": max(0, int(item.get("amount_sat") or 0)),
+        "method": str(item.get("method") or "lightning")[:40],
+        "payment_type": str(item.get("type") or "payment")[:40],
+    }
+    comment = _payment_comment(item)
+    if comment:
+        payload_data["comment"] = comment
     payload = json.dumps(
-        {
-            "version": 1,
-            "event_id": event_id,
-            "type": "payment_received",
-            "amount_sat": max(0, int(item.get("amount_sat") or 0)),
-            "method": str(item.get("method") or "lightning")[:40],
-            "payment_type": str(item.get("type") or "payment")[:40],
-        },
+        payload_data,
         separators=(",", ":"),
         ensure_ascii=False,
     )

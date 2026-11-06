@@ -27,6 +27,7 @@
     <string name="push_payment_received_title">⚡ %1$s sats reçus</string>
     <string name="push_private_title">BOLT12 Pay</string>
     <string name="push_private_body">Paiement Lightning entrant</string>
+    <string name="push_payment_with_comment">%1$s · %2$s</string>
     <string name="push_method_zap">Zap Nostr reçu</string>
     <string name="push_method_bolt12">Paiement BOLT12 reçu</string>
     <string name="push_method_lightning_address">Paiement à une adresse Lightning reçu</string>
@@ -45,6 +46,8 @@
     <string name="push_status_pairing">L’association attend le distributeur push</string>
     <string name="push_status_disabled">Non connecté</string>
     <string name="push_privacy_note">Facultatif et sans Google : WebPush chiffre les alertes de paiement de bout en bout. Votre distributeur ne voit que l’horaire et des données chiffrées.</string>
+    <string name="push_show_comments">Afficher les commentaires de paiement</string>
+    <string name="push_show_comments_note">Désactivé par défaut. Une fois activé, les vraies notes de payeur BOLT12 et les commentaires d’adresse Lightning ou LNURL peuvent apparaître dans la notification privée. Les descriptions techniques de facture ne sont jamais affichées.</string>
     <string name="push_disable">Désactiver les notifications</string>
     <string name="push_retry">Réessayer l’association</string>
     <string name="push_open_setup">Ouvrir la configuration des notifications</string>

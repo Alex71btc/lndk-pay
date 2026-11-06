@@ -4218,7 +4218,7 @@ async def lnurl_callback(
     if comment and len(comment) > max(0, LNURL_COMMENT_ALLOWED):
         raise HTTPException(status_code=400, detail="comment too long")
 
-    print(f"LNURL callback username={username} amount={amount} comment={comment!r}")
+    print(f"LNURL callback username={username} amount={amount}")
     amount_sat = max(1, math.ceil(amount / 1000))
 
     metadata = _lnurl_metadata_for_alias(alias)

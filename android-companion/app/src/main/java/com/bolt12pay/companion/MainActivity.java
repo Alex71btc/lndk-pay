@@ -19,6 +19,7 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -283,6 +284,24 @@ public final class MainActivity extends Activity {
         TextView pushPrivacy = text(getString(R.string.push_privacy_note), 13, Color.rgb(170, 180, 198));
         pushPrivacy.setPadding(0, dp(8), 0, dp(8));
         content.addView(pushPrivacy);
+
+        Switch commentToggle = new Switch(this);
+        commentToggle.setText(R.string.push_show_comments);
+        commentToggle.setTextColor(Color.WHITE);
+        commentToggle.setTextSize(15);
+        commentToggle.setChecked(pushSettings.showPaymentComments());
+        commentToggle.setPadding(0, dp(6), 0, 0);
+        commentToggle.setOnCheckedChangeListener(
+                (button, checked) -> pushSettings.setShowPaymentComments(checked));
+        content.addView(commentToggle);
+
+        TextView commentPrivacy =
+                text(
+                        getString(R.string.push_show_comments_note),
+                        13,
+                        Color.rgb(170, 180, 198));
+        commentPrivacy.setPadding(0, dp(4), 0, dp(12));
+        content.addView(commentPrivacy);
 
         Button pushButton = new Button(this);
         pushButton.setText(

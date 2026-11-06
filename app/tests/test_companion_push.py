@@ -77,7 +77,7 @@ class CompanionPushTests(unittest.TestCase):
         )
         self.assertEqual(companion_push.list_devices(self.db_path), [])
 
-    def test_payload_is_minimal_and_duplicate_payments_are_not_requeued(self):
+    def test_payload_uses_real_payer_note_without_private_history_fields(self):
         self.pair_device()
         item = {
             "payment_hash": "aa" * 32,
@@ -86,8 +86,8 @@ class CompanionPushTests(unittest.TestCase):
             "amount_sat": 2100,
             "method": "bolt12",
             "type": "offer",
-            "memo": "private memo",
-            "payer_note": "private payer note",
+            "memo": "technical offer description",
+            "payer_note": "  First line\r\nSecond line\x00\u202e  ",
         }
 
         self.assertTrue(companion_push.queue_settled_payment(self.db_path, item, now=200))
@@ -102,10 +102,48 @@ class CompanionPushTests(unittest.TestCase):
 
         self.assertEqual(payload["amount_sat"], 2100)
         self.assertEqual(payload["method"], "bolt12")
+        self.assertEqual(payload["comment"], "First line Second line")
         self.assertNotIn("payment_hash", payload)
         self.assertNotIn("memo", payload)
         self.assertNotIn("payer_note", payload)
         self.assertEqual(delivery_count, 1)
+
+    def test_comment_sources_exclude_technical_and_unrelated_memos(self):
+        self.assertEqual(
+            companion_push._payment_comment(
+                {
+                    "method": "bolt12",
+                    "payer_note": "payer note",
+                    "memo": "offer description",
+                }
+            ),
+            "payer note",
+        )
+        for method in ("lightning_address", "lnurl"):
+            with self.subTest(method=method):
+                self.assertEqual(
+                    companion_push._payment_comment(
+                        {"method": method, "memo": "LNURL comment"}
+                    ),
+                    "LNURL comment",
+                )
+        for method in ("bolt12", "bolt11", "bolt11_alias_fallback", "keysend", "zap"):
+            with self.subTest(method=method):
+                self.assertEqual(
+                    companion_push._payment_comment(
+                        {"method": method, "memo": "automatically generated memo"}
+                    ),
+                    "",
+                )
+
+    def test_comment_is_sanitized_and_bounded(self):
+        raw = "  hello\n\tworld\x00\u202e " + "🚀" * 200
+        comment = companion_push._sanitize_payment_comment(raw)
+
+        self.assertTrue(comment.startswith("hello world "))
+        self.assertNotIn("\x00", comment)
+        self.assertNotIn("\u202e", comment)
+        self.assertLessEqual(len(comment), companion_push.MAX_PUSH_COMMENT_CHARS)
 
     def test_subscription_update_cannot_take_another_device_endpoint(self):
         _pairing_token, first_device = self.pair_device()

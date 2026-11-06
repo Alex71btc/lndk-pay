@@ -77,9 +77,12 @@ automatically: it opens the normal BOLT12 Pay payment screen, where the target
 and amount can be reviewed and the payment must be confirmed explicitly.
 
 Payment notifications are optional and use a UnifiedPush distributor selected
-by the user. BOLT12 Pay encrypts the notification for the paired device and
-sends only the payment amount and method; payment hashes, payer notes and memos
-are not included. No Google/Firebase service is built into the Companion.
+by the user. BOLT12 Pay encrypts every notification for the paired device. The
+payload contains the amount and method and may contain a bounded, sanitized
+genuine BOLT12 payer note or Lightning Address/LNURL comment. Android displays
+comments only when the persistent **Show payment comments** switch is enabled;
+it is off by default. Payment hashes, technical memos and invoice descriptions
+are never sent. No Google/Firebase service is built into the Companion.
 See [Android payment notifications](docs/android-payment-notifications.md) for
 setup, privacy and reliability details.
 

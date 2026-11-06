@@ -27,6 +27,7 @@
     <string name="push_payment_received_title">⚡ %1$s sats received</string>
     <string name="push_private_title">BOLT12 Pay</string>
     <string name="push_private_body">Incoming Lightning payment</string>
+    <string name="push_payment_with_comment">%1$s · %2$s</string>
     <string name="push_method_zap">Nostr Zap received</string>
     <string name="push_method_bolt12">BOLT12 payment received</string>
     <string name="push_method_lightning_address">Lightning Address payment received</string>
@@ -45,6 +46,8 @@
     <string name="push_status_pairing">Pairing is waiting for the push distributor</string>
     <string name="push_status_disabled">Not connected</string>
     <string name="push_privacy_note">Optional and Google-free: WebPush encrypts payment alerts end to end. Your chosen distributor sees only timing and encrypted data.</string>
+    <string name="push_show_comments">Show payment comments</string>
+    <string name="push_show_comments_note">Off by default. When enabled, genuine BOLT12 payer notes and Lightning Address or LNURL comments can appear in the private notification. Technical invoice descriptions are never shown.</string>
     <string name="push_disable">Disable notifications</string>
     <string name="push_retry">Retry pairing</string>
     <string name="push_open_setup">Open notification setup</string>

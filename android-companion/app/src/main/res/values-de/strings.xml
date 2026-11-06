@@ -27,6 +27,7 @@
     <string name="push_payment_received_title">⚡ %1$s sats erhalten</string>
     <string name="push_private_title">BOLT12 Pay</string>
     <string name="push_private_body">Eingehende Lightning-Zahlung</string>
+    <string name="push_payment_with_comment">%1$s · %2$s</string>
     <string name="push_method_zap">Nostr-Zap erhalten</string>
     <string name="push_method_bolt12">BOLT12-Zahlung erhalten</string>
     <string name="push_method_lightning_address">Zahlung an Lightning-Adresse erhalten</string>
@@ -45,6 +46,8 @@
     <string name="push_status_pairing">Kopplung wartet auf den Push-Distributor</string>
     <string name="push_status_disabled">Nicht verbunden</string>
     <string name="push_privacy_note">Optional und Google-frei: WebPush verschlüsselt Zahlungshinweise Ende-zu-Ende. Dein gewählter Distributor sieht nur Zeitpunkt und verschlüsselte Daten.</string>
+    <string name="push_show_comments">Zahlungskommentare anzeigen</string>
+    <string name="push_show_comments_note">Standardmäßig aus. Wenn aktiviert, können echte BOLT12-Zahlernotizen und Kommentare von Lightning-Adressen oder LNURL in der privaten Benachrichtigung erscheinen. Technische Invoice-Beschreibungen werden nie angezeigt.</string>
     <string name="push_disable">Benachrichtigungen deaktivieren</string>
     <string name="push_retry">Kopplung erneut versuchen</string>
     <string name="push_open_setup">Benachrichtigungen einrichten</string>

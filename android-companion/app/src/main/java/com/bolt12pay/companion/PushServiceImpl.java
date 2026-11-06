@@ -41,11 +41,16 @@ public final class PushServiceImpl extends PushService {
             String eventId = payload.optString("event_id");
             PushSettings settings = new PushSettings(this);
             if (!settings.rememberEvent(eventId)) return;
+            String comment =
+                    settings.showPaymentComments()
+                            ? PaymentComment.sanitize(payload.optString("comment", ""))
+                            : "";
             showPaymentNotification(
                     eventId,
                     Math.max(0, payload.optLong("amount_sat")),
                     payload.optString("method", "lightning"),
-                    payload.optString("payment_type", "payment"));
+                    payload.optString("payment_type", "payment"),
+                    comment);
         } catch (Exception error) {
             new PushSettings(this).setLastError(getString(R.string.push_message_invalid));
         }
@@ -66,7 +71,8 @@ public final class PushServiceImpl extends PushService {
             String eventId,
             long amountSat,
             String method,
-            String paymentType) {
+            String paymentType,
+            String comment) {
         NotificationManager manager = getSystemService(NotificationManager.class);
         NotificationChannel channel =
                 new NotificationChannel(
@@ -82,7 +88,14 @@ public final class PushServiceImpl extends PushService {
 
         String amount = NumberFormat.getIntegerInstance().format(amountSat);
         String title = getString(R.string.push_payment_received_title, amount);
-        String body = describePayment(method, paymentType);
+        String paymentDescription = describePayment(method, paymentType);
+        String body =
+                comment.isEmpty()
+                        ? paymentDescription
+                        : getString(
+                                R.string.push_payment_with_comment,
+                                paymentDescription,
+                                comment);
         String serverUrl = new ServerSettings(this).load();
         Intent open =
                 new Intent(
@@ -101,7 +114,7 @@ public final class PushServiceImpl extends PushService {
                         .setContentTitle(getString(R.string.push_private_title))
                         .setContentText(getString(R.string.push_private_body))
                         .build();
-        Notification notification =
+        Notification.Builder notificationBuilder =
                 new Notification.Builder(this, CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_notification_bolt)
                         .setContentTitle(title)
@@ -110,9 +123,11 @@ public final class PushServiceImpl extends PushService {
                         .setCategory(Notification.CATEGORY_STATUS)
                         .setVisibility(Notification.VISIBILITY_PRIVATE)
                         .setPublicVersion(publicVersion)
-                        .setContentIntent(pendingIntent)
-                        .build();
-        manager.notify(eventId.hashCode(), notification);
+                        .setContentIntent(pendingIntent);
+        if (!comment.isEmpty()) {
+            notificationBuilder.setStyle(new Notification.BigTextStyle().bigText(body));
+        }
+        manager.notify(eventId.hashCode(), notificationBuilder.build());
     }
 
     private String describePayment(String method, String paymentType) {

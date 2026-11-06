@@ -17,12 +17,17 @@ final class PushSettings {
     private static final String KEY_DEVICE_NAME = "device_name";
     private static final String KEY_LAST_ERROR = "last_error";
     private static final String KEY_SEEN_EVENTS = "seen_events";
+    private static final String KEY_SHOW_PAYMENT_COMMENTS = "show_payment_comments";
     private static final int MAX_SEEN_EVENTS = 100;
 
     private final SharedPreferences preferences;
 
     PushSettings(Context context) {
-        preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        this(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE));
+    }
+
+    PushSettings(SharedPreferences preferences) {
+        this.preferences = preferences;
     }
 
     void savePending(String pairingToken, String vapidPublicKey, String deviceName) {
@@ -60,6 +65,16 @@ final class PushSettings {
 
     boolean isPairing() {
         return !pairingToken().isEmpty();
+    }
+
+    boolean showPaymentComments() {
+        return preferences.getBoolean(KEY_SHOW_PAYMENT_COMMENTS, false);
+    }
+
+    void setShowPaymentComments(boolean showPaymentComments) {
+        preferences.edit()
+                .putBoolean(KEY_SHOW_PAYMENT_COMMENTS, showPaymentComments)
+                .apply();
     }
 
     void saveDeviceToken(String deviceToken) {
