@@ -319,10 +319,9 @@ class CompanionPushEnrichmentTests(unittest.IsolatedAsyncioTestCase):
             **SUBSCRIPTION,
         )
 
-    async def test_bolt12_note_reconciles_same_delayed_event_once(self):
-        payment_hash = "dd" * 32
+    async def test_immediate_push_without_note_is_not_duplicated(self):
         initial = {
-            "payment_hash": payment_hash,
+            "payment_hash": "dd" * 32,
             "direction": "incoming",
             "status": "settled",
             "amount_sat": 22,
@@ -331,7 +330,73 @@ class CompanionPushEnrichmentTests(unittest.IsolatedAsyncioTestCase):
             "memo": "Public offer description",
         }
         self.assertTrue(
-            companion_push.queue_settled_payment(self.db_path, initial, now=200)
+            companion_push.queue_settled_payment(
+                self.db_path, initial, now=200
+            )
+        )
+
+        with sqlite3.connect(self.db_path) as connection:
+            due = connection.execute(
+                "SELECT next_attempt_at FROM companion_push_deliveries"
+            ).fetchone()[0]
+        self.assertEqual(due, 200)
+
+        calls = []
+
+        async def sender(**kwargs):
+            calls.append(kwargs)
+            return object()
+
+        delivered = await companion_push.dispatch_due(
+            self.db_path,
+            vapid_private_key=companion_push.generate_vapid_private_key(),
+            vapid_subject="https://pay.example.com",
+            sender=sender,
+            now=200,
+        )
+        self.assertEqual(delivered, 1)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("comment", json.loads(calls[0]["data"]))
+
+        enriched = {
+            **initial,
+            "method": "bolt12",
+            "type": "offer",
+            "payer_note": "late payer note",
+        }
+        self.assertFalse(
+            companion_push.queue_settled_payment(
+                self.db_path,
+                enriched,
+                now=201,
+                allow_create=False,
+            )
+        )
+        delivered = await companion_push.dispatch_due(
+            self.db_path,
+            vapid_private_key=companion_push.generate_vapid_private_key(),
+            vapid_subject="https://pay.example.com",
+            sender=sender,
+            now=201,
+        )
+        self.assertEqual(delivered, 0)
+        self.assertEqual(len(calls), 1)
+
+    async def test_immediate_bolt12_push_includes_available_payer_note(self):
+        item = {
+            "payment_hash": "ee" * 32,
+            "direction": "incoming",
+            "status": "settled",
+            "amount_sat": 22,
+            "method": "bolt12",
+            "type": "offer",
+            "memo": "",
+            "payer_note": "Danke für BOLT12 Pay!",
+        }
+        self.assertTrue(
+            companion_push.queue_settled_payment(
+                self.db_path, item, now=300
+            )
         )
 
         calls = []
@@ -345,84 +410,15 @@ class CompanionPushEnrichmentTests(unittest.IsolatedAsyncioTestCase):
             vapid_private_key=companion_push.generate_vapid_private_key(),
             vapid_subject="https://pay.example.com",
             sender=sender,
-            now=214,
-        )
-        self.assertEqual(delivered, 0)
-        self.assertEqual(calls, [])
-
-        with sqlite3.connect(self.db_path) as connection:
-            event_id, original_payload = connection.execute(
-                "SELECT id, payload FROM companion_push_events"
-            ).fetchone()
-            original_due = connection.execute(
-                "SELECT next_attempt_at FROM companion_push_deliveries"
-            ).fetchone()[0]
-        self.assertNotIn("comment", json.loads(original_payload))
-        self.assertEqual(original_due, 215)
-
-        enriched = {
-            **initial,
-            "method": "bolt12",
-            "type": "offer",
-            "payer_note": "real payer note",
-        }
-        self.assertTrue(
-            companion_push.queue_settled_payment(
-                self.db_path,
-                enriched,
-                now=214,
-                allow_create=False,
-            )
-        )
-        self.assertFalse(
-            companion_push.queue_settled_payment(
-                self.db_path,
-                enriched,
-                now=214,
-                allow_create=False,
-            )
-        )
-
-        with sqlite3.connect(self.db_path) as connection:
-            reconciled_id, reconciled_payload = connection.execute(
-                "SELECT id, payload FROM companion_push_events"
-            ).fetchone()
-            delivery_count, reconciled_due = connection.execute(
-                "SELECT COUNT(*), MIN(next_attempt_at) FROM companion_push_deliveries"
-            ).fetchone()
-        self.assertEqual(reconciled_id, event_id)
-        self.assertEqual(delivery_count, 1)
-        self.assertEqual(reconciled_due, original_due)
-        self.assertEqual(json.loads(reconciled_payload)["comment"], "real payer note")
-        self.assertEqual(
-            json.loads(reconciled_payload)["comment_source"],
-            "payer_note",
-        )
-
-        delivered = await companion_push.dispatch_due(
-            self.db_path,
-            vapid_private_key=companion_push.generate_vapid_private_key(),
-            vapid_subject="https://pay.example.com",
-            sender=sender,
-            now=215,
+            now=300,
         )
         self.assertEqual(delivered, 1)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(json.loads(calls[0]["data"])["event_id"], event_id)
-        self.assertEqual(
-            json.loads(calls[0]["data"])["comment"],
-            "real payer note",
-        )
 
-        changed_after_delivery = {**enriched, "payer_note": "too late"}
-        self.assertFalse(
-            companion_push.queue_settled_payment(
-                self.db_path,
-                changed_after_delivery,
-                now=216,
-                allow_create=False,
-            )
-        )
+        payload = json.loads(calls[0]["data"])
+        self.assertEqual(payload["comment"], "Danke für BOLT12 Pay!")
+        self.assertEqual(payload["comment_source"], "payer_note")
+
 
 
 class PublicOnlyResolverTests(unittest.IsolatedAsyncioTestCase):
