@@ -13,11 +13,13 @@ final class PairingLink {
     final String serverUrl;
     final String pairingToken;
     final String vapidPublicKey;
+    final boolean browserPairing;
 
-    private PairingLink(String serverUrl, String pairingToken, String vapidPublicKey) {
+    private PairingLink(String serverUrl, String pairingToken, String vapidPublicKey, boolean browserPairing) {
         this.serverUrl = serverUrl;
         this.pairingToken = pairingToken;
         this.vapidPublicKey = vapidPublicKey;
+        this.browserPairing = browserPairing;
     }
 
     static PairingLink parse(String raw) {
@@ -31,7 +33,12 @@ final class PairingLink {
             String token = query.get("token");
             String vapid = query.get("vapid");
             if (serverUrl == null || !isToken(token) || !isVapidKey(vapid)) return null;
-            return new PairingLink(serverUrl, token, vapid);
+            String mode = query.getOrDefault("mode", "direct");
+            if (!"direct".equals(mode) && !"browser".equals(mode)) {
+                return null;
+            }
+            return new PairingLink(
+                    serverUrl, token, vapid, "browser".equals(mode));
         } catch (URISyntaxException error) {
             return null;
         }

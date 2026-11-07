@@ -4,6 +4,7 @@ import base64
 import hashlib
 import ipaddress
 import json
+import re
 import secrets
 import socket
 import sqlite3
@@ -14,12 +15,18 @@ from typing import Any, Awaitable, Callable
 from urllib.parse import urlparse
 
 import aiohttp
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from py_vapid import Vapid
 from pywebpush import WebPushException, webpush_async
 
 
 PAIRING_TTL_SECONDS = 10 * 60
+BROWSER_ACTION_TTL_SECONDS = 10 * 60
+BROWSER_ENVELOPE_VERSION = 1
+BROWSER_ENVELOPE_INFO = b"bolt12-pay/browser-action/v1"
 PUSH_TTL_SECONDS = 24 * 60 * 60
 MAX_PUSH_ATTEMPTS = 12
 VAPID_PRIVATE_KEY_FIELD = "companion_vapid_private_key"
@@ -79,6 +86,95 @@ async def secure_webpush_async(**kwargs):
         )
 
 
+
+async def send_pairing_confirmation(
+    *,
+    pairing_token: str,
+    device_token: str,
+    endpoint: str,
+    p256dh: str,
+    auth: str,
+    vapid_private_key: str,
+    vapid_subject: str,
+    sender: Callable[..., Awaitable[Any]] = secure_webpush_async,
+) -> None:
+    """Send the device credential only through encrypted WebPush."""
+    subscription = validate_subscription(endpoint, p256dh, auth)
+
+    if not pairing_token or not device_token:
+        raise ValueError("Missing pairing credentials")
+
+    payload = json.dumps(
+        {
+            "version": 1,
+            "type": "pairing_confirmed",
+            "pairing_token": pairing_token,
+            "device_token": device_token,
+        },
+        separators=(",", ":"),
+    )
+
+    await sender(
+        subscription_info={
+            "endpoint": subscription["endpoint"],
+            "keys": {
+                "p256dh": subscription["p256dh"],
+                "auth": subscription["auth"],
+            },
+        },
+        data=payload,
+        vapid_private_key=vapid_private_key,
+        vapid_claims={"sub": vapid_subject},
+        ttl=600,
+        timeout=15,
+        headers={"Urgency": "high"},
+    )
+
+
+async def send_browser_action_confirmation(
+    *,
+    action_type: str,
+    action_nonce: str,
+    endpoint: str,
+    p256dh: str,
+    auth: str,
+    vapid_private_key: str,
+    vapid_subject: str,
+    sender: Callable[..., Awaitable[Any]] = secure_webpush_async,
+) -> None:
+    """Confirm a browser-authorized renewal or revocation over WebPush."""
+    if action_type not in {"subscription_updated", "device_revoked"}:
+        raise ValueError("Invalid browser action confirmation")
+    if not _valid_capability(action_nonce):
+        raise ValueError("Invalid browser action nonce")
+
+    subscription = validate_subscription(endpoint, p256dh, auth)
+    payload = json.dumps(
+        {
+            "version": 1,
+            "type": action_type,
+            "action_nonce": action_nonce,
+        },
+        separators=(",", ":"),
+    )
+
+    await sender(
+        subscription_info={
+            "endpoint": subscription["endpoint"],
+            "keys": {
+                "p256dh": subscription["p256dh"],
+                "auth": subscription["auth"],
+            },
+        },
+        data=payload,
+        vapid_private_key=vapid_private_key,
+        vapid_claims={"sub": vapid_subject},
+        ttl=600,
+        timeout=15,
+        headers={"Urgency": "high"},
+    )
+
+
 def _connect(db_path: Path | str) -> sqlite3.Connection:
     connection = sqlite3.connect(db_path)
     connection.row_factory = sqlite3.Row
@@ -92,6 +188,12 @@ def init_db(db_path: Path | str) -> None:
             """
             CREATE TABLE IF NOT EXISTS companion_pairing_tokens (
                 token_hash TEXT PRIMARY KEY,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS companion_browser_actions (
+                nonce_hash TEXT PRIMARY KEY,
                 created_at INTEGER NOT NULL,
                 expires_at INTEGER NOT NULL
             );
@@ -143,8 +245,16 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _decode_base64url(value: str, label: str) -> bytes:
-    if not value or len(value) > 200:
+def _valid_capability(value: str) -> bool:
+    return bool(
+        isinstance(value, str)
+        and 32 <= len(value) <= 200
+        and re.fullmatch(r"[A-Za-z0-9_-]+", value)
+    )
+
+
+def _decode_base64url(value: str, label: str, *, max_length: int = 200) -> bytes:
+    if not value or len(value) > max_length:
         raise ValueError(f"Invalid {label}")
     try:
         padded = value + "=" * ((4 - len(value) % 4) % 4)
@@ -171,6 +281,150 @@ def vapid_public_key(private_key: str) -> str:
         serialization.PublicFormat.UncompressedPoint,
     )
     return _encode_base64url(raw_public_key)
+
+
+def decrypt_browser_action(
+    envelope: str,
+    vapid_private_key: str,
+    *,
+    now: int | None = None,
+) -> dict[str, Any]:
+    """Decrypt and validate an Android-to-browser action envelope."""
+    if (
+        not isinstance(envelope, str)
+        or not 140 <= len(envelope) <= 6000
+        or re.fullmatch(r"[A-Za-z0-9_-]+", envelope) is None
+    ):
+        raise ValueError("Invalid encrypted browser action")
+
+    try:
+        packed = _decode_base64url(
+            envelope, "browser action", max_length=6000
+        )
+        if len(packed) < 1 + 65 + 16 + 12 + 16:
+            raise ValueError("Invalid encrypted browser action")
+        if packed[0] != BROWSER_ENVELOPE_VERSION:
+            raise ValueError("Unsupported encrypted browser action")
+
+        ephemeral_key = ec.EllipticCurvePublicKey.from_encoded_point(
+            ec.SECP256R1(), packed[1:66]
+        )
+        salt = packed[66:82]
+        nonce = packed[82:94]
+        ciphertext = packed[94:]
+
+        private_bytes = _decode_base64url(
+            str(vapid_private_key or ""), "VAPID private key"
+        )
+        if len(private_bytes) != 32:
+            raise ValueError("Invalid VAPID private key")
+        private_value = int.from_bytes(private_bytes, "big")
+        private_key = ec.derive_private_key(private_value, ec.SECP256R1())
+        shared_secret = private_key.exchange(ec.ECDH(), ephemeral_key)
+        action_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            info=BROWSER_ENVELOPE_INFO,
+        ).derive(shared_secret)
+        plaintext = AESGCM(action_key).decrypt(
+            nonce,
+            ciphertext,
+            BROWSER_ENVELOPE_INFO,
+        )
+        payload = json.loads(plaintext.decode("utf-8"))
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("Invalid encrypted browser action") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid encrypted browser action")
+
+    operation = payload.get("operation")
+    required = {
+        "pair": {
+            "operation", "issued_at", "action_nonce", "pairing_token",
+            "device_name", "endpoint", "p256dh", "auth",
+        },
+        "renew": {
+            "operation", "issued_at", "action_nonce", "device_token",
+            "endpoint", "p256dh", "auth",
+        },
+        "revoke": {
+            "operation", "issued_at", "action_nonce", "device_token",
+        },
+    }.get(operation)
+    if required is None or set(payload) != required:
+        raise ValueError("Invalid encrypted browser action")
+
+    timestamp = int(time.time()) if now is None else int(now)
+    issued_at = payload.get("issued_at")
+    if (
+        isinstance(issued_at, bool)
+        or not isinstance(issued_at, int)
+        or issued_at > timestamp + 60
+        or issued_at < timestamp - BROWSER_ACTION_TTL_SECONDS
+    ):
+        raise ValueError("Encrypted browser action expired")
+    if not _valid_capability(payload.get("action_nonce")):
+        raise ValueError("Invalid encrypted browser action")
+
+    for key in required - {"issued_at"}:
+        if not isinstance(payload.get(key), str) or not payload[key]:
+            raise ValueError("Invalid encrypted browser action")
+    if "pairing_token" in payload and not _valid_capability(payload["pairing_token"]):
+        raise ValueError("Invalid encrypted browser action")
+    if "device_token" in payload and not _valid_capability(payload["device_token"]):
+        raise ValueError("Invalid encrypted browser action")
+    if len(str(payload.get("device_name", ""))) > 80:
+        raise ValueError("Invalid encrypted browser action")
+    if len(str(payload.get("endpoint", ""))) > 1000:
+        raise ValueError("Invalid encrypted browser action")
+    if len(str(payload.get("p256dh", ""))) > 200:
+        raise ValueError("Invalid encrypted browser action")
+    if len(str(payload.get("auth", ""))) > 200:
+        raise ValueError("Invalid encrypted browser action")
+
+    return payload
+
+
+def claim_browser_action(
+    db_path: Path | str,
+    action_nonce: str,
+    *,
+    now: int | None = None,
+) -> None:
+    if not _valid_capability(action_nonce):
+        raise ValueError("Invalid browser action nonce")
+    timestamp = int(time.time()) if now is None else int(now)
+    nonce_hash = _hash_token(action_nonce)
+    try:
+        with _connect(db_path) as connection:
+            connection.execute(
+                "DELETE FROM companion_browser_actions WHERE expires_at < ?",
+                (timestamp,),
+            )
+            connection.execute(
+                """
+                INSERT INTO companion_browser_actions(
+                    nonce_hash, created_at, expires_at
+                ) VALUES (?, ?, ?)
+                """,
+                (nonce_hash, timestamp, timestamp + BROWSER_ACTION_TTL_SECONDS),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise PermissionError("Browser action was already used") from exc
+
+
+def release_browser_action(db_path: Path | str, action_nonce: str) -> None:
+    if not _valid_capability(action_nonce):
+        return
+    with _connect(db_path) as connection:
+        connection.execute(
+            "DELETE FROM companion_browser_actions WHERE nonce_hash = ?",
+            (_hash_token(action_nonce),),
+        )
 
 
 def validate_subscription(
@@ -251,6 +505,7 @@ def register_device(
     p256dh: str,
     auth: str,
     now: int | None = None,
+    include_rollback: bool = False,
 ) -> dict[str, Any]:
     timestamp = int(time.time()) if now is None else int(now)
     subscription = validate_subscription(endpoint, p256dh, auth)
@@ -278,7 +533,7 @@ def register_device(
         )
 
         existing = connection.execute(
-            "SELECT id, created_at FROM companion_devices WHERE endpoint = ?",
+            "SELECT * FROM companion_devices WHERE endpoint = ?",
             (subscription["endpoint"],),
         ).fetchone()
         device_id = str(existing["id"]) if existing else secrets.token_urlsafe(12)
@@ -313,12 +568,15 @@ def register_device(
             ),
         )
 
-    return {
+    result = {
         "id": device_id,
         "name": device_name,
         "device_token": device_token,
         "created_at": created_at,
     }
+    if include_rollback:
+        result["_rollback"] = dict(existing) if existing is not None else None
+    return result
 
 
 def _device_for_token(
@@ -341,6 +599,7 @@ def update_device_subscription(
     p256dh: str,
     auth: str,
     now: int | None = None,
+    include_rollback: bool = False,
 ) -> dict[str, Any]:
     timestamp = int(time.time()) if now is None else int(now)
     subscription = validate_subscription(endpoint, p256dh, auth)
@@ -368,7 +627,75 @@ def update_device_subscription(
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError("Push endpoint is already paired") from exc
-    return {"id": device["id"], "name": device["name"], "enabled": True}
+    result = {"id": device["id"], "name": device["name"], "enabled": True}
+    if include_rollback:
+        result["_rollback"] = dict(device)
+    return result
+
+
+def rollback_device_change(
+    db_path: Path | str,
+    *,
+    current_device_token: str,
+    previous: dict[str, Any] | None,
+) -> bool:
+    """Undo only the device row written with current_device_token."""
+    with _connect(db_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        current = _device_for_token(connection, current_device_token)
+        if current is None:
+            return False
+        if previous is None:
+            cursor = connection.execute(
+                "DELETE FROM companion_devices WHERE id = ? AND token_hash = ?",
+                (current["id"], current["token_hash"]),
+            )
+            return cursor.rowcount > 0
+
+        if str(previous.get("id") or "") != str(current["id"]):
+            return False
+        cursor = connection.execute(
+            """
+            UPDATE companion_devices
+            SET name = ?, token_hash = ?, endpoint = ?, p256dh = ?, auth = ?,
+                enabled = ?, created_at = ?, updated_at = ?, last_seen_at = ?,
+                last_success_at = ?, last_error = ?
+            WHERE id = ? AND token_hash = ?
+            """,
+            (
+                previous["name"],
+                previous["token_hash"],
+                previous["endpoint"],
+                previous["p256dh"],
+                previous["auth"],
+                previous["enabled"],
+                previous["created_at"],
+                previous["updated_at"],
+                previous["last_seen_at"],
+                previous["last_success_at"],
+                previous["last_error"],
+                current["id"],
+                current["token_hash"],
+            ),
+        )
+    return cursor.rowcount > 0
+
+
+def device_subscription(
+    db_path: Path | str,
+    device_token: str,
+) -> dict[str, Any] | None:
+    with _connect(db_path) as connection:
+        device = _device_for_token(connection, device_token)
+        if device is None:
+            return None
+        return {
+            "id": device["id"],
+            "name": device["name"],
+            "endpoint": device["endpoint"],
+            "p256dh": device["p256dh"],
+            "auth": device["auth"],
+        }
 
 
 def unregister_device_token(db_path: Path | str, device_token: str) -> bool:

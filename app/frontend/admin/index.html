@@ -3,6 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (() => {
+        const prefix = "#companion-action=";
+        if (!location.hash.startsWith(prefix)) return;
+
+        const encoded = location.hash.slice(prefix.length);
+        history.replaceState(null, "", location.pathname + location.search);
+
+        if (!/^[A-Za-z0-9_-]{140,6000}$/.test(encoded)) return;
+
+        try {
+          sessionStorage.setItem(
+            "bolt12pay.browser-action",
+            JSON.stringify({ envelope: encoded, receivedAt: Date.now() })
+          );
+        } catch {}
+      })();
+    </script>
     <meta name="theme-color" content="#0f172a" />
     <script src="/assets/i18n/runtime.js"></script>
     <script src="/assets/i18n/pay.js"></script>
@@ -1828,6 +1846,7 @@
         >
           Geräte werden geladen…
         </div>
+
         <div class="row" style="margin-top: 12px">
           <button id="createCompanionPairingBtn" type="button">
             <span data-i18n="companion.create_pairing">Gerät koppeln</span>
@@ -4048,6 +4067,7 @@
             server: window.location.origin,
             token: data.pairing_token,
             vapid: data.vapid_public_key,
+            mode: "browser",
           });
           const pairingUri = `bolt12pay://pair?${query.toString()}`;
           openCompanionPairingLink.dataset.pairingUri = pairingUri;
@@ -4083,6 +4103,127 @@
           setStatus(errorToMessage(error), "error", true);
         } finally {
           createCompanionPairingBtn.disabled = false;
+        }
+      }
+
+      async function completeCompanionBrowserPairing() {
+        const storageKey = "bolt12pay.browser-action";
+        let stored = "";
+
+        try {
+          stored = sessionStorage.getItem(storageKey) || "";
+          sessionStorage.removeItem(storageKey);
+        } catch {
+          return;
+        }
+
+        if (!stored) return;
+
+        let envelope;
+
+        try {
+          const record = JSON.parse(stored);
+          const receivedAt = Number(record.receivedAt);
+          const age = Date.now() - receivedAt;
+
+          if (!Number.isFinite(age) || age < 0 || age > 600000) {
+            setStatus(
+              window.__t("companion.browser_pair_expired"),
+              "warn", true,
+            );
+            return;
+          }
+
+          envelope = String(record.envelope || "");
+          if (!/^[A-Za-z0-9_-]{140,6000}$/.test(envelope)) {
+            throw new Error("Invalid pairing data");
+          }
+
+          const base64 = envelope
+            .replace(/-/g, "+")
+            .replace(/_/g, "/");
+          const padded = base64.padEnd(
+            Math.ceil(base64.length / 4) * 4, "="
+          );
+          const packed = Uint8Array.from(
+            atob(padded), char => char.charCodeAt(0)
+          );
+          if (packed.length < 110 || packed[0] !== 1) {
+            throw new Error("Invalid pairing data");
+          }
+        } catch {
+          setStatus(
+            window.__t("companion.browser_pair_invalid"),
+            "error", true,
+          );
+          return;
+        }
+
+        if (!window.confirm(window.__t("companion.browser_pair_confirm"))) {
+          setStatus(
+            window.__t("companion.browser_pair_cancelled"),
+            "warn", true,
+          );
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            "/api/admin/companion/browser-action",
+            {
+              method: "POST",
+              credentials: "same-origin",
+              cache: "no-store",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": getCookie("csrf_token") || "",
+              },
+              body: JSON.stringify({ envelope }),
+            },
+          );
+
+          const data = await readJsonOrThrow(response);
+          if (!response.ok || !data.ok) {
+            throw new Error(
+              data.detail || window.__t("companion.browser_pair_failed")
+            );
+          }
+
+          await loadCompanionDevices();
+          setStatus(
+            window.__t("companion.browser_pair_success"),
+            "ok", true,
+          );
+
+          // Android receives no credentials through this return link.
+          const returnUri = "bolt12pay://return";
+          let returnButton = document.getElementById(
+            "companionReturnToApp"
+          );
+
+          if (!returnButton && companionPushSection) {
+            returnButton = document.createElement("button");
+            returnButton.id = "companionReturnToApp";
+            returnButton.type = "button";
+            returnButton.textContent =
+              window.__t("companion.return_to_app");
+            returnButton.addEventListener("click", () => {
+              window.location.assign(returnUri);
+            });
+            companionPushSection.appendChild(returnButton);
+          }
+
+          if (returnButton) returnButton.hidden = false;
+
+          // Chrome may require user interaction for external app links.
+          // The button above remains available as a fallback.
+          window.location.assign(returnUri);
+        } catch (error) {
+          setStatus(
+            window.__t("companion.browser_pair_failed")
+              + " " + errorToMessage(error),
+            "error", true,
+          );
         }
       }
 
@@ -9489,8 +9630,9 @@
 
       async function initAdminPageData() {
           console.time("checkPaySession");
-          await checkPaySession();
+          const authenticated = await checkPaySession();
           console.timeEnd("checkPaySession");
+          if (!authenticated) return;
 
           try {
             await checkPublicBip353Status();
@@ -9520,6 +9662,8 @@
             console.error("Companion device load failed", error);
           }
 
+          await completeCompanionBrowserPairing();
+
           // NWC-Daten nach erfolgreicher Auth laden
           await initNwcData();
 
@@ -9544,9 +9688,12 @@
           const data = await readJsonOrThrow(res);
           if (data.enabled && !data.ok) {
             window.location.assign("/pay-login?next=" + encodeURIComponent(window.location.pathname + window.location.search));
+            return false;
           }
+          return true;
         } catch {
           window.location.assign("/pay-login?next=" + encodeURIComponent(window.location.pathname + window.location.search));
+          return false;
         }
       }
 

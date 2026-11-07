@@ -1679,6 +1679,10 @@ class CompanionSubscriptionRequest(BaseModel):
     p256dh: str = Field(min_length=40, max_length=200)
     auth: str = Field(min_length=16, max_length=200)
 
+
+class CompanionBrowserActionRequest(BaseModel):
+    envelope: str = Field(min_length=140, max_length=6000)
+
 from typing import Literal
 
 class NwcConnectionCreateRequest(BaseModel):
@@ -5869,7 +5873,12 @@ async def app_shell(request: StarletteRequest):
         raise HTTPException(status_code=404, detail="frontend/public/index.html not found")
 
     resp = FileResponse(index_file)
-    for k, v in _no_store_headers().items():
+    for k, v in _no_store_headers(
+        {
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+        }
+    ).items():
         resp.headers[k] = v
     return resp
 
@@ -5893,7 +5902,12 @@ def pay_page(request: StarletteRequest):
         raise HTTPException(status_code=404, detail="frontend/admin/index.html not found")
 
     resp = FileResponse(index_file)
-    for k, v in _no_store_headers().items():
+    for k, v in _no_store_headers(
+        {
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+        }
+    ).items():
         resp.headers[k] = v
     return resp
 
@@ -5915,7 +5929,12 @@ def pay_login_page(request: StarletteRequest):
     if not file.exists():
         raise HTTPException(status_code=404, detail="frontend/admin/pay-login.html not found")
     resp = FileResponse(file, media_type="text/html")
-    for k, v in _no_store_headers().items():
+    for k, v in _no_store_headers(
+        {
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+        }
+    ).items():
         resp.headers[k] = v
     return resp
 
@@ -6053,6 +6072,155 @@ def api_admin_companion_device_delete(
     if not companion_push.revoke_device(DB_PATH, device_id):
         raise HTTPException(status_code=404, detail="Companion device not found")
     return JSONResponse({"ok": True}, headers=_no_store_headers())
+
+
+@app.post("/api/admin/companion/browser-action")
+async def api_admin_companion_browser_action(
+    payload: CompanionBrowserActionRequest,
+    request: StarletteRequest,
+):
+    require_pay_auth(request)
+    _require_csrf(request)
+
+    try:
+        private_key = _companion_vapid_private_key(create=False)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Companion encryption keys are unavailable",
+        ) from exc
+
+    if not private_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Companion encryption keys are not initialized",
+        )
+
+    try:
+        action = companion_push.decrypt_browser_action(
+            payload.envelope,
+            private_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    action_nonce = action["action_nonce"]
+    try:
+        companion_push.claim_browser_action(DB_PATH, action_nonce)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    operation = action["operation"]
+    device = None
+    try:
+        if operation == "pair":
+            device = companion_push.register_device(
+                DB_PATH,
+                pairing_token=action["pairing_token"],
+                name=action["device_name"],
+                endpoint=action["endpoint"],
+                p256dh=action["p256dh"],
+                auth=action["auth"],
+                include_rollback=True,
+            )
+            previous = device.pop("_rollback")
+            try:
+                await companion_push.send_pairing_confirmation(
+                    pairing_token=action["pairing_token"],
+                    device_token=device["device_token"],
+                    endpoint=action["endpoint"],
+                    p256dh=action["p256dh"],
+                    auth=action["auth"],
+                    vapid_private_key=private_key,
+                    vapid_subject=_companion_vapid_subject(),
+                )
+            except Exception:
+                companion_push.rollback_device_change(
+                    DB_PATH,
+                    current_device_token=device["device_token"],
+                    previous=previous,
+                )
+                raise
+        elif operation == "renew":
+            device = companion_push.update_device_subscription(
+                DB_PATH,
+                device_token=action["device_token"],
+                endpoint=action["endpoint"],
+                p256dh=action["p256dh"],
+                auth=action["auth"],
+                include_rollback=True,
+            )
+            previous = device.pop("_rollback")
+            try:
+                await companion_push.send_browser_action_confirmation(
+                    action_type="subscription_updated",
+                    action_nonce=action_nonce,
+                    endpoint=action["endpoint"],
+                    p256dh=action["p256dh"],
+                    auth=action["auth"],
+                    vapid_private_key=private_key,
+                    vapid_subject=_companion_vapid_subject(),
+                )
+            except Exception:
+                companion_push.rollback_device_change(
+                    DB_PATH,
+                    current_device_token=action["device_token"],
+                    previous=previous,
+                )
+                raise
+        elif operation == "revoke":
+            subscription = companion_push.device_subscription(
+                DB_PATH,
+                action["device_token"],
+            )
+            if subscription is None:
+                raise PermissionError("Unknown companion device")
+            await companion_push.send_browser_action_confirmation(
+                action_type="device_revoked",
+                action_nonce=action_nonce,
+                endpoint=subscription["endpoint"],
+                p256dh=subscription["p256dh"],
+                auth=subscription["auth"],
+                vapid_private_key=private_key,
+                vapid_subject=_companion_vapid_subject(),
+            )
+            if not companion_push.unregister_device_token(
+                DB_PATH, action["device_token"]
+            ):
+                raise PermissionError("Unknown companion device")
+            device = subscription
+        else:
+            raise ValueError("Invalid browser action")
+    except PermissionError as exc:
+        companion_push.release_browser_action(DB_PATH, action_nonce)
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        companion_push.release_browser_action(DB_PATH, action_nonce)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        companion_push.release_browser_action(DB_PATH, action_nonce)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Encrypted companion confirmation could not be sent. "
+                "Retry the browser action."
+            ),
+        ) from exc
+
+    # Never return device credentials or subscription secrets to the browser.
+    return JSONResponse(
+        {
+            "ok": True,
+            "operation": operation,
+            "device": {
+                "id": device["id"],
+                "name": device["name"],
+            },
+        },
+        headers=_no_store_headers(),
+    )
 
 
 @app.post("/api/companion/pair")

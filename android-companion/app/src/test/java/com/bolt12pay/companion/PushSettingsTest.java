@@ -23,16 +23,56 @@ public final class PushSettingsTest {
         assertTrue(reopened.showPaymentComments());
     }
 
+    @Test
+    public void browserPairingPersistsModeAndTracksRenewalAndRevokeActions() {
+        PushSettings settings = new PushSettings(inMemoryPreferences());
+
+        settings.savePending(
+                "A".repeat(43),
+                "B".repeat(87),
+                "Pixel Test",
+                true);
+        assertTrue(settings.isBrowserPairing());
+        assertTrue(settings.isPairing());
+        assertFalse(settings.hasPendingBrowserAction());
+
+        settings.saveBrowserSubscription(
+                "https://push.example/one", "C".repeat(87), "D".repeat(22));
+        assertTrue(settings.hasPendingBrowserAction());
+        assertTrue("pair".equals(settings.browserOperation()));
+
+        settings.saveDeviceToken("E".repeat(43));
+        assertTrue(settings.isPaired());
+        assertFalse(settings.hasPendingBrowserAction());
+        assertTrue(settings.isBrowserPairing());
+
+        settings.saveBrowserSubscription(
+                "https://push.example/two", "F".repeat(87), "G".repeat(22));
+        assertTrue(settings.hasPendingBrowserAction());
+        assertTrue("renew".equals(settings.browserOperation()));
+        settings.completeBrowserRenewal();
+        assertFalse(settings.hasPendingBrowserAction());
+
+        assertTrue(settings.beginBrowserRevoke());
+        assertTrue(settings.hasPendingBrowserAction());
+        assertTrue("revoke".equals(settings.browserOperation()));
+    }
+
     private SharedPreferences inMemoryPreferences() {
-        Map<String, Boolean> booleans = new HashMap<>();
+        Map<String, Object> values = new HashMap<>();
         SharedPreferences.Editor editor =
                 (SharedPreferences.Editor)
                         Proxy.newProxyInstance(
                                 SharedPreferences.Editor.class.getClassLoader(),
                                 new Class<?>[] {SharedPreferences.Editor.class},
                                 (proxy, method, arguments) -> {
-                                    if ("putBoolean".equals(method.getName())) {
-                                        booleans.put((String) arguments[0], (Boolean) arguments[1]);
+                                    if ("putBoolean".equals(method.getName())
+                                            || "putString".equals(method.getName())) {
+                                        values.put((String) arguments[0], arguments[1]);
+                                        return proxy;
+                                    }
+                                    if ("remove".equals(method.getName())) {
+                                        values.remove((String) arguments[0]);
                                         return proxy;
                                     }
                                     if ("apply".equals(method.getName())) return null;
@@ -44,9 +84,14 @@ public final class PushSettingsTest {
                         new Class<?>[] {SharedPreferences.class},
                         (proxy, method, arguments) -> {
                             if ("getBoolean".equals(method.getName())) {
-                                return booleans.getOrDefault(
+                                return values.getOrDefault(
                                         (String) arguments[0],
-                                        (Boolean) arguments[1]);
+                                        arguments[1]);
+                            }
+                            if ("getString".equals(method.getName())) {
+                                return values.getOrDefault(
+                                        (String) arguments[0],
+                                        arguments[1]);
                             }
                             if ("edit".equals(method.getName())) return editor;
                             throw new AssertionError("Unexpected preferences call: " + method.getName());

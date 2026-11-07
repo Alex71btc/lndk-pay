@@ -12,6 +12,9 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.view.Gravity;
 import android.widget.Button;
@@ -24,6 +27,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import org.unifiedpush.android.connector.UnifiedPush;
+import org.json.JSONObject;
 
 import static org.unifiedpush.android.connector.ConstantsKt.INSTANCE_DEFAULT;
 
@@ -31,6 +35,41 @@ public final class MainActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 71;
     private ServerSettings serverSettings;
     private PushSettings pushSettings;
+    private boolean pairingUiRequested = false;
+    private boolean appResumed = false;
+    private boolean autoBrowserHandoff = false;
+    private long browserHandoffDeadline = 0L;
+
+    private final Handler browserHandoffHandler =
+            new Handler(Looper.getMainLooper());
+
+    private final Runnable browserHandoffPoll = new Runnable() {
+        @Override
+        public void run() {
+            if (!appResumed || !autoBrowserHandoff) return;
+
+            if (pushSettings.isBrowserPairing()
+                    && pushSettings.hasPendingBrowserAction()) {
+                autoBrowserHandoff = false;
+                openBrowserAction();
+                return;
+            }
+
+            if (SystemClock.uptimeMillis() >= browserHandoffDeadline) {
+                autoBrowserHandoff = false;
+                return;
+            }
+
+            browserHandoffHandler.postDelayed(this, 400L);
+        }
+    };
+
+    private void scheduleAutoBrowserHandoff() {
+        browserHandoffHandler.removeCallbacks(browserHandoffPoll);
+        if (appResumed && autoBrowserHandoff) {
+            browserHandoffHandler.postDelayed(browserHandoffPoll, 400L);
+        }
+    }
     private String pendingTarget;
 
     @Override
@@ -42,6 +81,24 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        appResumed = true;
+        if (pairingUiRequested && serverSettings != null) {
+            String url = serverSettings.load();
+            showSettingsScreen(url == null ? "" : url);
+        }
+        scheduleAutoBrowserHandoff();
+    }
+
+    @Override
+    protected void onPause() {
+        appResumed = false;
+        browserHandoffHandler.removeCallbacks(browserHandoffPoll);
+        super.onPause();
+    }
+
+    @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
@@ -49,6 +106,23 @@ public final class MainActivity extends Activity {
     }
 
     private void handleIntent(Intent intent) {
+        Uri incoming = intent == null ? null : intent.getData();
+
+        if (intent != null
+                && Intent.ACTION_VIEW.equals(intent.getAction())
+                && incoming != null
+                && "bolt12pay".equalsIgnoreCase(incoming.getScheme())
+                && "return".equalsIgnoreCase(incoming.getHost())
+                && (incoming.getPath() == null || incoming.getPath().isEmpty())
+                && incoming.getQuery() == null
+                && incoming.getFragment() == null) {
+            pairingUiRequested = false;
+            pendingTarget = null;
+            String url = serverSettings.load();
+            showSettingsScreen(url == null ? "" : url);
+            return;
+        }
+
         PairingLink pairingLink =
                 intent == null || intent.getData() == null
                         ? null
@@ -63,8 +137,13 @@ public final class MainActivity extends Activity {
             pushSettings.savePending(
                     pairingLink.pairingToken,
                     pairingLink.vapidPublicKey,
-                    Build.MANUFACTURER + " " + Build.MODEL);
+                    Build.MANUFACTURER + " " + Build.MODEL,
+                    pairingLink.browserPairing);
+            pairingUiRequested = true;
+            autoBrowserHandoff = pairingLink.browserPairing;
+            browserHandoffDeadline = SystemClock.uptimeMillis() + 30000L;
             beginPushRegistration();
+            scheduleAutoBrowserHandoff();
             return;
         }
 
@@ -137,9 +216,15 @@ public final class MainActivity extends Activity {
                                 INSTANCE_DEFAULT,
                                 getString(R.string.push_distributor_registration),
                                 vapid);
-                        showMessageScreen(
-                                getString(R.string.push_pairing_started_title),
-                                getString(R.string.push_pairing_started_message));
+                        if (pushSettings.isBrowserPairing()) {
+                            String serverUrl = serverSettings.load();
+                            showSettingsScreen(
+                                    serverUrl == null ? "" : serverUrl);
+                        } else {
+                            String serverUrl = serverSettings.load();
+                            showSettingsScreen(
+                                    serverUrl == null ? "" : serverUrl);
+                        }
                     } else {
                         pushSettings.setLastError(getString(R.string.push_no_distributor));
                         showMessageScreen(
@@ -267,6 +352,9 @@ public final class MainActivity extends Activity {
         if (!pushSettings.lastError().isEmpty()) {
             pushStatus = getString(R.string.push_status_error, pushSettings.lastError());
             pushStatusColor = Color.rgb(255, 170, 120);
+        } else if (pushSettings.hasPendingBrowserAction()) {
+            pushStatus = getString(R.string.push_status_browser_pending);
+            pushStatusColor = Color.rgb(247, 147, 26);
         } else if (pushSettings.isPaired()) {
             pushStatus = getString(R.string.push_status_enabled);
             pushStatusColor = Color.rgb(110, 220, 160);
@@ -305,7 +393,9 @@ public final class MainActivity extends Activity {
 
         Button pushButton = new Button(this);
         pushButton.setText(
-                pushSettings.isPaired()
+                pushSettings.hasPendingBrowserAction()
+                        ? R.string.push_finish_browser_pairing
+                        : pushSettings.isPaired()
                         ? R.string.push_disable
                         : pushSettings.isPairing()
                                 ? R.string.push_retry
@@ -318,21 +408,29 @@ public final class MainActivity extends Activity {
         pushButton.setBackground(pushButtonBackground);
         pushButton.setOnClickListener(
                 ignored -> {
-                    if (pushSettings.isPaired()) {
-                        UnifiedPush.unregister(this, INSTANCE_DEFAULT);
-                        PushApi.unregister(
-                                this,
-                                () -> {
-                                    Toast.makeText(
-                                                    this,
-                                                    R.string.push_disabled,
-                                                    Toast.LENGTH_SHORT)
-                                            .show();
-                                    showSettingsScreen(
-                                            serverSettings.load() == null
-                                                    ? ""
-                                                    : serverSettings.load());
-                                });
+                    if (pushSettings.hasPendingBrowserAction()) {
+                        openBrowserAction();
+                    } else if (pushSettings.isPaired()) {
+                        if (pushSettings.isBrowserPairing()) {
+                            if (pushSettings.beginBrowserRevoke()) {
+                                openBrowserAction();
+                            }
+                        } else {
+                            UnifiedPush.unregister(this, INSTANCE_DEFAULT);
+                            PushApi.unregister(
+                                    this,
+                                    () -> {
+                                        Toast.makeText(
+                                                        this,
+                                                        R.string.push_disabled,
+                                                        Toast.LENGTH_SHORT)
+                                                .show();
+                                        showSettingsScreen(
+                                                serverSettings.load() == null
+                                                        ? ""
+                                                        : serverSettings.load());
+                                    });
+                        }
                     } else if (pushSettings.isPairing()) {
                         beginPushRegistration();
                     } else {
@@ -340,6 +438,33 @@ public final class MainActivity extends Activity {
                     }
                 });
         content.addView(pushButton);
+
+        Button refreshStatusButton = new Button(this);
+        refreshStatusButton.setText(R.string.push_refresh_status);
+        refreshStatusButton.setOnClickListener(ignored -> {
+            String url = serverSettings.load();
+            showSettingsScreen(url == null ? "" : url);
+        });
+        content.addView(refreshStatusButton);
+
+        Button managePairingButton = new Button(this);
+        managePairingButton.setText(R.string.push_manage_pairing);
+        managePairingButton.setOnClickListener(ignored -> {
+            String url = serverSettings.load();
+            openNotificationSetup(url == null ? "" : url);
+        });
+        content.addView(managePairingButton);
+
+        if (pushSettings.isBrowserPairing()
+                && pushSettings.isPairing()
+                && !pushSettings.hasPendingBrowserAction()) {
+            Button browserPairingButton = new Button(this);
+            browserPairingButton.setText(R.string.push_finish_browser_pairing);
+            browserPairingButton.setTextColor(Color.WHITE);
+            browserPairingButton.setOnClickListener(
+                    ignored -> openBrowserAction());
+            content.addView(browserPairingButton);
+        }
 
         TextView safety = text(getString(R.string.safety_note), 14, Color.rgb(170, 180, 198));
         safety.setPadding(0, dp(18), 0, 0);
@@ -367,6 +492,60 @@ public final class MainActivity extends Activity {
         message.setLineSpacing(0, 1.12f);
         content.addView(message);
         setContentView(content);
+    }
+
+    private void openBrowserAction() {
+        String serverUrl = serverSettings.load();
+
+        if (serverUrl == null
+                || !pushSettings.isBrowserPairing()
+                || !pushSettings.hasPendingBrowserAction()) {
+            Toast.makeText(
+                    this, R.string.push_registration_failed,
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        try {
+            JSONObject payload = new JSONObject();
+            String operation = pushSettings.browserOperation();
+            payload.put("operation", operation);
+            payload.put("issued_at", System.currentTimeMillis() / 1000L);
+            payload.put("action_nonce", pushSettings.browserActionNonce());
+
+            if ("pair".equals(operation)) {
+                payload.put("pairing_token", pushSettings.pairingToken());
+                payload.put("device_name", pushSettings.deviceName());
+                payload.put("endpoint", pushSettings.browserEndpoint());
+                payload.put("p256dh", pushSettings.browserP256dh());
+                payload.put("auth", pushSettings.browserAuth());
+            } else if ("renew".equals(operation)) {
+                payload.put("device_token", pushSettings.deviceToken());
+                payload.put("endpoint", pushSettings.browserEndpoint());
+                payload.put("p256dh", pushSettings.browserP256dh());
+                payload.put("auth", pushSettings.browserAuth());
+            } else if ("revoke".equals(operation)) {
+                payload.put("device_token", pushSettings.deviceToken());
+            } else {
+                throw new IllegalStateException("Unknown browser action");
+            }
+
+            String encrypted = BrowserPairingEnvelope.encrypt(
+                    payload.toString(), pushSettings.vapidPublicKey());
+
+            Uri uri = Uri.parse(
+                    serverUrl
+                    + "/pay?view=notifications#companion-action="
+                    + encrypted);
+
+            Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            startActivity(intent);
+        } catch (Exception error) {
+            Toast.makeText(
+                    this, R.string.push_registration_failed,
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     private void openNotificationSetup(String currentServerUrl) {

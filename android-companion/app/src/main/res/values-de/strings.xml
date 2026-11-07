@@ -44,6 +44,7 @@
     <string name="push_status_error">Status: %1$s</string>
     <string name="push_status_enabled">Über UnifiedPush aktiviert</string>
     <string name="push_status_pairing">Kopplung wartet auf den Push-Distributor</string>
+    <string name="push_status_browser_pending">Geschützte Aktion im angemeldeten Browser abschließen</string>
     <string name="push_status_disabled">Nicht verbunden</string>
     <string name="push_privacy_note">Optional und Google-frei: WebPush verschlüsselt Zahlungshinweise Ende-zu-Ende. Dein gewählter Distributor sieht nur Zeitpunkt und verschlüsselte Daten.</string>
     <string name="push_show_comments">Zahlungskommentare anzeigen</string>
@@ -53,4 +54,7 @@
     <string name="push_open_setup">Benachrichtigungen einrichten</string>
     <string name="push_disabled">Benachrichtigungen deaktiviert</string>
     <string name="push_save_server_first">Speichere zuerst deinen BOLT12-Pay-HTTPS-Server.</string>
+    <string name="push_finish_browser_pairing">Kopplung im Browser abschließen</string>
+    <string name="push_refresh_status">Status aktualisieren</string>
+    <string name="push_manage_pairing">Kopplung verwalten</string>
 </resources>

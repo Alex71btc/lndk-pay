@@ -44,6 +44,7 @@
     <string name="push_status_error">Stan: %1$s</string>
     <string name="push_status_enabled">Włączone przez UnifiedPush</string>
     <string name="push_status_pairing">Parowanie czeka na dystrybutora push</string>
+    <string name="push_status_browser_pending">Dokończ chronioną czynność w zalogowanej przeglądarce</string>
     <string name="push_status_disabled">Niepołączone</string>
     <string name="push_privacy_note">Opcjonalne i bez Google: WebPush szyfruje alerty o płatnościach kompleksowo. Wybrany dystrybutor widzi tylko czas i zaszyfrowane dane.</string>
     <string name="push_show_comments">Pokazuj komentarze do płatności</string>
@@ -53,4 +54,7 @@
     <string name="push_open_setup">Otwórz konfigurację powiadomień</string>
     <string name="push_disabled">Powiadomienia wyłączone</string>
     <string name="push_save_server_first">Najpierw zapisz serwer HTTPS BOLT12 Pay.</string>
+    <string name="push_finish_browser_pairing">Dokończ parowanie w przeglądarce</string>
+    <string name="push_refresh_status">Odśwież stan</string>
+    <string name="push_manage_pairing">Zarządzaj parowaniem</string>
 </resources>

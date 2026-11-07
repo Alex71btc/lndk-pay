@@ -31,6 +31,27 @@ public final class PairingLinkTest {
     }
 
     @Test
+    public void recognizesExplicitBrowserPairingMode() {
+        PairingLink parsed = PairingLink.parse(
+                "bolt12pay://pair?server=https%3A%2F%2Fumbrel.local%3A8091"
+                        + "&token=" + TOKEN
+                        + "&vapid=" + VAPID
+                        + "&mode=browser");
+
+        assertEquals("https://umbrel.local:8091", parsed.serverUrl);
+        org.junit.Assert.assertTrue(parsed.browserPairing);
+    }
+
+    @Test
+    public void rejectsUnknownPairingMode() {
+        assertNull(PairingLink.parse(
+                "bolt12pay://pair?server=https%3A%2F%2Fpay.example.com"
+                        + "&token=" + TOKEN
+                        + "&vapid=" + VAPID
+                        + "&mode=unsafe"));
+    }
+
+    @Test
     public void rejectsInsecureOrMalformedPairingData() {
         assertNull(PairingLink.parse("bolt12pay://pair?server=http://pay.example.com"));
         assertNull(

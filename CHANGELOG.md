@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.23] - 2026-11-07
+
+### Added
+
+- Encrypted browser-mediated Android Companion pairing for Umbrel, retaining direct pairing for StartOS.
+- Authenticated push subscription renewal and device revocation.
+
+### Improved
+
+- Android Companion 1.1.3: streamlined pairing, clearer status and direct access to pairing management.
+- Five-language interface support for the new pairing workflow.
+
+
 ## [0.3.22] - 2026-11-07
 
 ### Fixed

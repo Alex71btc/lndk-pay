@@ -6,6 +6,21 @@
   <title data-i18n="login.title">BOLT12 Pay Login</title>
   <meta http-equiv="Cache-Control" content="no-store" />
   <link rel="icon" type="image/png" href="/assets/icon.png" />
+  <script>
+    (() => {
+      const prefix = "#companion-action=";
+      if (!location.hash.startsWith(prefix)) return;
+      const envelope = location.hash.slice(prefix.length);
+      history.replaceState(null, "", location.pathname + location.search);
+      if (!/^[A-Za-z0-9_-]{140,6000}$/.test(envelope)) return;
+      try {
+        sessionStorage.setItem(
+          "bolt12pay.browser-action",
+          JSON.stringify({ envelope, receivedAt: Date.now() })
+        );
+      } catch {}
+    })();
+  </script>
   <script src="/assets/i18n/runtime.js"></script>
   <script src="/assets/i18n/login.js"></script>
   <script>Bolt12I18n.use("login");</script>

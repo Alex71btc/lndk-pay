@@ -44,6 +44,7 @@
     <string name="push_status_error">État : %1$s</string>
     <string name="push_status_enabled">Activées via UnifiedPush</string>
     <string name="push_status_pairing">L’association attend le distributeur push</string>
+    <string name="push_status_browser_pending">Terminez l’action protégée dans le navigateur connecté</string>
     <string name="push_status_disabled">Non connecté</string>
     <string name="push_privacy_note">Facultatif et sans Google : WebPush chiffre les alertes de paiement de bout en bout. Votre distributeur ne voit que l’horaire et des données chiffrées.</string>
     <string name="push_show_comments">Afficher les commentaires de paiement</string>
@@ -53,4 +54,7 @@
     <string name="push_open_setup">Ouvrir la configuration des notifications</string>
     <string name="push_disabled">Notifications désactivées</string>
     <string name="push_save_server_first">Enregistrez d’abord votre serveur HTTPS BOLT12 Pay.</string>
+    <string name="push_finish_browser_pairing">Terminer l\'association dans le navigateur</string>
+    <string name="push_refresh_status">Actualiser le statut</string>
+    <string name="push_manage_pairing">Gérer l\'association</string>
 </resources>

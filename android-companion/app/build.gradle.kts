@@ -40,8 +40,8 @@ android {
         applicationId = "com.bolt12pay.companion"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.1.0"
+        versionCode = 16
+        versionName = "1.1.3"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
     }
