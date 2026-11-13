@@ -49,12 +49,17 @@
     return value;
   }
 
-  function translate(key, values = {}, namespace = scope) {
+  function translationTemplate(key, namespace = scope) {
     const catalog = catalogs[namespace] || {};
     const localized = catalog[language] || {};
     const english = catalog.en || {};
-    const template = (Object.hasOwn(localized, key) && localized[key]) ||
-      (Object.hasOwn(english, key) && english[key]) || key;
+    return (Object.hasOwn(localized, key) && localized[key]) ||
+      (Object.hasOwn(english, key) && english[key]) || null;
+  }
+
+  function translate(key, values = {}, namespace = scope) {
+    const template = translationTemplate(key, namespace);
+    if (template === null) return "";
     return String(template).replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (match, name) =>
       values && Object.hasOwn(values, name)
         ? String(resolveValue(values[name], namespace))
@@ -79,10 +84,15 @@
     };
     for (const [marker, attribute] of Object.entries(attributes)) {
       for (const element of elements(root, `[${marker}]`)) {
+        const key = element.getAttribute(marker);
+        // Keep the reviewed inline copy (or existing accessibility attribute)
+        // when a stale catalog does not contain this key. Never paint a raw
+        // identifier such as "companion.title" into the interface.
+        if (translationTemplate(key) === null) continue;
         let values = {};
         try { values = JSON.parse(element.getAttribute("data-i18n-params") || "{}"); }
         catch (_) { /* Leave unresolved placeholders visible for diagnostics. */ }
-        const value = translate(element.getAttribute(marker), values);
+        const value = translate(key, values);
         if (attribute) element.setAttribute(attribute, value);
         else element.textContent = value;
       }

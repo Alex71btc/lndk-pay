@@ -6,14 +6,12 @@
   const ANDROID_APK_PATH =
     scriptOptions.androidApk || "/bolt12-pay-companion.apk";
   const LABEL_KEYS = {
-    ready: scriptOptions.labelReady || "nav.install",
-    checking: scriptOptions.labelChecking || "nav.install_checking",
-    help: scriptOptions.labelHelp || "nav.install_help",
-    manual: scriptOptions.labelManual || "nav.install_manual",
-    insecure:
-      scriptOptions.labelInsecure || "nav.install_https_required",
-    insecureHelp:
-      scriptOptions.labelInsecureHelp || "nav.install_https_help",
+    ready: scriptOptions.labelReady,
+    checking: scriptOptions.labelChecking,
+    help: scriptOptions.labelHelp,
+    manual: scriptOptions.labelManual,
+    insecure: scriptOptions.labelInsecure,
+    insecureHelp: scriptOptions.labelInsecureHelp,
   };
   const RELOAD_MARKER = "bolt12pay.pwa-reinstall-reload";
   const promptWaiters = new Set();
@@ -21,6 +19,14 @@
   let deferredPrompt = null;
   let registration = null;
   let installedState = null;
+  let reloadingForServiceWorker = false;
+  const controlledAtStartup = Boolean(navigator.serviceWorker?.controller);
+
+  function reloadWhenUpdatedWorkerTakesControl() {
+    if (!controlledAtStartup || reloadingForServiceWorker) return;
+    reloadingForServiceWorker = true;
+    window.location.reload();
+  }
 
   function hasReloadMarker() {
     try {
@@ -160,6 +166,12 @@
 
   async function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return null;
+
+    navigator.serviceWorker.addEventListener(
+      "controllerchange",
+      reloadWhenUpdatedWorkerTakesControl,
+      { once: true },
+    );
 
     registration = await navigator.serviceWorker.register(
       "/service-worker.js",

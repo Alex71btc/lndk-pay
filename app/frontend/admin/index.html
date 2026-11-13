@@ -22,12 +22,12 @@
       })();
     </script>
     <meta name="theme-color" content="#0f172a" />
-    <script src="/assets/i18n/runtime.js"></script>
-    <script src="/assets/i18n/pay.js"></script>
+    <script src="/assets/i18n/runtime.js?v=0.3.24"></script>
+    <script src="/assets/i18n/pay.js?v=0.3.24"></script>
     <script>window.Bolt12I18n.use("pay");</script>
     <link rel="manifest" href="/pay.webmanifest" />
     <script
-      src="/pwa-install.js"
+      src="/pwa-install.js?v=0.3.24"
       data-manifest="/pay.webmanifest"
       data-label-ready="nav.install"
       data-label-checking="nav.install_checking"
@@ -137,6 +137,49 @@
         border-color: rgba(255, 209, 102, 0.35);
         background: rgba(255, 209, 102, 0.1);
         color: var(--warn);
+      }
+
+      .paymentToastRegion {
+        display: grid;
+        justify-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        max-height: min(70vh, 520px);
+        overflow-y: auto;
+      }
+
+      .paymentToast {
+        width: fit-content;
+        max-width: min(520px, calc(100% - 16px));
+        margin-inline: auto;
+      }
+
+      .paymentToast:hover,
+      .paymentToast:focus-visible {
+        border-color: var(--ok);
+        background: rgba(143, 227, 136, 0.14);
+        transform: none;
+      }
+
+      .paymentToastTitle {
+        display: block;
+        color: var(--ok);
+        font-weight: 800;
+      }
+
+      .paymentToastCategory {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 600;
+      }
+
+      .paymentToastComment {
+        display: block;
+        margin-top: 4px;
+        color: var(--text);
+        overflow-wrap: anywhere;
       }
 
       .card {
@@ -710,8 +753,26 @@
       }
 
       .txAmount {
+        appearance: none;
+        width: auto;
+        min-height: 44px;
+        padding: 6px 8px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text);
         font-weight: 800;
         font-size: 16px;
+        line-height: 1.2;
+        cursor: copy;
+      }
+
+      .txAmount:hover,
+      .txAmount:focus-visible {
+        border-color: rgba(247, 147, 26, 0.55);
+        background: rgba(247, 147, 26, 0.1);
+        box-shadow: none;
+        transform: none;
       }
 
       .txMeta {
@@ -1283,6 +1344,12 @@
   <body>
     <div class="toastWrap" id="toastWrap">
       <div class="statusBar" id="statusBar"></div>
+      <div
+        class="paymentToastRegion"
+        id="paymentToastRegion"
+        aria-live="polite"
+        aria-relevant="additions"
+      ></div>
     </div>
 
     <main class="card" style="position: relative">
@@ -1865,6 +1932,7 @@
           class="qrBox"
           style="margin-top: 12px"
           hidden
+          data-i18n-aria-label="companion.pairing_qr_label"
           aria-label="Android Companion pairing QR"
         ></div>
         <div class="hint" style="margin-top: 10px" data-i18n="companion.pairing_hint">
@@ -3164,6 +3232,7 @@
 
       const toastWrap = document.getElementById("toastWrap");
       const statusBar = document.getElementById("statusBar");
+      const paymentToastRegion = document.getElementById("paymentToastRegion");
 
       const amountInput = document.getElementById("amountInput");
       const messageInput = document.getElementById("messageInput");
@@ -6554,9 +6623,191 @@
       }
 
       const TX_HISTORY_PAGE_SIZE = 50;
+      const INCOMING_PAYMENT_SEEN_STORAGE_KEY =
+        "bolt12pay.incoming-payment-toast.seen.v1";
+      const INCOMING_PAYMENT_SEEN_LIMIT = 250;
+      const INCOMING_PAYMENT_RECENCY_GRACE_MS = 5000;
+      const incomingPaymentMonitoringStartedAt = Date.now();
       let txHistoryItems = [];
       let txHistoryHasMore = true;
       let txHistorySearchQuery = "";
+      let incomingPaymentBaselineReady = false;
+
+      function loadSeenIncomingPaymentIds() {
+        try {
+          const stored = JSON.parse(
+            sessionStorage.getItem(INCOMING_PAYMENT_SEEN_STORAGE_KEY) || "[]",
+          );
+          return new Set(
+            Array.isArray(stored)
+              ? stored.filter((value) => typeof value === "string")
+              : [],
+          );
+        } catch {
+          return new Set();
+        }
+      }
+
+      const seenIncomingPaymentIds = loadSeenIncomingPaymentIds();
+
+      function incomingPaymentId(item) {
+        if (item?.direction !== "incoming" || item?.status !== "settled") {
+          return "";
+        }
+        return String(item.payment_hash || "").trim().toLowerCase();
+      }
+
+      function incomingPaymentIsRecent(item) {
+        const settledAt =
+          parseTxTimestamp(item?.settled_at) ||
+          parseTxTimestamp(item?.created_at);
+        return (
+          !settledAt ||
+          settledAt.getTime() >=
+            incomingPaymentMonitoringStartedAt -
+              INCOMING_PAYMENT_RECENCY_GRACE_MS
+        );
+      }
+
+      function persistSeenIncomingPaymentIds() {
+        try {
+          const recentIds = Array.from(seenIncomingPaymentIds).slice(
+            -INCOMING_PAYMENT_SEEN_LIMIT,
+          );
+          sessionStorage.setItem(
+            INCOMING_PAYMENT_SEEN_STORAGE_KEY,
+            JSON.stringify(recentIds),
+          );
+        } catch {}
+      }
+
+      function plainSatsValue(value) {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) return "0";
+        return String(Math.max(0, Math.trunc(numericValue)));
+      }
+
+      function incomingPaymentCategory(item) {
+        const method = String(item?.method || "").trim().toLowerCase();
+        const paymentType = String(item?.type || "").trim().toLowerCase();
+
+        if (method === "zap" || paymentType === "zap") {
+          return window.__t("history.nostr_zap");
+        }
+        if (
+          method === "bolt12" ||
+          method === "offer" ||
+          paymentType === "offer"
+        ) {
+          return window.__t("history.bolt12_offer");
+        }
+
+        const translationKey = {
+          lightning_address: "history.lightning_address",
+          lnurl: "history.lnurl",
+          bolt11: "history.bolt11_invoice",
+          bolt11_alias_fallback: "history.bolt11_invoice",
+          keysend: "history.keysend",
+        }[method];
+        return translationKey ? window.__t(translationKey) : "";
+      }
+
+      async function openIncomingPaymentInActivity(paymentHash) {
+        txHistorySearchQuery = "";
+        txHistoryItems = [];
+        txHistoryHasMore = true;
+        if (txHistorySearchInput) txHistorySearchInput.value = "";
+        if (txHistorySection) txHistorySection.open = true;
+
+        await window.renderTxHistory();
+
+        const paymentDetails = Array.from(
+          document.querySelectorAll("details.txDetailsRoot[data-payment-hash]"),
+        ).find((element) => element.dataset.paymentHash === paymentHash);
+        if (!paymentDetails) return;
+
+        paymentDetails.open = true;
+        paymentDetails.scrollIntoView({ behavior: "smooth", block: "center" });
+        paymentDetails.focus({ preventScroll: true });
+      }
+
+      function showIncomingPaymentToast(item, paymentHash) {
+        if (!paymentToastRegion) return;
+
+        const amount = plainSatsValue(item.amount_sat);
+        const category = incomingPaymentCategory(item);
+        const comment = String(item.notification_comment || "").trim();
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "statusBar show ok paymentToast";
+        button.title = window.__t("toast.open_payment_activity");
+        button.setAttribute(
+          "aria-label",
+          window.__t("toast.open_payment_activity_amount", { amount }),
+        );
+
+        const title = document.createElement("span");
+        title.className = "paymentToastTitle";
+        title.textContent = window.__t("toast.payment_received", { amount });
+        button.appendChild(title);
+
+        if (category) {
+          const categoryElement = document.createElement("span");
+          categoryElement.className = "paymentToastCategory";
+          categoryElement.textContent = category;
+          button.appendChild(categoryElement);
+        }
+
+        if (comment) {
+          const commentElement = document.createElement("span");
+          commentElement.className = "paymentToastComment";
+          commentElement.textContent = comment;
+          button.appendChild(commentElement);
+        }
+
+        const dismissTimer = window.setTimeout(() => button.remove(), 10000);
+        button.addEventListener("click", async () => {
+          window.clearTimeout(dismissTimer);
+          button.remove();
+          try {
+            await openIncomingPaymentInActivity(paymentHash);
+          } catch (error) {
+            console.error("Failed to open incoming payment", error);
+          }
+        });
+        paymentToastRegion.appendChild(button);
+      }
+
+      function processIncomingPaymentNotifications(items) {
+        const settledIncoming = (Array.isArray(items) ? items : [])
+          .map((item) => ({ item, id: incomingPaymentId(item) }))
+          .filter(({ id }) => Boolean(id));
+
+        if (!incomingPaymentBaselineReady) {
+          for (const { id } of settledIncoming) seenIncomingPaymentIds.add(id);
+          incomingPaymentBaselineReady = true;
+          persistSeenIncomingPaymentIds();
+          return [];
+        }
+
+        const unseenPayments = settledIncoming.filter(
+          ({ id }) => !seenIncomingPaymentIds.has(id),
+        );
+        for (const { id } of unseenPayments) seenIncomingPaymentIds.add(id);
+
+        // A server restart can backfill older LND history after the page has
+        // already established an empty baseline. Remember those rows without
+        // presenting them as newly received browser events.
+        const newPayments = unseenPayments
+          .filter(({ item }) => incomingPaymentIsRecent(item))
+          .reverse();
+
+        for (const { item, id } of newPayments) {
+          showIncomingPaymentToast(item, id);
+        }
+        if (unseenPayments.length) persistSeenIncomingPaymentIds();
+        return newPayments.map(({ id }) => id);
+      }
 
       function parseTxTimestamp(value) {
         if (value === null || value === undefined) return null;
@@ -6619,7 +6870,10 @@
         }
       }
 
-      async function fetchTxHistoryPage(offset = 0) {
+      async function fetchTxHistoryPage(
+        offset = 0,
+        searchQuery = txHistorySearchQuery,
+      ) {
         console.time("GET /api/tx-history");
 
         const params = new URLSearchParams({
@@ -6627,12 +6881,16 @@
           offset: String(offset),
         });
 
-        if (txHistorySearchQuery) {
-          params.set("q", txHistorySearchQuery);
+        if (searchQuery) {
+          params.set("q", searchQuery);
         }
 
         const response = await fetch(
           `/api/tx-history?${params.toString()}`,
+          {
+            credentials: "same-origin",
+            cache: "no-store",
+          },
         );
 
         console.timeEnd("GET /api/tx-history");
@@ -6647,6 +6905,10 @@
       async function loadTxHistory() {
         const data = await fetchTxHistoryPage(0);
         const newestItems = data.items || [];
+
+        if (!txHistorySearchQuery) {
+          processIncomingPaymentNotifications(newestItems);
+        }
 
         if (!txHistoryItems.length) {
           txHistoryItems = newestItems;
@@ -6672,6 +6934,11 @@
       }
 
         return txHistoryItems;
+      }
+
+      async function pollIncomingPaymentNotifications() {
+        const data = await fetchTxHistoryPage(0, "");
+        processIncomingPaymentNotifications(data.items || []);
       }
 
       async function loadMoreTxHistory() {
@@ -6824,6 +7091,7 @@
               : "";
 
           const paymentHash = item.payment_hash || raw.payment_hash || raw.r_hash || "";
+          const amountClipboardValue = plainSatsValue(item.amount_sat);
           const txKey = [
             paymentHash,
             item.direction || "",
@@ -6938,7 +7206,12 @@
               <summary>
                 <div class="txHeader">
                   <span class="txArrow ${arrowClass}">${arrow}</span>
-                  <span class="txAmount">${item.amount_sat} sats</span>
+                  <button
+                    class="txAmount"
+                    type="button"
+                    title="${window.__t("history.copy_amount", { amount: amountClipboardValue })}"
+                    aria-label="${window.__t("history.copy_amount", { amount: amountClipboardValue })}"
+                  >${amountClipboardValue} sats</button>
                 </div>
 
                 <div class="txMeta">
@@ -7058,6 +7331,23 @@
             </details>
           `;
 
+          const rootDetails = div.querySelector(".txDetailsRoot");
+          if (rootDetails && paymentHash) {
+            rootDetails.dataset.paymentHash = String(paymentHash).toLowerCase();
+            rootDetails.tabIndex = -1;
+          }
+
+          const amountButton = div.querySelector(".txAmount");
+          amountButton?.addEventListener("click", async (event) => {
+            // Copying must not also expand/collapse the surrounding activity row.
+            event.preventDefault();
+            event.stopPropagation();
+            await copyText(
+              amountClipboardValue,
+              window.__t("toast.amount_copied"),
+            );
+          });
+
           const repeatButton = div.querySelector(".txRepeatTarget");
           repeatButton?.addEventListener("click", (event) => {
             // A button inside <summary> must not expand/collapse transaction details.
@@ -7107,7 +7397,6 @@
             });
           }
 
-          const rootDetails = div.querySelector(".txDetailsRoot");
           const expandArrow = div.querySelector(".txExpandArrow");
           const expandText = div.querySelector(".txExpandText");
 
@@ -7207,6 +7496,9 @@
         txHistoryRefreshTimer = setInterval(async () => {
             try {
                 await window.renderTxHistory();
+                if (txHistorySearchQuery) {
+                  await pollIncomingPaymentNotifications();
+                }
             } catch (e) {
                 console.error(e);
             }

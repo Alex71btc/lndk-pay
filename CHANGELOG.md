@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.24] - 2026-11-13
+
+### Added
+
+- Show deduplicated incoming-payment alerts with amount, payment category and
+  optional comment in the authenticated Pay PWA, and open the matching
+  Lightning Activity entry when an alert is selected.
+- Copy the numeric sat value from Lightning Activity by tapping, clicking or
+  using the keyboard on an amount.
+
+### Fixed
+
+- Remove legacy PWA caches, reload after a service-worker update and version
+  local JavaScript and translation assets so updates do not reuse stale UI
+  files or expose raw translation keys.
+
 ## [0.3.23] - 2026-11-07
 
 ### Added

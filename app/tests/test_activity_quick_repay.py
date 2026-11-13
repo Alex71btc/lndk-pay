@@ -14,7 +14,7 @@ class ActivityQuickRepayTests(unittest.TestCase):
         cls.html = PAGE.read_text(encoding="utf-8")
 
     def test_version(self):
-        self.assertEqual(VERSION.read_text().strip(), "0.3.20")
+        self.assertEqual(VERSION.read_text().strip(), "0.3.24")
 
     def test_success_opens_and_syncs_activity(self):
         start = self.html.index("function renderSuccessOutput(")

@@ -787,6 +787,11 @@ def _payment_comment(item: dict[str, Any]) -> str:
     return _payment_comment_details(item)[0]
 
 
+def payment_notification_comment(item: dict[str, Any]) -> str:
+    """Return only comment text that is safe and useful in payment alerts."""
+    return _payment_comment(item)
+
+
 def _payment_payload(event_id: str, item: dict[str, Any]) -> str:
     payload_data = {
         "version": 1,

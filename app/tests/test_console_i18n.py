@@ -46,7 +46,8 @@ class ConsoleI18nTests(unittest.TestCase):
             if "code" in script:
                 scripts.append(script["code"])
             elif script["src"].startswith("/assets/i18n/"):
-                scripts.append((APP / script["src"].lstrip("/")).read_text())
+                source = script["src"].split("?", 1)[0]
+                scripts.append((APP / source.lstrip("/")).read_text())
         result = subprocess.run(
             ["node", str(Path(__file__).with_name("console_language_switch.cjs"))],
             input=json.dumps({"tags": page.tags, "scripts": scripts}),

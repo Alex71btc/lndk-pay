@@ -24,7 +24,8 @@ class PageScripts(HTMLParser):
             source = attrs.get("src", "")
             self.in_script = not source
             if source.startswith("/assets/i18n/"):
-                self.scripts.append((self.assets / source.removeprefix("/assets/")).read_text(encoding="utf-8"))
+                asset_path = source.split("?", 1)[0].removeprefix("/assets/")
+                self.scripts.append((self.assets / asset_path).read_text(encoding="utf-8"))
         else:
             self.tags.append(attrs)
 

@@ -21,7 +21,7 @@ let storageBlocked = false;
 const nodes = [];
 function node(attrs = {}) {
   return {
-    attrs, dataset: {}, textContent: '', value: '', children: [], handlers: {},
+    attrs, dataset: {}, textContent: attrs.textContent || '', value: '', children: [], handlers: {},
     getAttribute(name) { return this.attrs[name] ?? null; },
     setAttribute(name, value) { this.attrs[name] = value; },
     addEventListener(name, listener) { this.handlers[name] = listener; },
@@ -75,8 +75,8 @@ for (const [locale, greeting] of Object.entries({
   assert.equal(window.__t('hello', {name: 'Ada'}), greeting);
   assert.equal(window.__t('fallback'), 'English fallback');
   assert.equal(window.__t('empty'), 'English empty');
-  assert.equal(window.__t('unknown.key'), 'unknown.key');
-  assert.equal(window.__t('toString'), 'toString');
+  assert.equal(window.__t('unknown.key'), '');
+  assert.equal(window.__t('toString'), '');
 }
 """)
 
@@ -131,6 +131,17 @@ assert.equal(input.attrs.placeholder, 'Hallo Ada');
 assert.equal(input.value, 'alice@example.com');
 assert.equal(button.attrs['aria-label'], 'English fallback');
 assert.equal(document.documentElement.lang, 'de');
+""")
+
+    def test_missing_dom_translation_preserves_reviewed_inline_fallback(self):
+        self.run_js(r"""
+const heading = node({'data-i18n': 'missing.title', textContent: 'Safe fallback'});
+const button = node({'data-i18n-title': 'missing.title', title: 'Safe title'});
+nodes.push(heading, button);
+window.applyTranslations();
+assert.equal(heading.textContent, 'Safe fallback');
+assert.equal(button.attrs.title, 'Safe title');
+assert.equal(window.__t('missing.title'), '');
 """)
 
     def test_selector_and_language_event_switch_all_five_languages(self):

@@ -5330,8 +5330,8 @@ async def public_index_page():
 <!doctype html>
 <html lang="en">
 <head>
-<script src="/assets/i18n/runtime.js"></script>
-<script src="/assets/i18n/landing.js"></script>
+<script src="/assets/i18n/runtime.js?v={escape(APP_VERSION)}"></script>
+<script src="/assets/i18n/landing.js?v={escape(APP_VERSION)}"></script>
 <script>window.Bolt12I18n.use("landing");</script>
 
   <meta charset="UTF-8" />
@@ -6405,10 +6405,10 @@ async def public_alias_page(alias_name: str):
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
-    not_found_html = """<!doctype html>
+    not_found_html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<script src="/assets/i18n/runtime.js"></script>
-<script src="/assets/i18n/alias.js"></script>
+<script src="/assets/i18n/runtime.js?v={escape(APP_VERSION)}"></script>
+<script src="/assets/i18n/alias.js?v={escape(APP_VERSION)}"></script>
 <script>window.Bolt12I18n.use("alias");</script>
 <title data-i18n="error.not_found">Alias not found</title></head>
 <body><select data-i18n-language data-i18n-aria-label="nav.language" aria-label="Language"></select>
@@ -6538,8 +6538,8 @@ async def public_alias_page(alias_name: str):
 <!doctype html>
 <html lang="en">
 <head>
-<script src="/assets/i18n/runtime.js"></script>
-<script src="/assets/i18n/alias.js"></script>
+<script src="/assets/i18n/runtime.js?v={escape(APP_VERSION)}"></script>
+<script src="/assets/i18n/alias.js?v={escape(APP_VERSION)}"></script>
 <script>window.Bolt12I18n.use("alias");</script>
 
 <meta charset="UTF-8" />
@@ -8549,10 +8549,18 @@ def api_get_tx_history(
         search=q,
     )
 
-    return {
-        "items": items,
-        "has_more": len(items) == limit,
-    }
+    for item in items:
+        comment = companion_push.payment_notification_comment(item)
+        if comment:
+            item["notification_comment"] = comment
+
+    return JSONResponse(
+        {
+            "items": items,
+            "has_more": len(items) == limit,
+        },
+        headers=_no_store_headers(),
+    )
 
 @app.post("/api/admin/sync-tx-history")
 async def api_sync_tx_history(request: StarletteRequest):

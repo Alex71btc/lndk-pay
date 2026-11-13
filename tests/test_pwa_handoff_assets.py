@@ -1,5 +1,7 @@
 import json
+import re
 import struct
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -44,6 +46,78 @@ class PwaInstallAssetsTest(unittest.TestCase):
 
         self.assertIn('self.addEventListener("fetch"', service_worker)
         self.assertIn("event.respondWith(fetch(event.request))", service_worker)
+        self.assertIn('const LEGACY_CACHE_PREFIX = "bolt12-pay-"', service_worker)
+        self.assertIn("caches.keys()", service_worker)
+        self.assertIn("key.startsWith(LEGACY_CACHE_PREFIX)", service_worker)
+        self.assertIn("caches.delete(key)", service_worker)
+
+    def test_service_worker_update_deletes_only_legacy_app_caches(self):
+        service_worker = (PUBLIC / "service-worker.js").read_text()
+        script = """
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const listeners = {};
+const deleted = [];
+let skipped = false;
+let claimed = false;
+const context = {
+  self: {
+    addEventListener(name, handler) { listeners[name] = handler; },
+    skipWaiting() { skipped = true; },
+    clients: { claim: async () => { claimed = true; } },
+  },
+  caches: {
+    keys: async () => ['bolt12-pay-v2', 'another-app-v1'],
+    delete: async key => { deleted.push(key); return true; },
+  },
+  fetch: async request => `network:${request}`,
+  Promise,
+};
+vm.runInNewContext(SOURCE, context);
+(async () => {
+  listeners.install({});
+  assert.equal(skipped, true);
+  let activation;
+  listeners.activate({waitUntil(promise) { activation = promise; }});
+  await activation;
+  assert.deepEqual(deleted, ['bolt12-pay-v2']);
+  assert.equal(claimed, true);
+  let response;
+  listeners.fetch({request: '/pay', respondWith(promise) { response = promise; }});
+  assert.equal(await response, 'network:/pay');
+})().catch(error => { console.error(error); process.exitCode = 1; });
+""".replace("SOURCE", json.dumps(service_worker), 1)
+        result = subprocess.run(
+            ["node", "-"],
+            input=script,
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_javascript_assets_are_versioned_with_the_app_release(self):
+        version = (ROOT / "app" / "VERSION").read_text().strip()
+        pay_html = (ADMIN / "index.html").read_text()
+        login_html = (ADMIN / "pay-login.html").read_text()
+        console_html = (PUBLIC / "index.html").read_text()
+        backend = BACKEND.read_text()
+
+        for source in (pay_html, login_html, console_html):
+            for asset in re.findall(r'src="(/[^"]+\.js\?v=[^"]+)"', source):
+                if asset.startswith(("/assets/i18n/", "/pwa-install.js")):
+                    self.assertTrue(asset.endswith(f"?v={version}"), asset)
+
+        self.assertIn(f'/assets/i18n/runtime.js?v={version}', pay_html)
+        self.assertIn(f'/assets/i18n/pay.js?v={version}', pay_html)
+        self.assertIn(f'/pwa-install.js?v={version}', pay_html)
+        self.assertIn('runtime.js?v={escape(APP_VERSION)}', backend)
+        self.assertIn('alias.js?v={escape(APP_VERSION)}', backend)
+        self.assertIn('landing.js?v={escape(APP_VERSION)}', backend)
+        self.assertNotRegex(
+            "\n".join((pay_html, login_html, console_html, backend)),
+            r'src="/(?:assets/i18n/[^"?]+|pwa-install)\.js"',
+        )
 
     def test_manifests_reference_icons_with_truthful_installable_sizes(self):
         for manifest_path in (
@@ -89,12 +163,15 @@ class PwaInstallAssetsTest(unittest.TestCase):
         pay_html = (ADMIN / "index.html").read_text()
         console_html = (PUBLIC / "index.html").read_text()
         controller = (ADMIN / "pwa-install.js").read_text()
+        version = (ROOT / "app" / "VERSION").read_text().strip()
 
         self.assertIn('id="installBtn" type="button" hidden', pay_html)
-        self.assertIn('src="/pwa-install.js"', pay_html)
-        self.assertIn('src="/pwa-install.js"', console_html)
+        self.assertIn(f'src="/pwa-install.js?v={version}"', pay_html)
+        self.assertIn(f'src="/pwa-install.js?v={version}"', console_html)
         self.assertIn('navigator.serviceWorker.register(', controller)
         self.assertIn("await registration.update()", controller)
+        self.assertIn('"controllerchange"', controller)
+        self.assertIn("reloadWhenUpdatedWorkerTakesControl", controller)
         self.assertIn("if (!window.isSecureContext)", controller)
         self.assertIn('setButtonState("insecure")', controller)
         self.assertIn('window.addEventListener("beforeinstallprompt"', controller)

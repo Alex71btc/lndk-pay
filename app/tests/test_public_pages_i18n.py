@@ -56,7 +56,14 @@ class PublicPageI18nTests(unittest.IsolatedAsyncioTestCase):
         html = response.text
         page = Elements(html)
         sources = [node["src"] for tag, node in page.tags if tag == "script" and "src" in node]
-        self.assertEqual(sources, ["/assets/i18n/runtime.js", f"/assets/i18n/{scope}.js"])
+        version = (APP / "VERSION").read_text().strip()
+        self.assertEqual(
+            sources,
+            [
+                f"/assets/i18n/runtime.js?v={version}",
+                f"/assets/i18n/{scope}.js?v={version}",
+            ],
+        )
         self.assertIn(f'window.Bolt12I18n.use("{scope}")', html.split("</head>")[0])
         self.assertTrue(any("data-i18n-language" in node for _, node in page.tags))
         for language in ("en", "de", "es", "fr", "pl"):
