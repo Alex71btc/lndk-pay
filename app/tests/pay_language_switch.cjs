@@ -82,3 +82,34 @@ for (const code of ["en", "de", "es", "fr", "pl"]) {
   assert.equal(byId("txHistoryList").children.at(-1).textContent, tab.__t("history.no_transactions"));
   assert.deepEqual(requests, ["/api/setup/config"], "Language selection performed a network request");
 }
+
+(async () => {
+  const dialog = byId("qrActionsDialog");
+  const decodeDetails = byId("offerDecodeDetails");
+  const decodeInput = byId("decodeInput");
+  const scans = [];
+  dialog.showModal = () => { dialog.open = true; };
+  dialog.close = () => { dialog.open = false; };
+  decodeInput.focus = () => { document.activeElement = decodeInput; };
+  decodeInput.scrollIntoView = () => {};
+  tab.openScanner = mode => scans.push(mode);
+
+  assert.equal(Object.hasOwn(decodeDetails.attrs, "open"), false);
+  byId("qrActionsBtn").handlers.get("click")();
+  assert.equal(dialog.open, true);
+  byId("qrDecodeBtn").handlers.get("click")();
+  assert.equal(dialog.open, false);
+  assert.equal(decodeDetails.open, true);
+  assert.equal(document.activeElement, decodeInput);
+  assert.equal(byId("payOfferInput").value, target);
+
+  byId("qrActionsBtn").handlers.get("click")();
+  await byId("qrScanBtn").handlers.get("click")();
+  assert.equal(dialog.open, false);
+  await byId("scanToPayBtn").handlers.get("click")();
+  await byId("scanToDecodeBtn").handlers.get("click")();
+  assert.deepEqual(scans, ["pay", "pay", "decode"]);
+})().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

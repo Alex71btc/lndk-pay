@@ -925,6 +925,31 @@
         opacity: 0.82;
       }
 
+      .offerDecodeDetails {
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+
+      .offerDecodeDetails > summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .offerDecodeDetails[open] > summary {
+        margin-bottom: 12px;
+      }
+
+      #qrActionsDialog {
+        width: min(360px, calc(100% - 32px));
+        color: inherit;
+      }
+
+      #qrActionsDialog::backdrop {
+        background: rgba(3, 8, 20, 0.72);
+      }
+
       .scannerViewport {
         width: 100%;
         aspect-ratio: 1 / 1;
@@ -1358,8 +1383,7 @@
       </div>
       <div class="sub">
         <span data-i18n="hint.top_intro"
-          >LNDK kann Offers nicht nur erzeugen, sondern auch direkt bezahlen.
-          Deshalb steht der Pay-Bereich bewusst ganz oben im Fokus.</span
+          >BOLT12-Offers erstellen und direkt bezahlen.</span
         >
       </div>
       <div class="topActions">
@@ -1387,21 +1411,19 @@
         >
           <span data-i18n="nav.console">Zur Console</span>
         </button>
-        <button class="secondary" id="scanToDecodeBtn" type="button">
-          <span data-i18n="nav.qr_decode">QR → Decode</span>
-        </button>
+        <button class="secondary" id="qrActionsBtn" type="button" aria-haspopup="dialog">QR</button>
         <button class="danger" id="logoutBtn" type="button">
           <span data-i18n="nav.logout">Logout</span>
         </button>
       </div>
       <div class="heroGrid">
         <form id="payForm" class="section payHero" novalidate>
-          <h2><span data-i18n="title.pay">Offer bezahlen</span></h2>
+          <h2><span data-i18n="title.pay">Zahlung senden</span></h2>
 
           <div class="payTargetLabelRow">
             <label class="label" for="payOfferInput"
               ><span data-i18n="label.target"
-                >Offer, Invoice oder Lightning Address</span
+                >Lightning-Zahlungsziel</span
               ></label
             >
           </div>
@@ -1617,8 +1639,7 @@
 
           <div class="hint">
             <span data-i18n="hint.top"
-              >Hauptfokus: BOLT12 Offer Pay. Automatische Erkennung für BOLT12,
-              BOLT11 und LNURL / Lightning Address.</span
+              >Unterstützt BOLT12-Offers, BOLT11-Rechnungen, Lightning-Adressen, LNURL und Keysend.</span
             >
           </div>
         </form>
@@ -1656,10 +1677,40 @@
 
           <div class="hint">
             <span data-i18n="hint.offer_string"
-              >Der erzeugte Offer-String kann direkt als QR angezeigt oder in
-              Pay / Decode übernommen werden.</span
+              >Das erstellte Offer erscheint als QR-Code unter „Aktuelles Offer / QR“.</span
             >
           </div>
+          <details class="offerDecodeDetails" id="offerDecodeDetails">
+            <summary data-i18n="title.decode">Offer dekodieren</summary>
+            <label class="label" for="decodeInput"
+              ><span data-i18n="label.decode_target"
+                >Offer oder BIP353-Adresse</span
+              ></label
+            >
+            <input
+              id="decodeInput"
+              type="text"
+              data-i18n-placeholder="ph.decode_target"
+              placeholder="lno... oder user@domain"
+            />
+
+            <div class="row">
+              <button class="secondary" id="scanToDecodeBtn" type="button" data-i18n="btn.qr_scan">QR-Code scannen</button>
+              <button id="decodeBtn" data-i18n="btn.decode" type="button">Dekodieren</button>
+            </div>
+
+            <label class="label" for="decodeOutput" style="margin-top: 14px"
+              ><span data-i18n="label.decode_output">Decode-Ausgabe</span></label
+            >
+            <textarea
+              id="decodeOutput"
+              class="mono copyable"
+              readonly
+              data-i18n-placeholder="ph.decode_output"
+              placeholder="Hier erscheint die Decode-Ausgabe..."
+              data-i18n-title="hint.tap_copy" title="Zum Kopieren antippen"
+            ></textarea>
+          </details>
         </section>
       </div>
 
@@ -1719,38 +1770,6 @@
               <span data-i18n="btn.refresh_qr">QR aktualisieren</span>
             </button>
           </div>
-        </section>
-
-        <section class="section">
-          <h2><span data-i18n="title.decode">Offer decoden</span></h2>
-
-          <label class="label" for="decodeInput"
-            ><span data-i18n="label.decode_target"
-              >Offer oder BIP353-Adresse</span
-            ></label
-          >
-          <input
-            id="decodeInput"
-            type="text"
-            data-i18n-placeholder="ph.decode_target"
-            placeholder="lno... oder user@domain"
-          />
-
-          <div class="row">
-            <button id="decodeBtn" data-i18n="btn.decode" type="button">Decode</button>
-          </div>
-
-          <label class="label" for="decodeOutput" style="margin-top: 14px"
-            ><span data-i18n="label.decode_output">Decode-Ausgabe</span></label
-          >
-          <textarea
-            id="decodeOutput"
-            class="mono copyable"
-            readonly
-            data-i18n-placeholder="ph.decode_output"
-            placeholder="Hier erscheint die Decode-Ausgabe..."
-            data-i18n-title="hint.tap_copy" title="Zum Kopieren antippen"
-          ></textarea>
         </section>
 
         <section class="section">
@@ -3089,6 +3108,17 @@
         </div>
       </div>
     </div>
+
+    <dialog class="scannerCard" id="qrActionsDialog" aria-labelledby="qrActionsTitle">
+      <h2 id="qrActionsTitle">QR</h2>
+      <div class="row">
+        <button id="qrScanBtn" type="button" data-i18n="btn.qr_scan">QR-Code scannen</button>
+        <button id="qrDecodeBtn" class="secondary" type="button" data-i18n="title.decode">Offer dekodieren</button>
+        <form method="dialog">
+          <button class="secondary" type="submit" data-i18n="btn.close">Schließen</button>
+        </form>
+      </div>
+    </dialog>
 
     <div
       class="scannerModal"
@@ -9551,6 +9581,23 @@
             window.__t("toast.address_copied"),
           );
         });
+
+      const qrActionsDialog = document.getElementById("qrActionsDialog");
+      document.getElementById("qrActionsBtn").addEventListener("click", () => {
+        qrActionsDialog.showModal();
+      });
+
+      document.getElementById("qrScanBtn").addEventListener("click", async () => {
+        qrActionsDialog.close();
+        await openScanner("pay");
+      });
+
+      document.getElementById("qrDecodeBtn").addEventListener("click", () => {
+        qrActionsDialog.close();
+        document.getElementById("offerDecodeDetails").open = true;
+        decodeInput.focus({ preventScroll: true });
+        decodeInput.scrollIntoView({ block: "center" });
+      });
 
       document
         .getElementById("scanToDecodeBtn")

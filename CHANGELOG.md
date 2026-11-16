@@ -17,6 +17,8 @@ All notable changes to this project will be documented in this file.
 ### Improved
 
 - Make payment notifications easier to read over page content.
+- Clarify supported payment types and move offer decoding into the Create offer
+  panel, accessible from the QR menu.
 - Scale channel liquidity bars to compare total balances across channels.
 - Explain supported payment failures and link to Channel Liquidity when
   relevant.
