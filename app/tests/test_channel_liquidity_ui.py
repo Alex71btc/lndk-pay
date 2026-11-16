@@ -56,7 +56,12 @@ assert.equal(target.children[0].children.length,2,'empty channels do not fabrica
 
     def test_activity_shortcut_has_bolt_and_liquidity_is_last(self):
         html = (ROOT / 'app/frontend/admin/index.html').read_text()
-        nav = re.search(r'<nav class="activityShortcut">(.*?)</nav>',html,re.S)[1]
+        nav = re.search(r'<button class="secondary activityShortcut".*?</button>',html,re.S)[0]
+        actions_start = html.index('<div class="topActions">')
+        self.assertLess(html.index('<h1 '), actions_start)
+        self.assertEqual(html.index(nav), html.index('<button', actions_start))
+        self.assertNotIn('<nav class="activityShortcut">', html)
+        self.assertIn("openPaySection('txHistorySection')", html)
         self.assertIn('/assets/icons/bolt.svg',nav)
         self.assertNotIn('liquidity',nav.lower())
         main = html.split('</main>',1)[0]

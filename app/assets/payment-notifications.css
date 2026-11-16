@@ -4,8 +4,8 @@
 .paymentToastRegion .paymentToastTitle { width:100%; min-width:0; overflow-wrap:anywhere; display:block; color:#adf0b0; font-weight:800; }
 .paymentToastRegion .paymentToastCategory { width:100%; min-width:0; overflow-wrap:anywhere; display:block; color:#e2e8ef; font-size:.85rem; margin-top:2px; }
 .paymentToastRegion .paymentToastComment { width:100%; min-width:0; display:block; margin-top:4px; overflow-wrap:anywhere; max-height:8em; overflow:auto; }
-.activityShortcut { position:relative; width:min(1180px,calc(100% - 24px)); margin:12px auto; text-align:center; }
-.activityShortcut a { display:inline-flex; align-items:center; gap:8px; padding:10px; color:inherit; font-weight:700; }
 #liquidityContent { overflow-wrap:anywhere; }
 
-.activityShortcut img { width:18px; height:22px; object-fit:contain; flex:none; }
+.topActions .activityShortcut { display:inline-flex; align-items:center; justify-content:center; gap:8px; border-color:#7546a7; background:rgba(151,80,216,.08); }
+.topActions .activityShortcut img { width:14px; height:18px; object-fit:contain; flex:none; }
+.topActions .activityShortcut:focus-visible { outline:2px solid #c695f0; outline-offset:3px; }

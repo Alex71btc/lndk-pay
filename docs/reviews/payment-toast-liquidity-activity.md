@@ -159,3 +159,17 @@ git pull --ff-only origin codex/payment-toast-liquidity-activity
 ```
 
 Anschließend wie bisher lokal neu bauen/starten und Browser/PWA neu laden.
+
+## Activity-Pille nach Abschluss des manuellen Toast-Tests (16.11.2026)
+
+Alexander hat die korrigierten Toasts auf Desktop und Mobile getestet und die
+Channel-Liquiditätsübersicht als gut bestätigt. Der Activity-Sprung steht jetzt
+als erste Pille in der vorhandenen Aktionsleiste vor der Installationshilfe:
+unter Logo, Seitentitel und Einleitung, vor dem Zahlungsformular. Blitz-SVG,
+dezenter violetter Rand, native Tastaturbedienung und Umbruch der Aktionsleiste
+auf schmalen Displays bleiben erhalten. Der Sprung öffnet Activity ohne Reload.
+Die vorherige zentrierte Navigation oberhalb des Seitentitels ist entfernt.
+
+Geprüft: bestehender UI-Regressionstest an die neue Position angepasst,
+Activity-Direktlink-Tests und i18n-/UI-Text-Prüfung bestanden. Noch offen ist die
+manuelle Sichtprüfung der neuen Pillenposition auf Desktop und Android-PWA.
