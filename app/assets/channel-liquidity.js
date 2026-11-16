@@ -1,7 +1,7 @@
 /* Read-only presentation of the authenticated LND channel snapshot. */
 (() => {
   'use strict';
-  function render(container, channels) {
+  function render(container, channels, localAlias) {
     if (!Array.isArray(channels)) throw new Error('Invalid channel snapshot');
     const rows = channels.map(channel => {
       const outgoing = Number(channel.outgoing_sat);
@@ -9,7 +9,7 @@
       if (![outgoing, incoming].every(value => Number.isSafeInteger(value) && value >= 0)) {
         throw new Error('Invalid channel balance');
       }
-      return {id: String(channel.channel_id), outgoing, incoming};
+      return {id: String(channel.channel_id), outgoing, incoming, alias: typeof channel.peer_alias === 'string' ? channel.peer_alias.trim() : '', pubkey: channel.remote_pubkey || ''};
     });
     const format = value => new Intl.NumberFormat(window.getLang()).format(value);
     function element(tag, className, text) {
@@ -45,14 +45,21 @@
       rows.reduce((sum, row) => sum + row.incoming, 0),
       'channelLiquidityTotals',
     ));
+    if (typeof localAlias === 'string' && localAlias.trim()) {
+      const label = overview.querySelector('.channelLiquidityTotals .outgoing .channelLiquidityLabel');
+      label.textContent = localAlias.trim() + ' · ' + label.textContent;
+    }
     const list = element('div', 'channelLiquidityList');
     for (const row of rows) {
       const total = row.outgoing + row.incoming;
       const outgoingRatio = total ? row.outgoing / total * 100 : 0;
       const incomingRatio = total ? 100 - outgoingRatio : 0;
       const card = element('article', 'channelLiquidityCard');
-      card.appendChild(element('h3', 'channelLiquidityName',
-        window.__t('liquidity.channel_label', {channel: row.id})));
+      const channelLabel = window.__t('liquidity.channel_label', {channel: row.id});
+      const heading = element('h3', 'channelLiquidityName', row.alias || row.pubkey || channelLabel);
+      heading.title = channelLabel;
+      if (row.alias && row.pubkey) heading.appendChild(element('small', 'channelLiquidityLabel', row.pubkey));
+      card.appendChild(heading);
       card.appendChild(balances(row.outgoing, row.incoming, 'channelLiquidityBalances'));
       const bar = element('div', 'channelLiquidityBar');
       bar.setAttribute('role', 'img');

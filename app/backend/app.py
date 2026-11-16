@@ -7572,12 +7572,12 @@ def _payment_failure_detail(reason: str, amount_sat: int | None = None,
     return None
 
 
-async def _active_channel_liquidity() -> list[dict]:
+async def _active_channel_liquidity(*, include_peer_aliases: bool = False) -> list[dict]:
     headers = {"Grpc-Metadata-macaroon": _read_macaroon_hex(LND_MACAROON_PATH)}
     verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
     async with httpx.AsyncClient(timeout=10, verify=verify) as client:
         response = await client.get(f"{LND_REST_URL}/v1/channels", headers=headers,
-                                    params={"active_only": "true"})
+                                    params={"active_only": "true", **({"peer_alias_lookup": "true"} if include_peer_aliases else {})})
         response.raise_for_status()
         payload = response.json()
     if not isinstance(payload.get("channels"), list):
@@ -7593,6 +7593,8 @@ async def _active_channel_liquidity() -> list[dict]:
             raise ValueError("Invalid channel balance")
         result.append({"channel_id": str(channel["chan_id"]),
                        "outgoing_sat": outgoing, "incoming_sat": incoming})
+        if include_peer_aliases:
+            result[-1].update(peer_alias=channel.get("peer_alias"), remote_pubkey=channel.get("remote_pubkey"))
     return result
 
 
@@ -7611,10 +7613,14 @@ async def _explain_payment_failure(reason: str, amount_sat: int | None = None) -
 async def api_liquidity(request: StarletteRequest):
     require_pay_auth(request)
     try:
-        channels = await _active_channel_liquidity()
+        channels = await _active_channel_liquidity(include_peer_aliases=True)
     except Exception as exc:
         raise HTTPException(status_code=503, detail={"code": "lnd_unavailable"}) from exc
-    return JSONResponse({"channels": channels}, headers=_no_store_headers())
+    try:
+        local_alias = (await _lnd_getinfo()).get("alias")
+    except (HTTPException, httpx.HTTPError, OSError, ValueError):
+        local_alias = None
+    return JSONResponse({"channels": channels, "local_alias": local_alias}, headers=_no_store_headers())
 
 
 async def _lookup_invoice(payment_hash):

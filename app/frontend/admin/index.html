@@ -1298,8 +1298,8 @@
       }
     </style>
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
-<link rel="stylesheet" href="/assets/channel-liquidity.css?v=1">
-<script defer src="/assets/channel-liquidity.js?v=1"></script>
+<link rel="stylesheet" href="/assets/channel-liquidity.css?v=2">
+<script defer src="/assets/channel-liquidity.js?v=2"></script>
 <script defer src="/assets/payment-notifications.js?v=1"></script>
 </head>
   <body>
@@ -9606,7 +9606,7 @@
           if ([401, 403].includes(response.status)) throw new Error('session_expired');
           if (!response.ok) throw new Error('unavailable');
           const data = await response.json();
-          window.Bolt12ChannelLiquidity.render(content, data.channels);
+          window.Bolt12ChannelLiquidity.render(content, data.channels, data.local_alias);
         } catch (error) {
           content.textContent = error.message === 'session_expired'
             ? window.__t('liquidity.session_expired') : window.__t('liquidity.unavailable');

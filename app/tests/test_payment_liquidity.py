@@ -26,7 +26,7 @@ def functions():
                'LND_TLS_CERT_PATH': '/test/cert', 'LND_MACAROON_PATH': '/test/mac',
                '_read_macaroon_hex': Mock(return_value='test-macaroon'),
                '_no_store_headers': lambda: {'Cache-Control': 'no-store'},
-               'require_pay_auth': Mock(),
+               'require_pay_auth': Mock(), '_lnd_getinfo': AsyncMock(return_value={'alias': 'local'}),
                'JSONResponse': lambda body, headers: (body, headers)}
     exec(compile(ast.Module(nodes, type_ignores=[]), str(SOURCE), 'exec'), context)
     return context
@@ -99,7 +99,7 @@ class PaymentLiquidityTests(unittest.IsolatedAsyncioTestCase):
     async def test_endpoint_no_store_and_unavailable_status(self):
         self.ns['_active_channel_liquidity'] = AsyncMock(return_value=[])
         body, headers = await self.ns['api_liquidity'](object())
-        self.assertEqual(body, {'channels': []})
+        self.assertEqual(body, {'channels': [], 'local_alias': 'local'})
         self.assertEqual(headers['Cache-Control'], 'no-store')
         self.ns['_active_channel_liquidity'].side_effect = OSError('offline')
         with self.assertRaises(HttpError) as caught:
