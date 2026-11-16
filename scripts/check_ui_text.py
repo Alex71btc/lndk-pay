@@ -230,6 +230,9 @@ def check_repository(root):
     path = Path("app/frontend/admin/pwa-install.js")
     for scope in ("pay", "console"):
         checker.javascript(path, scope, (root / path).read_text())
+    path = Path("app/assets/payment-notifications.js")
+    for scope in ("pay", "console"):
+        checker.javascript(path, scope, (root / path).read_text())
     server_fragments(checker, root)
     android(checker, root)
     return checker.finish()

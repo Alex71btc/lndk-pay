@@ -493,5 +493,19 @@
   "companion.status_pairing_created": "Kopplungscode erzeugt. Öffne ihn innerhalb von zehn Minuten auf Android.",
   "companion.confirm_revoke": "Dieses Android-Gerät widerrufen? Es erhält dann keine Zahlungsbenachrichtigungen mehr.",
   "companion.revoke_failed": "Android-Gerät konnte nicht widerrufen werden.",
-  "companion.revoked": "Android-Gerät widerrufen."
+  "companion.revoked": "Android-Gerät widerrufen.",
+  "liquidity.title": "Liquidität",
+  "liquidity.view": "Liquidität ansehen",
+  "liquidity.note": "Salden aktiver Channels in sats. Reserven, ausstehende Zahlungen, Gebühren und Routen können die nutzbare Liquidität begrenzen. Verwalte Channels in deinen Channel-Tools.",
+  "liquidity.loading": "Channel-Salden werden geladen…",
+  "liquidity.empty": "Keine aktiven Channels.",
+  "liquidity.unavailable": "LND-Daten nicht verfügbar.",
+  "liquidity.channel": "Channel {channel} · Ausgehend: {outgoing} sats · Eingehend: {incoming} sats",
+  "payment_error.no_route": "Keine Route gefunden.",
+  "payment_error.local_liquidity": "LND meldet unzureichende lokale ausgehende Liquidität.",
+  "payment_error.no_route_local_liquidity": "Keine Route gefunden. Die verfügbaren Salden aktiver Channels zeigen außerdem, dass die lokale ausgehende Liquidität für diesen Betrag nicht ausreicht.",
+  "payment_error.timeout": "Zeitüberschreitung bei der Zahlung.",
+  "payment_error.incorrect_details": "Zahlungsdaten ungültig oder Rechnung nicht mehr zahlbar.",
+  "payment_error.lnd_unavailable": "LND-Daten nicht verfügbar.",
+  "liquidity.session_expired": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an."
 }

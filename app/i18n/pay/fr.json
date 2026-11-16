@@ -493,5 +493,19 @@
   "companion.status_pairing_created": "Code d’association créé. Ouvrez-le sur Android dans les dix prochaines minutes.",
   "companion.confirm_revoke": "Révoquer cet appareil Android ? Il ne recevra plus les notifications de paiement.",
   "companion.revoke_failed": "Impossible de révoquer l’appareil Android.",
-  "companion.revoked": "Appareil Android révoqué."
+  "companion.revoked": "Appareil Android révoqué.",
+  "liquidity.title": "Liquidité",
+  "liquidity.view": "Voir la liquidité",
+  "liquidity.note": "Soldes des canaux actifs en sats. Les réserves, paiements en attente, frais et routes peuvent limiter la liquidité utilisable. Gérez les canaux avec vos outils dédiés.",
+  "liquidity.loading": "Chargement des soldes des canaux…",
+  "liquidity.empty": "Aucun canal actif.",
+  "liquidity.unavailable": "Données LND indisponibles.",
+  "liquidity.channel": "Canal {channel} · Sortante : {outgoing} sats · Entrante : {incoming} sats",
+  "payment_error.no_route": "Aucune route trouvée.",
+  "payment_error.local_liquidity": "LND signale une liquidité sortante locale insuffisante.",
+  "payment_error.no_route_local_liquidity": "Aucune route trouvée. Les soldes disponibles des canaux actifs indiquent également une liquidité sortante locale insuffisante pour ce montant.",
+  "payment_error.timeout": "Le paiement a expiré.",
+  "payment_error.incorrect_details": "Détails de paiement incorrects ou facture qui ne peut plus être payée.",
+  "payment_error.lnd_unavailable": "Données LND indisponibles.",
+  "liquidity.session_expired": "Votre session a expiré. Veuillez vous reconnecter."
 }

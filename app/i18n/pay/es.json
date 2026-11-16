@@ -493,5 +493,19 @@
   "companion.status_pairing_created": "Código de vinculación creado. Ábrelo en Android durante los próximos diez minutos.",
   "companion.confirm_revoke": "¿Revocar este dispositivo Android? Dejará de recibir notificaciones de pago.",
   "companion.revoke_failed": "No se pudo revocar el dispositivo Android.",
-  "companion.revoked": "Dispositivo Android revocado."
+  "companion.revoked": "Dispositivo Android revocado.",
+  "liquidity.title": "Liquidez",
+  "liquidity.view": "Ver liquidez",
+  "liquidity.note": "Saldos de canales activos en sats. Las reservas, pagos pendientes, comisiones y rutas pueden limitar la liquidez utilizable. Gestiona los canales en tus herramientas de canales.",
+  "liquidity.loading": "Cargando saldos de canales…",
+  "liquidity.empty": "No hay canales activos.",
+  "liquidity.unavailable": "Datos de LND no disponibles.",
+  "liquidity.channel": "Canal {channel} · Saliente: {outgoing} sats · Entrante: {incoming} sats",
+  "payment_error.no_route": "No se encontró ninguna ruta.",
+  "payment_error.local_liquidity": "LND indica liquidez saliente local insuficiente.",
+  "payment_error.no_route_local_liquidity": "No se encontró ninguna ruta. Los saldos disponibles de los canales activos también indican liquidez saliente local insuficiente para este importe.",
+  "payment_error.timeout": "Se agotó el tiempo del pago.",
+  "payment_error.incorrect_details": "Datos de pago incorrectos o factura ya no pagable.",
+  "payment_error.lnd_unavailable": "Datos de LND no disponibles.",
+  "liquidity.session_expired": "Tu sesión ha caducado. Vuelve a iniciar sesión."
 }

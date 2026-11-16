@@ -17,11 +17,13 @@ class WalletActivityNotificationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html = PAY_HTML.read_text(encoding="utf-8")
+        cls.shared = (ROOT / "app/assets/payment-notifications.js").read_text()
+        cls.css = (ROOT / "app/assets/payment-notifications.css").read_text()
 
     def function_source(self, name):
         match = re.search(
             rf"^      function {name}\(.*?^      \}}",
-            self.html,
+            self.shared,
             re.S | re.M,
         )
         self.assertIsNotNone(match, name)
@@ -125,19 +127,14 @@ assert.equal(incomingPaymentCategory({method: 'unknown'}), '');
         self.assertIn("min-height: 44px", self.html)
 
     def test_payment_toast_is_viewport_fixed_safe_and_opens_exact_activity(self):
-        self.assertRegex(self.html, r"\.toastWrap\s*\{\s*position:\s*fixed;")
-        self.assertIn('id="paymentToastRegion"', self.html)
-        self.assertIn('aria-live="polite"', self.html)
-        self.assertIn('button.className = "statusBar show ok paymentToast"', self.html)
-        self.assertIn("justify-items: center", self.html)
-        self.assertIn("max-width: min(520px, calc(100% - 16px))", self.html)
-        self.assertNotIn("background: #10241d", self.html)
-        self.assertIn("categoryElement.textContent = category", self.html)
-        self.assertIn("commentElement.textContent = comment", self.html)
-        self.assertNotIn("commentElement.innerHTML", self.html)
-        self.assertIn("rootDetails.dataset.paymentHash", self.html)
-        self.assertIn("element.dataset.paymentHash === paymentHash", self.html)
-        self.assertIn("paymentDetails.scrollIntoView", self.html)
+        self.assertIn("position:fixed", self.css)
+        self.assertIn("rgba(14,20,28,.94)", self.css)
+        self.assertIn("backdrop-filter:blur(8px)", self.css)
+        self.assertIn("commentElement.textContent = comment", self.shared)
+        self.assertNotIn("commentElement.innerHTML", self.shared)
+        self.assertIn("/pay?view=activity&payment=", self.shared)
+        self.assertIn("['/pay', '/app']", self.shared)
+        self.assertIn("[401,403].includes(response.status)", self.shared)
 
     def test_browser_alert_comment_filter_reuses_private_notification_rules(self):
         tree = ast.parse(COMPANION_PUSH.read_text(encoding="utf-8"))

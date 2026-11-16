@@ -493,5 +493,19 @@
   "companion.status_pairing_created": "Kod parowania został utworzony. Otwórz go na Androidzie w ciągu dziesięciu minut.",
   "companion.confirm_revoke": "Cofnąć uprawnienia tego urządzenia z Androidem? Przestanie otrzymywać powiadomienia o płatnościach.",
   "companion.revoke_failed": "Nie udało się cofnąć urządzenia z Androidem.",
-  "companion.revoked": "Urządzenie z Androidem zostało cofnięte."
+  "companion.revoked": "Urządzenie z Androidem zostało cofnięte.",
+  "liquidity.title": "Płynność",
+  "liquidity.view": "Zobacz płynność",
+  "liquidity.note": "Salda aktywnych kanałów w sats. Rezerwy, oczekujące płatności, opłaty i trasy mogą ograniczać dostępną płynność. Zarządzaj kanałami w przeznaczonych do tego narzędziach.",
+  "liquidity.loading": "Ładowanie sald kanałów…",
+  "liquidity.empty": "Brak aktywnych kanałów.",
+  "liquidity.unavailable": "Dane LND niedostępne.",
+  "liquidity.channel": "Kanał {channel} · Wychodząca: {outgoing} sats · Przychodząca: {incoming} sats",
+  "payment_error.no_route": "Nie znaleziono trasy.",
+  "payment_error.local_liquidity": "LND zgłasza niewystarczającą lokalną płynność wychodzącą.",
+  "payment_error.no_route_local_liquidity": "Nie znaleziono trasy. Dostępne salda aktywnych kanałów wskazują również na niewystarczającą lokalną płynność wychodzącą dla tej kwoty.",
+  "payment_error.timeout": "Przekroczono czas płatności.",
+  "payment_error.incorrect_details": "Nieprawidłowe dane płatności lub faktura nie może już zostać opłacona.",
+  "payment_error.lnd_unavailable": "Dane LND niedostępne.",
+  "liquidity.session_expired": "Twoja sesja wygasła. Zaloguj się ponownie."
 }
