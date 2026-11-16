@@ -1,0 +1,26 @@
+#liquidityContent { min-width:0; margin-top:16px; }
+.channelLiquidityOverview { --outgoing:#61b8ff; --incoming:#f5c75d; }
+.channelLiquidityCount { margin:0 0 12px; color:#cbd5e1; font-weight:600; }
+.channelLiquidityTotals, .channelLiquidityBalances { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; }
+.channelLiquidityTotals { padding:16px; margin-bottom:16px; border-radius:14px; background:#0c1525; border:1px solid #30415b; }
+.channelLiquidityMetric { min-width:0; }
+.channelLiquidityMetric.incoming { text-align:right; }
+.channelLiquidityLabel { display:block; font-size:.8rem; line-height:1.5; overflow-wrap:anywhere; }
+.channelLiquidityMetric.outgoing .channelLiquidityLabel { color:var(--outgoing); }
+.channelLiquidityMetric.incoming .channelLiquidityLabel { color:var(--incoming); }
+.channelLiquidityAmount { display:block; margin-top:3px; color:#f1f5f9; font-size:1rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.channelLiquidityTotals .channelLiquidityAmount { font-size:1.2rem; }
+.channelLiquidityList { display:grid; gap:10px; }
+.channelLiquidityCard { padding:16px; border:1px solid #2b3a51; border-radius:14px; background:linear-gradient(135deg,#141f30,#101827); }
+.channelLiquidityName { margin:0 0 12px; color:#cbd5e1; font-size:.85rem; font-weight:600; overflow-wrap:anywhere; }
+.channelLiquidityBar { display:flex; height:14px; margin-top:14px; overflow:hidden; border-radius:7px; background:#334155; }
+.channelLiquiditySegment { display:block; min-width:0; height:100%; flex:none; box-sizing:border-box; }
+.channelLiquiditySegment.outgoing { background:linear-gradient(90deg,#3294ed,#75c7ff); }
+.channelLiquiditySegment.incoming { background:linear-gradient(90deg,#eab542,#ffe08a); }
+.channelLiquidityPercentages { display:flex; justify-content:space-between; gap:12px; margin-top:5px; color:#b6c3d5; font-size:.75rem; font-variant-numeric:tabular-nums; }
+.liquidityNote { color:var(--muted); font-size:.82rem; line-height:1.6; margin:16px 0 0; }
+@media (max-width:560px) {
+  .channelLiquidityCard, .channelLiquidityTotals { padding:12px; }
+  .channelLiquidityTotals, .channelLiquidityBalances { gap:10px; }
+  .channelLiquidityTotals .channelLiquidityAmount { font-size:1.05rem; }
+}

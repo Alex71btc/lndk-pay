@@ -2939,14 +2939,18 @@ async def _pay_bolt11_invoice(
     if "self payment" in combined_error or "self-payments not allowed" in combined_error:
         raise HTTPException(status_code=400, detail="Selbstzahlungen sind nicht erlaubt.")
 
-    if "no route" in combined_error:
-        raise HTTPException(status_code=400, detail="Keine Route gefunden.")
-
-    if "insufficient balance" in combined_error:
-        raise HTTPException(status_code=400, detail="Nicht genügend Guthaben.")
-
-    if "timeout" in combined_error:
-        raise HTTPException(status_code=400, detail="Zahlung hat zu lange gedauert.")
+    reason = str(failure_reason or "")
+    if reason.lower() in {"", "0", "none", "failure_reason_none"}:
+        reason = str(payment_error or message_text)
+    amount_sat = None
+    if _payment_failure_detail(reason):
+        try:
+            decoded = await _decode_bolt11_invoice(payment_request)
+            amount_sat = int(amount_sat_override or decoded.get("num_satoshis") or decoded.get("numSatoshis") or 0)
+        except Exception:
+            pass
+        detail = await _explain_payment_failure(reason, amount_sat)
+        raise HTTPException(status_code=400, detail=detail)
 
     if response.status_code >= 400:
         detail = message_text or payment_error or failure_reason or raw_text or f"LND REST payment failed with HTTP {response.status_code}"
@@ -3105,23 +3109,9 @@ async def _pay_keysend(
             detail="Selbstzahlungen sind nicht erlaubt.",
         )
 
-    if "no route" in combined_error:
-        raise HTTPException(
-            status_code=400,
-            detail="Keine Route gefunden.",
-        )
-
-    if "insufficient balance" in combined_error:
-        raise HTTPException(
-            status_code=400,
-            detail="Nicht genügend Guthaben.",
-        )
-
-    if "timeout" in combined_error:
-        raise HTTPException(
-            status_code=400,
-            detail="Zahlung hat zu lange gedauert.",
-        )
+    detail = await _explain_payment_failure(str(failure_reason or message_text), amount_sat)
+    if detail:
+        raise HTTPException(status_code=400, detail=detail)
 
     if response.status_code >= 400:
         raise HTTPException(
@@ -4587,7 +4577,13 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
         payload.payer_note,
     )
 
-    raw_output = _run_command(args)
+    try:
+        raw_output = _run_command(args)
+    except HTTPException as exc:
+        detail = _payment_failure_detail(str(exc.detail))
+        if detail:
+            raise HTTPException(status_code=400, detail=detail) from exc
+        raise
 
     _log_tx(
         payment_hash=f"bolt12-outgoing-{int(time.time())}",
@@ -4749,7 +4745,13 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
             payload.payer_note,
         )
 
-        raw_cli_output = await asyncio.to_thread(_run_command, args)
+        try:
+            raw_cli_output = await asyncio.to_thread(_run_command, args)
+        except HTTPException as exc:
+            detail = await _explain_payment_failure(str(exc.detail), payload.amount_sat)
+            if detail:
+                raise HTTPException(status_code=400, detail=detail) from exc
+            raise
 
         _log_tx(
             payment_hash=f"bip353-outgoing-{int(time.time())}",
@@ -7543,6 +7545,82 @@ def _merge_pending_zap_updates(updates: dict[str, dict[str, Any]]) -> None:
     save_config(cfg)
 
 import base64
+
+
+def _payment_failure_detail(reason: str, amount_sat: int | None = None,
+                            channels: list[dict] | None = None) -> dict | None:
+    """Only explicit LND evidence or an insufficient active-balance upper bound.
+
+    Local balances are an upper bound, not a promise of routable liquidity:
+    reserves, pending HTLCs, fees and the remote route can reduce capacity.
+    """
+    normalized = str(reason).strip().lower().replace("_", " ")
+    if normalized in {"3", "failure reason incorrect payment details"} or "incorrect payment details" in normalized:
+        return {"code": "incorrect_details", "liquidity": False}
+    insufficient = "insufficient balance" in normalized or normalized == "5"
+    no_route = "no route" in normalized or "unable to find a path" in normalized or normalized == "2"
+    if insufficient:
+        return {"code": "local_liquidity", "liquidity": True}
+    if no_route:
+        if amount_sat and channels is not None:
+            upper_bound = sum(int(channel["outgoing_sat"]) for channel in channels)
+            if upper_bound < amount_sat:
+                return {"code": "no_route_local_liquidity", "liquidity": True}
+        return {"code": "no_route", "liquidity": True}
+    if "timeout" in normalized or "time out" in normalized or normalized == "1":
+        return {"code": "timeout", "liquidity": False}
+    return None
+
+
+async def _active_channel_liquidity(*, include_peer_aliases: bool = False) -> list[dict]:
+    headers = {"Grpc-Metadata-macaroon": _read_macaroon_hex(LND_MACAROON_PATH)}
+    verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
+    async with httpx.AsyncClient(timeout=10, verify=verify) as client:
+        response = await client.get(f"{LND_REST_URL}/v1/channels", headers=headers,
+                                    params={"active_only": "true", **({"peer_alias_lookup": "true"} if include_peer_aliases else {})})
+        response.raise_for_status()
+        payload = response.json()
+    if not isinstance(payload.get("channels"), list):
+        raise ValueError("Missing channel data")
+    result = []
+    for channel in payload["channels"]:
+        if channel.get("active") is not True:
+            continue
+        # Missing/malformed balances must never become a zero-balance diagnosis.
+        outgoing = int(channel["local_balance"])
+        incoming = int(channel["remote_balance"])
+        if min(outgoing, incoming) < 0:
+            raise ValueError("Invalid channel balance")
+        result.append({"channel_id": str(channel["chan_id"]),
+                       "outgoing_sat": outgoing, "incoming_sat": incoming})
+        if include_peer_aliases:
+            result[-1].update(peer_alias=channel.get("peer_alias"), remote_pubkey=channel.get("remote_pubkey"))
+    return result
+
+
+async def _explain_payment_failure(reason: str, amount_sat: int | None = None) -> dict | None:
+    detail = _payment_failure_detail(reason)
+    if not detail or detail["code"] != "no_route" or not amount_sat:
+        return detail
+    try:
+        channels = await _active_channel_liquidity()
+    except Exception:
+        channels = None
+    return _payment_failure_detail(reason, amount_sat, channels)
+
+
+@app.get("/api/liquidity")
+async def api_liquidity(request: StarletteRequest):
+    require_pay_auth(request)
+    try:
+        channels = await _active_channel_liquidity(include_peer_aliases=True)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"code": "lnd_unavailable"}) from exc
+    try:
+        local_alias = (await _lnd_getinfo()).get("alias")
+    except (HTTPException, httpx.HTTPError, OSError, ValueError):
+        local_alias = None
+    return JSONResponse({"channels": channels, "local_alias": local_alias}, headers=_no_store_headers())
 
 
 async def _lookup_invoice(payment_hash):

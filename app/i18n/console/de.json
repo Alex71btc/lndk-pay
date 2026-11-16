@@ -257,5 +257,14 @@
   "ui.language": "Sprache",
   "ui.loading_address": "Adresse wird geladen …",
   "ui.loading_offer": "Offer wird geladen …",
-  "ui.saving": "Wird gespeichert …"
+  "ui.saving": "Wird gespeichert …",
+  "toast.open_payment_activity": "In Lightning Activity öffnen",
+  "toast.open_payment_activity_amount": "Empfangene Zahlung über {amount} sats in Lightning Activity öffnen",
+  "toast.payment_received": "⚡ {amount} sats empfangen",
+  "history.nostr_zap": "Nostr Zap",
+  "history.bolt12_offer": "BOLT12 Offer",
+  "history.lightning_address": "Lightning-Adresse",
+  "history.lnurl": "LNURL",
+  "history.bolt11_invoice": "BOLT11-Rechnung",
+  "history.keysend": "Keysend"
 }

@@ -257,5 +257,14 @@
   "ui.language": "Language",
   "ui.loading_address": "Loading address…",
   "ui.loading_offer": "Loading offer…",
-  "ui.saving": "Saving…"
+  "ui.saving": "Saving…",
+  "toast.open_payment_activity": "Open in Lightning Activity",
+  "toast.open_payment_activity_amount": "Open the received payment of {amount} sats in Lightning Activity",
+  "toast.payment_received": "⚡ {amount} sats received",
+  "history.nostr_zap": "Nostr Zap",
+  "history.bolt12_offer": "BOLT12 Offer",
+  "history.lightning_address": "Lightning Address",
+  "history.lnurl": "LNURL",
+  "history.bolt11_invoice": "BOLT11 Invoice",
+  "history.keysend": "Keysend"
 }
