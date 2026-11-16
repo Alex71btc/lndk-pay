@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.25] - 2026-11-16
+
+### Added
+
+- Show incoming-payment notifications across Pay, Setup and Console, with a
+  direct link to the matching Lightning Activity entry.
+- Show read-only incoming and outgoing balances for active LND channels,
+  including peer aliases and public keys.
+- Add a Lightning Activity shortcut to the Pay action bar.
+
+### Improved
+
+- Make payment notifications easier to read over page content.
+- Explain supported payment failures and link to Channel Liquidity when
+  relevant.
+
+
 ## [0.3.24] - 2026-11-13
 
 ### Added
