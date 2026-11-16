@@ -496,6 +496,7 @@
   "companion.revoked": "Android device revoked.",
   "liquidity.title": "Channel Liquidity",
   "liquidity.view": "View channel liquidity",
+  "liquidity.capacity": "Total capacity: {amount} sats",
   "liquidity.note": "Active channel balances in sats. Reserves, pending payments, fees and routes can reduce usable liquidity. Manage channels in your channel tools. Bar lengths compare total balances across channels.",
   "liquidity.loading": "Loading channel balances…",
   "liquidity.empty": "No active channels.",

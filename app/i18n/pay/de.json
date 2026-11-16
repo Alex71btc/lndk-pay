@@ -496,6 +496,7 @@
   "companion.revoked": "Android-Gerät widerrufen.",
   "liquidity.title": "Channel-Liquidität",
   "liquidity.view": "Channel-Liquidität ansehen",
+  "liquidity.capacity": "Gesamtkapazität: {amount} sats",
   "liquidity.note": "Salden aktiver Channels in sats. Reserven, ausstehende Zahlungen, Gebühren und Routen können die nutzbare Liquidität begrenzen. Verwalte Channels in deinen Channel-Tools. Die Balkenlängen vergleichen die Gesamtsalden der Channels.",
   "liquidity.loading": "Channel-Salden werden geladen…",
   "liquidity.empty": "Keine aktiven Channels.",

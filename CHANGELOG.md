@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 - Show incoming-payment notifications across Pay, Setup and Console, with a
   direct link to the matching Lightning Activity entry.
 - Show read-only incoming and outgoing balances for active LND channels,
-  including peer aliases and public keys.
+  including total capacity, peer aliases and public keys.
 - Add a Lightning Activity shortcut to the Pay action bar.
 
 ### Improved

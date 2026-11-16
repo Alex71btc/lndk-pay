@@ -496,6 +496,7 @@
   "companion.revoked": "Urządzenie z Androidem zostało cofnięte.",
   "liquidity.title": "Płynność kanałów",
   "liquidity.view": "Zobacz płynność kanałów",
+  "liquidity.capacity": "Całkowita pojemność: {amount} sats",
   "liquidity.note": "Salda aktywnych kanałów w sats. Rezerwy, oczekujące płatności, opłaty i trasy mogą ograniczać dostępną płynność. Zarządzaj kanałami w przeznaczonych do tego narzędziach. Długości pasków porównują łączne salda kanałów.",
   "liquidity.loading": "Ładowanie sald kanałów…",
   "liquidity.empty": "Brak aktywnych kanałów.",

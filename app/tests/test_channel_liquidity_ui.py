@@ -19,7 +19,7 @@ const window={getLang:()=> 'en',__t:(key,params={})=>key+JSON.stringify(params)}
 ''' + source + r'''
 const target=node('div');
 window.Bolt12ChannelLiquidity.render(target,[
- {channel_id:'<img onerror=bad()>',outgoing_sat:375,incoming_sat:125},
+ {channel_id:'<img onerror=bad()>',outgoing_sat:375,incoming_sat:125,capacity_sat:2000},
  {channel_id:'zero',outgoing_sat:0,incoming_sat:0},
  {channel_id:'out',outgoing_sat:1000,incoming_sat:0},
  {channel_id:'in',outgoing_sat:0,incoming_sat:1000},
@@ -28,11 +28,13 @@ const overview=target.children[0],list=overview.children[2];
 assert.equal(list.children.length,4);
 assert.ok(list.children[0].children[0].textContent.includes('<img onerror=bad()>'));
 assert.equal(list.children[0].children[0].children.length,0,'channel ID must be text');
+assert.equal(list.children[0].children[1].textContent, 'liquidity.capacity{"amount":"2,000"}');
+assert.equal(list.children[1].children[1].className, 'channelLiquidityBalances');
 for(const [index, barWidth, widths] of [
  [0,'50%',['75%','25%']], [1,'0%',['0%','0%']],
  [2,'100%',['100%','0%']], [3,'100%',['0%','100%']],
 ]) {
- const bar=list.children[index].children[2];
+ const bar=list.children[index].children.find(node=>node.className==='channelLiquidityBar');
  assert.equal(bar.attrs.role,'img');assert.ok(bar.attrs['aria-label']);
  assert.equal(bar.style.width,barWidth);
  assert.deepEqual(bar.children.map(node=>node.style.width),widths);
@@ -81,5 +83,5 @@ assert.equal(target.children[0].children.length,2,'empty channels do not fabrica
     def test_all_five_languages_name_both_sides(self):
         for language in ('en','de','es','fr','pl'):
             catalog=json.loads((ROOT/f'app/i18n/pay/{language}.json').read_text())
-            for key in ('title','outgoing','incoming','active_channels','distribution'):
+            for key in ('title','outgoing','incoming','active_channels','distribution','capacity'):
                 self.assertTrue(catalog['liquidity.'+key])

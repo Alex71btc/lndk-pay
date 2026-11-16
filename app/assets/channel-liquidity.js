@@ -9,7 +9,12 @@
       if (![outgoing, incoming].every(value => Number.isSafeInteger(value) && value >= 0)) {
         throw new Error('Invalid channel balance');
       }
-      return {id: String(channel.channel_id), outgoing, incoming, alias: typeof channel.peer_alias === 'string' ? channel.peer_alias.trim() : '', pubkey: channel.remote_pubkey || ''};
+      return {
+        id: String(channel.channel_id),
+        outgoing, incoming, capacity: channel.capacity_sat,
+        alias: typeof channel.peer_alias === 'string' ? channel.peer_alias.trim() : '',
+        pubkey: channel.remote_pubkey || '',
+      };
     });
     const format = value => new Intl.NumberFormat(window.getLang()).format(value);
     function element(tag, className, text) {
@@ -61,6 +66,10 @@
       heading.title = channelLabel;
       if (row.alias && row.pubkey) heading.appendChild(element('small', 'channelLiquidityLabel', row.pubkey));
       card.appendChild(heading);
+      if (Number.isSafeInteger(row.capacity) && row.capacity > 0) {
+        card.appendChild(element('p', 'channelLiquidityName',
+          window.__t('liquidity.capacity', {amount: format(row.capacity)})));
+      }
       card.appendChild(balances(row.outgoing, row.incoming, 'channelLiquidityBalances'));
       const bar = element('div', 'channelLiquidityBar');
       bar.style.width = (largestBalance ? total / largestBalance * 100 : 0) + '%';
