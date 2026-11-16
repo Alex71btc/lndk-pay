@@ -6,6 +6,6 @@
 .paymentToastRegion .paymentToastComment { width:100%; min-width:0; display:block; margin-top:4px; overflow-wrap:anywhere; max-height:8em; overflow:auto; }
 #liquidityContent { overflow-wrap:anywhere; }
 
-.topActions .activityShortcut { display:inline-flex; align-items:center; justify-content:center; gap:8px; border-color:#7546a7; background:rgba(151,80,216,.08); }
+.topActions .activityShortcut { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
 .topActions .activityShortcut img { width:14px; height:18px; object-fit:contain; flex:none; }
-.topActions .activityShortcut:focus-visible { outline:2px solid #c695f0; outline-offset:3px; }
+.topActions .activityShortcut:focus-visible { outline:2px solid currentColor; outline-offset:3px; }
