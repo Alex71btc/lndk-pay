@@ -197,8 +197,21 @@
         display: grid;
         grid-template-columns: 0.9fr 1.1fr;
         gap: 18px;
-        align-items: start;
         margin-bottom: 18px;
+      }
+
+      .paymentResultSection {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        scroll-margin-top: 24px;
+      }
+
+      @media (min-width: 941px) {
+        #paymentResultOutput {
+          flex: 1;
+          resize: none;
+        }
       }
 
       .section {
@@ -925,6 +938,31 @@
         opacity: 0.82;
       }
 
+      .offerDecodeDetails {
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+
+      .offerDecodeDetails > summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .offerDecodeDetails[open] > summary {
+        margin-bottom: 12px;
+      }
+
+      #qrActionsDialog {
+        width: min(360px, calc(100% - 32px));
+        color: inherit;
+      }
+
+      #qrActionsDialog::backdrop {
+        background: rgba(3, 8, 20, 0.72);
+      }
+
       .scannerViewport {
         width: 100%;
         aspect-ratio: 1 / 1;
@@ -1358,8 +1396,7 @@
       </div>
       <div class="sub">
         <span data-i18n="hint.top_intro"
-          >LNDK kann Offers nicht nur erzeugen, sondern auch direkt bezahlen.
-          Deshalb steht der Pay-Bereich bewusst ganz oben im Fokus.</span
+          >BOLT12-Offers erstellen und direkt bezahlen.</span
         >
       </div>
       <div class="topActions">
@@ -1387,21 +1424,19 @@
         >
           <span data-i18n="nav.console">Zur Console</span>
         </button>
-        <button class="secondary" id="scanToDecodeBtn" type="button">
-          <span data-i18n="nav.qr_decode">QR → Decode</span>
-        </button>
+        <button class="secondary" id="qrActionsBtn" type="button" aria-haspopup="dialog">QR</button>
         <button class="danger" id="logoutBtn" type="button">
           <span data-i18n="nav.logout">Logout</span>
         </button>
       </div>
       <div class="heroGrid">
         <form id="payForm" class="section payHero" novalidate>
-          <h2><span data-i18n="title.pay">Offer bezahlen</span></h2>
+          <h2><span data-i18n="title.pay">Zahlung senden</span></h2>
 
           <div class="payTargetLabelRow">
             <label class="label" for="payOfferInput"
               ><span data-i18n="label.target"
-                >Offer, Invoice oder Lightning Address</span
+                >Lightning-Zahlungsziel</span
               ></label
             >
           </div>
@@ -1617,8 +1652,7 @@
 
           <div class="hint">
             <span data-i18n="hint.top"
-              >Hauptfokus: BOLT12 Offer Pay. Automatische Erkennung für BOLT12,
-              BOLT11 und LNURL / Lightning Address.</span
+              >Unterstützt BOLT12-Offers, BOLT11-Rechnungen, Lightning-Adressen, LNURL und Keysend.</span
             >
           </div>
         </form>
@@ -1656,10 +1690,40 @@
 
           <div class="hint">
             <span data-i18n="hint.offer_string"
-              >Der erzeugte Offer-String kann direkt als QR angezeigt oder in
-              Pay / Decode übernommen werden.</span
+              >Das erstellte Offer erscheint als QR-Code unter „Aktuelles Offer / QR“.</span
             >
           </div>
+          <details class="offerDecodeDetails" id="offerDecodeDetails">
+            <summary data-i18n="title.decode">Offer dekodieren</summary>
+            <label class="label" for="decodeInput"
+              ><span data-i18n="label.decode_target"
+                >Offer oder BIP353-Adresse</span
+              ></label
+            >
+            <input
+              id="decodeInput"
+              type="text"
+              data-i18n-placeholder="ph.decode_target"
+              placeholder="lno... oder user@domain"
+            />
+
+            <div class="row">
+              <button class="secondary" id="scanToDecodeBtn" type="button" data-i18n="btn.qr_scan">QR-Code scannen</button>
+              <button id="decodeBtn" data-i18n="btn.decode" type="button">Dekodieren</button>
+            </div>
+
+            <label class="label" for="decodeOutput" style="margin-top: 14px"
+              ><span data-i18n="label.decode_output">Decode-Ausgabe</span></label
+            >
+            <textarea
+              id="decodeOutput"
+              class="mono copyable"
+              readonly
+              data-i18n-placeholder="ph.decode_output"
+              placeholder="Hier erscheint die Decode-Ausgabe..."
+              data-i18n-title="hint.tap_copy" title="Zum Kopieren antippen"
+            ></textarea>
+          </details>
         </section>
       </div>
 
@@ -1721,39 +1785,7 @@
           </div>
         </section>
 
-        <section class="section">
-          <h2><span data-i18n="title.decode">Offer decoden</span></h2>
-
-          <label class="label" for="decodeInput"
-            ><span data-i18n="label.decode_target"
-              >Offer oder BIP353-Adresse</span
-            ></label
-          >
-          <input
-            id="decodeInput"
-            type="text"
-            data-i18n-placeholder="ph.decode_target"
-            placeholder="lno... oder user@domain"
-          />
-
-          <div class="row">
-            <button id="decodeBtn" data-i18n="btn.decode" type="button">Decode</button>
-          </div>
-
-          <label class="label" for="decodeOutput" style="margin-top: 14px"
-            ><span data-i18n="label.decode_output">Decode-Ausgabe</span></label
-          >
-          <textarea
-            id="decodeOutput"
-            class="mono copyable"
-            readonly
-            data-i18n-placeholder="ph.decode_output"
-            placeholder="Hier erscheint die Decode-Ausgabe..."
-            data-i18n-title="hint.tap_copy" title="Zum Kopieren antippen"
-          ></textarea>
-        </section>
-
-        <section class="section">
+        <section class="section paymentResultSection" id="paymentResultSection">
           <h2>
             <span data-i18n="title.last_payment">Letztes Zahlungsergebnis</span>
           </h2>
@@ -3090,6 +3122,17 @@
       </div>
     </div>
 
+    <dialog class="scannerCard" id="qrActionsDialog" aria-labelledby="qrActionsTitle">
+      <h2 id="qrActionsTitle">QR</h2>
+      <div class="row">
+        <button id="qrScanBtn" type="button" data-i18n="btn.qr_scan">QR-Code scannen</button>
+        <button id="qrDecodeBtn" class="secondary" type="button" data-i18n="title.decode">Offer dekodieren</button>
+        <form method="dialog">
+          <button class="secondary" type="submit" data-i18n="btn.close">Schließen</button>
+        </form>
+      </div>
+    </dialog>
+
     <div
       class="scannerModal"
       id="scannerModal"
@@ -3234,6 +3277,7 @@
       const payPreviewMeta = document.getElementById("payPreviewMeta");
 
       const decodeInput = document.getElementById("decodeInput");
+      const decodeBtn = document.getElementById("decodeBtn");
       const decodeOutput = document.getElementById("decodeOutput");
       const paymentResultOutput = document.getElementById(
         "paymentResultOutput",
@@ -7707,12 +7751,10 @@
             paymentResultOutput.value = summary;
           }
 
-          if (typeof paymentResultOutput.scrollIntoView === "function") {
-            paymentResultOutput.scrollIntoView({
-              behavior: "smooth",
-              block: "center",
-            });
-          }
+          document.getElementById("paymentResultSection").scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
         }
       }
 
@@ -8418,11 +8460,15 @@
       });
 
       function applyScanResult(rawValue) {
+        if (!scannerModal.classList.contains("show")) return;
+
         const value = normalizeScannedText(rawValue);
         if (!value) {
           setStatus(window.__t("toast.qr_content_unreadable"), "error", true);
           return;
         }
+
+        void closeScanner();
 
         if (scanTarget === "pay") {
           payOfferInput.value = value;
@@ -8430,13 +8476,13 @@
           setStatus(window.__t("toast.qr_to_pay"));
         } else {
           decodeInput.value = value;
-          setStatus(window.__t("toast.qr_to_decode"));
+          void decodeOffer();
         }
-
-        closeScanner();
       }
 
       async function openScanner(target) {
+        if (target === "decode" && decodeBtn.disabled) return;
+
         scanTarget = target;
         scannerTitle.dataset.i18n = target === "pay" ? "scanner.subtitle.pay" : "scanner.subtitle.decode";
         scannerTitle.textContent = window.__t(scannerTitle.dataset.i18n);
@@ -9377,38 +9423,40 @@
           setUiText(btn, "btn.pay");
         }
       }
-      document
-        .getElementById("decodeBtn")
-        .addEventListener("click", async () => {
-          const offer = normalizeScannedText(decodeInput.value);
-          if (!offer) {
-            setStatus(window.__t("toast.enter_decode_target"), "error");
-            return;
-          }
+      async function decodeOffer() {
+        if (decodeBtn.disabled) return;
 
-          const btn = document.getElementById("decodeBtn");
-          btn.disabled = true;
-          setUiText(btn, "toast.decoding");
-          setStatus(window.__t("toast.decoding"), "warn");
+        const offer = normalizeScannedText(decodeInput.value);
+        if (!offer) {
+          setStatus(window.__t("toast.enter_decode_target"), "error");
+          return;
+        }
 
-          try {
-            const response = await fetch("/api/decode-offer", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offer }),
-            });
+        decodeBtn.disabled = true;
+        decodeOutput.value = "";
+        setUiText(decodeBtn, "toast.decoding");
+        setStatus(window.__t("toast.decoding"), "warn");
 
-            const data = await readJsonOrThrow(response);
-            decodeOutput.value = data.raw_output || "";
-            setStatus(window.__t("toast.decode_success"));
-          } catch (error) {
-            const message = errorToMessage(error);
-            showErrorDetail(message, error.liquidity);
-          } finally {
-            btn.disabled = false;
-            setUiText(btn, "btn.decode");
-          }
-        });
+        try {
+          const response = await fetch("/api/decode-offer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offer }),
+          });
+
+          const data = await readJsonOrThrow(response);
+          decodeOutput.value = data.raw_output || "";
+          setStatus(window.__t("toast.decode_success"));
+        } catch (error) {
+          const message = errorToMessage(error);
+          showErrorDetail(message, error.liquidity);
+        } finally {
+          decodeBtn.disabled = false;
+          setUiText(decodeBtn, "btn.decode");
+        }
+      }
+
+      decodeBtn.addEventListener("click", decodeOffer);
 
       payOfferInput.addEventListener("input", () => {
         updatePayInputCopyState();
@@ -9551,6 +9599,23 @@
             window.__t("toast.address_copied"),
           );
         });
+
+      const qrActionsDialog = document.getElementById("qrActionsDialog");
+      document.getElementById("qrActionsBtn").addEventListener("click", () => {
+        qrActionsDialog.showModal();
+      });
+
+      document.getElementById("qrScanBtn").addEventListener("click", async () => {
+        qrActionsDialog.close();
+        await openScanner("pay");
+      });
+
+      document.getElementById("qrDecodeBtn").addEventListener("click", async () => {
+        qrActionsDialog.close();
+        document.getElementById("offerDecodeDetails").open = true;
+        decodeInput.scrollIntoView({ block: "center" });
+        await openScanner("decode");
+      });
 
       document
         .getElementById("scanToDecodeBtn")
