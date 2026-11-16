@@ -23,7 +23,7 @@ class ActivityQuickRepayTests(unittest.TestCase):
         self.assertIn('getElementById("txHistorySection")', fragment)
         self.assertIn("if (activity) activity.open = true", fragment)
         self.assertIn("void syncTxHistory()", fragment)
-        self.assertIn("paymentResultOutput.scrollIntoView", fragment)
+        self.assertIn('getElementById("paymentResultSection").scrollIntoView', fragment)
 
     def test_only_reusable_outgoing_targets(self):
         self.assertIn('item.direction === "outgoing"', self.html)

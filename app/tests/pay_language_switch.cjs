@@ -87,20 +87,25 @@ for (const code of ["en", "de", "es", "fr", "pl"]) {
   const dialog = byId("qrActionsDialog");
   const decodeDetails = byId("offerDecodeDetails");
   const decodeInput = byId("decodeInput");
+  const activity = byId("txHistorySection");
+  const resultSection = byId("paymentResultSection");
   const scans = [];
   dialog.showModal = () => { dialog.open = true; };
   dialog.close = () => { dialog.open = false; };
-  decodeInput.focus = () => { document.activeElement = decodeInput; };
   decodeInput.scrollIntoView = () => {};
-  tab.openScanner = mode => scans.push(mode);
+  tab.openScanner = mode => {
+    assert.equal(dialog.open, false);
+    if (mode === "decode") assert.equal(decodeDetails.open, true);
+    scans.push(mode);
+  };
 
   assert.equal(Object.hasOwn(decodeDetails.attrs, "open"), false);
   byId("qrActionsBtn").handlers.get("click")();
   assert.equal(dialog.open, true);
-  byId("qrDecodeBtn").handlers.get("click")();
+  await byId("qrDecodeBtn").handlers.get("click")();
   assert.equal(dialog.open, false);
   assert.equal(decodeDetails.open, true);
-  assert.equal(document.activeElement, decodeInput);
+  assert.deepEqual(scans, ["decode"]);
   assert.equal(byId("payOfferInput").value, target);
 
   byId("qrActionsBtn").handlers.get("click")();
@@ -108,7 +113,58 @@ for (const code of ["en", "de", "es", "fr", "pl"]) {
   assert.equal(dialog.open, false);
   await byId("scanToPayBtn").handlers.get("click")();
   await byId("scanToDecodeBtn").handlers.get("click")();
-  assert.deepEqual(scans, ["pay", "pay", "decode"]);
+  assert.deepEqual(scans, ["decode", "pay", "pay", "decode"]);
+
+  const scanner = byId("scannerModal");
+  const scannerClasses = new Set();
+  scanner.classList.add = name => scannerClasses.add(name);
+  scanner.classList.remove = name => scannerClasses.delete(name);
+  scanner.classList.contains = name => scannerClasses.has(name);
+
+  const decodeRequests = [];
+  let finishDecode;
+  tab.fetch = (url, options) => {
+    assert.equal(url, "/api/decode-offer");
+    assert.equal(options.method, "POST");
+    decodeRequests.push(JSON.parse(options.body).offer);
+    return new Promise(resolve => {
+      finishDecode = raw_output => resolve({
+        ok: true,
+        text: async () => JSON.stringify({ raw_output }),
+      });
+    });
+  };
+
+  scanner.classList.add("show");
+  tab.applyScanResult("lightning:lno1scanned");
+  tab.applyScanResult("lightning:lno1scanned");
+  assert.equal(scanner.classList.contains("show"), false);
+  assert.equal(decodeInput.value, "lno1scanned");
+  assert.deepEqual(decodeRequests, ["lno1scanned"]);
+  finishDecode("Scanned offer details");
+  await new Promise(setImmediate);
+  assert.equal(byId("decodeOutput").value, "Scanned offer details");
+
+  decodeInput.value = "lno1manual";
+  assert.deepEqual(decodeRequests, ["lno1scanned"]);
+  const manualDecode = byId("decodeBtn").handlers.get("click")();
+  assert.deepEqual(decodeRequests, ["lno1scanned", "lno1manual"]);
+  finishDecode("Manual offer details");
+  await manualDecode;
+  assert.equal(byId("decodeOutput").value, "Manual offer details");
+
+  let resultScrolled = false;
+  resultSection.scrollIntoView = ({ block }) => {
+    assert.equal(block, "start");
+    assert.equal(activity.open, true);
+    assert.match(byId("paymentResultOutput").value, /Payment sent\n123 sats/);
+    resultScrolled = true;
+  };
+  let historySynced = false;
+  tab.syncTxHistory = () => { historySynced = true; };
+  tab.renderSuccessOutput("Payment sent", ["123 sats"]);
+  assert.equal(resultScrolled, true);
+  assert.equal(historySynced, true);
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;

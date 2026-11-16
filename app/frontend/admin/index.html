@@ -197,8 +197,21 @@
         display: grid;
         grid-template-columns: 0.9fr 1.1fr;
         gap: 18px;
-        align-items: start;
         margin-bottom: 18px;
+      }
+
+      .paymentResultSection {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        scroll-margin-top: 24px;
+      }
+
+      @media (min-width: 941px) {
+        #paymentResultOutput {
+          flex: 1;
+          resize: none;
+        }
       }
 
       .section {
@@ -1772,7 +1785,7 @@
           </div>
         </section>
 
-        <section class="section">
+        <section class="section paymentResultSection" id="paymentResultSection">
           <h2>
             <span data-i18n="title.last_payment">Letztes Zahlungsergebnis</span>
           </h2>
@@ -3264,6 +3277,7 @@
       const payPreviewMeta = document.getElementById("payPreviewMeta");
 
       const decodeInput = document.getElementById("decodeInput");
+      const decodeBtn = document.getElementById("decodeBtn");
       const decodeOutput = document.getElementById("decodeOutput");
       const paymentResultOutput = document.getElementById(
         "paymentResultOutput",
@@ -7737,12 +7751,10 @@
             paymentResultOutput.value = summary;
           }
 
-          if (typeof paymentResultOutput.scrollIntoView === "function") {
-            paymentResultOutput.scrollIntoView({
-              behavior: "smooth",
-              block: "center",
-            });
-          }
+          document.getElementById("paymentResultSection").scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
         }
       }
 
@@ -8448,11 +8460,15 @@
       });
 
       function applyScanResult(rawValue) {
+        if (!scannerModal.classList.contains("show")) return;
+
         const value = normalizeScannedText(rawValue);
         if (!value) {
           setStatus(window.__t("toast.qr_content_unreadable"), "error", true);
           return;
         }
+
+        void closeScanner();
 
         if (scanTarget === "pay") {
           payOfferInput.value = value;
@@ -8460,13 +8476,13 @@
           setStatus(window.__t("toast.qr_to_pay"));
         } else {
           decodeInput.value = value;
-          setStatus(window.__t("toast.qr_to_decode"));
+          void decodeOffer();
         }
-
-        closeScanner();
       }
 
       async function openScanner(target) {
+        if (target === "decode" && decodeBtn.disabled) return;
+
         scanTarget = target;
         scannerTitle.dataset.i18n = target === "pay" ? "scanner.subtitle.pay" : "scanner.subtitle.decode";
         scannerTitle.textContent = window.__t(scannerTitle.dataset.i18n);
@@ -9407,38 +9423,40 @@
           setUiText(btn, "btn.pay");
         }
       }
-      document
-        .getElementById("decodeBtn")
-        .addEventListener("click", async () => {
-          const offer = normalizeScannedText(decodeInput.value);
-          if (!offer) {
-            setStatus(window.__t("toast.enter_decode_target"), "error");
-            return;
-          }
+      async function decodeOffer() {
+        if (decodeBtn.disabled) return;
 
-          const btn = document.getElementById("decodeBtn");
-          btn.disabled = true;
-          setUiText(btn, "toast.decoding");
-          setStatus(window.__t("toast.decoding"), "warn");
+        const offer = normalizeScannedText(decodeInput.value);
+        if (!offer) {
+          setStatus(window.__t("toast.enter_decode_target"), "error");
+          return;
+        }
 
-          try {
-            const response = await fetch("/api/decode-offer", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offer }),
-            });
+        decodeBtn.disabled = true;
+        decodeOutput.value = "";
+        setUiText(decodeBtn, "toast.decoding");
+        setStatus(window.__t("toast.decoding"), "warn");
 
-            const data = await readJsonOrThrow(response);
-            decodeOutput.value = data.raw_output || "";
-            setStatus(window.__t("toast.decode_success"));
-          } catch (error) {
-            const message = errorToMessage(error);
-            showErrorDetail(message, error.liquidity);
-          } finally {
-            btn.disabled = false;
-            setUiText(btn, "btn.decode");
-          }
-        });
+        try {
+          const response = await fetch("/api/decode-offer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offer }),
+          });
+
+          const data = await readJsonOrThrow(response);
+          decodeOutput.value = data.raw_output || "";
+          setStatus(window.__t("toast.decode_success"));
+        } catch (error) {
+          const message = errorToMessage(error);
+          showErrorDetail(message, error.liquidity);
+        } finally {
+          decodeBtn.disabled = false;
+          setUiText(decodeBtn, "btn.decode");
+        }
+      }
+
+      decodeBtn.addEventListener("click", decodeOffer);
 
       payOfferInput.addEventListener("input", () => {
         updatePayInputCopyState();
@@ -9592,11 +9610,11 @@
         await openScanner("pay");
       });
 
-      document.getElementById("qrDecodeBtn").addEventListener("click", () => {
+      document.getElementById("qrDecodeBtn").addEventListener("click", async () => {
         qrActionsDialog.close();
         document.getElementById("offerDecodeDetails").open = true;
-        decodeInput.focus({ preventScroll: true });
         decodeInput.scrollIntoView({ block: "center" });
+        await openScanner("decode");
       });
 
       document

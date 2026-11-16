@@ -44,7 +44,7 @@ class MobileKeyboardBehaviorTests(unittest.TestCase):
         snippet = self.page[a:b]
         self.assertIn("dismissAndroidPaymentKeyboard();", snippet)
         self.assertIn("void syncTxHistory();", snippet)
-        self.assertIn("paymentResultOutput.scrollIntoView", snippet)
+        self.assertIn('getElementById("paymentResultSection").scrollIntoView', snippet)
 
     def test_manual_paste_fallback_still_focuses_input(self):
         a = self.page.index('function showClipboardPasteFallback(reason = "unavailable")')
