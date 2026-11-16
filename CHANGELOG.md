@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 ### Improved
 
 - Make payment notifications easier to read over page content.
+- Scale channel liquidity bars to compare total balances across channels.
 - Explain supported payment failures and link to Channel Liquidity when
   relevant.
 

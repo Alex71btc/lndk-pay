@@ -19,7 +19,7 @@ const window={getLang:()=> 'en',__t:(key,params={})=>key+JSON.stringify(params)}
 ''' + source + r'''
 const target=node('div');
 window.Bolt12ChannelLiquidity.render(target,[
- {channel_id:'<img onerror=bad()>',outgoing_sat:750,incoming_sat:250},
+ {channel_id:'<img onerror=bad()>',outgoing_sat:375,incoming_sat:125},
  {channel_id:'zero',outgoing_sat:0,incoming_sat:0},
  {channel_id:'out',outgoing_sat:1000,incoming_sat:0},
  {channel_id:'in',outgoing_sat:0,incoming_sat:1000},
@@ -28,15 +28,21 @@ const overview=target.children[0],list=overview.children[2];
 assert.equal(list.children.length,4);
 assert.ok(list.children[0].children[0].textContent.includes('<img onerror=bad()>'));
 assert.equal(list.children[0].children[0].children.length,0,'channel ID must be text');
-for(const [index,widths] of [[0,['75%','25%']],[1,['0%','0%']],[2,['100%','0%']],[3,['0%','100%']]]) {
+for(const [index, barWidth, widths] of [
+ [0,'50%',['75%','25%']], [1,'0%',['0%','0%']],
+ [2,'100%',['100%','0%']], [3,'100%',['0%','100%']],
+]) {
  const bar=list.children[index].children[2];
  assert.equal(bar.attrs.role,'img');assert.ok(bar.attrs['aria-label']);
+ assert.equal(bar.style.width,barWidth);
  assert.deepEqual(bar.children.map(node=>node.style.width),widths);
 }
-assert.equal(overview.children[1].children[0].children[1].textContent,'1,750 sats');
-assert.equal(overview.children[1].children[1].children[1].textContent,'1,250 sats');
+assert.equal(overview.children[1].children[0].children[1].textContent,'1,375 sats');
+assert.equal(overview.children[1].children[1].children[1].textContent,'1,125 sats');
 assert.throws(()=>window.Bolt12ChannelLiquidity.render(target,[{channel_id:'bad',outgoing_sat:-1,incoming_sat:1}]));
 assert.equal(target.children[0],overview,'invalid snapshots do not partially overwrite the view');
+window.Bolt12ChannelLiquidity.render(target,[{channel_id:'zero',outgoing_sat:0,incoming_sat:0}]);
+assert.equal(target.children[0].children[2].children[0].children[2].style.width,'0%');
 window.Bolt12ChannelLiquidity.render(target,[]);
 assert.equal(target.children[0].children.length,2,'empty channels do not fabricate zero bars');
 '''

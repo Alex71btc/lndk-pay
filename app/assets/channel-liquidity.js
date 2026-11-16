@@ -49,6 +49,7 @@
       const label = overview.querySelector('.channelLiquidityTotals .outgoing .channelLiquidityLabel');
       label.textContent = localAlias.trim() + ' · ' + label.textContent;
     }
+    const largestBalance = rows.reduce((largest, row) => Math.max(largest, row.outgoing + row.incoming), 0);
     const list = element('div', 'channelLiquidityList');
     for (const row of rows) {
       const total = row.outgoing + row.incoming;
@@ -62,6 +63,7 @@
       card.appendChild(heading);
       card.appendChild(balances(row.outgoing, row.incoming, 'channelLiquidityBalances'));
       const bar = element('div', 'channelLiquidityBar');
+      bar.style.width = (largestBalance ? total / largestBalance * 100 : 0) + '%';
       bar.setAttribute('role', 'img');
       bar.setAttribute('aria-label', window.__t('liquidity.distribution', {
         outgoing: format(row.outgoing), incoming: format(row.incoming),
