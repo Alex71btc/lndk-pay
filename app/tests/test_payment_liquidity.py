@@ -83,6 +83,16 @@ class PaymentLiquidityTests(unittest.IsolatedAsyncioTestCase):
             headers={'Grpc-Metadata-macaroon': 'test-macaroon'}, params={'active_only': 'true'})
         client.post.assert_not_called()
 
+    async def test_capacity_comes_from_lnd_and_is_optional(self):
+        self.channel_client([
+            {'active': True, 'chan_id': '42', 'local_balance': '123',
+             'remote_balance': '456', 'capacity': '1000'},
+            {'active': True, 'chan_id': '43', 'local_balance': '123',
+             'remote_balance': '456', 'capacity': 'invalid'},
+        ])
+        channels, _ = await self.ns['api_liquidity'](object())
+        self.assertEqual([c['capacity_sat'] for c in channels['channels']], [1000, None])
+
     async def test_malformed_balance_is_unavailable_not_zero(self):
         self.channel_client([{'active': True, 'chan_id': '42', 'remote_balance': '4'}])
         with self.assertRaises(KeyError):

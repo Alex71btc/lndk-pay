@@ -7594,7 +7594,15 @@ async def _active_channel_liquidity(*, include_peer_aliases: bool = False) -> li
         result.append({"channel_id": str(channel["chan_id"]),
                        "outgoing_sat": outgoing, "incoming_sat": incoming})
         if include_peer_aliases:
-            result[-1].update(peer_alias=channel.get("peer_alias"), remote_pubkey=channel.get("remote_pubkey"))
+            try:
+                capacity = int(str(channel.get("capacity")))
+            except ValueError:
+                capacity = 0
+            result[-1].update(
+                peer_alias=channel.get("peer_alias"),
+                remote_pubkey=channel.get("remote_pubkey"),
+                capacity_sat=capacity if capacity > 0 else None,
+            )
     return result
 
 
