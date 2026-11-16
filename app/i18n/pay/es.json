@@ -494,8 +494,8 @@
   "companion.confirm_revoke": "¿Revocar este dispositivo Android? Dejará de recibir notificaciones de pago.",
   "companion.revoke_failed": "No se pudo revocar el dispositivo Android.",
   "companion.revoked": "Dispositivo Android revocado.",
-  "liquidity.title": "Liquidez",
-  "liquidity.view": "Ver liquidez",
+  "liquidity.title": "Liquidez de canales",
+  "liquidity.view": "Ver liquidez de canales",
   "liquidity.note": "Saldos de canales activos en sats. Las reservas, pagos pendientes, comisiones y rutas pueden limitar la liquidez utilizable. Gestiona los canales en tus herramientas de canales.",
   "liquidity.loading": "Cargando saldos de canales…",
   "liquidity.empty": "No hay canales activos.",
@@ -507,5 +507,10 @@
   "payment_error.timeout": "Se agotó el tiempo del pago.",
   "payment_error.incorrect_details": "Datos de pago incorrectos o factura ya no pagable.",
   "payment_error.lnd_unavailable": "Datos de LND no disponibles.",
-  "liquidity.session_expired": "Tu sesión ha caducado. Vuelve a iniciar sesión."
+  "liquidity.session_expired": "Tu sesión ha caducado. Vuelve a iniciar sesión.",
+  "liquidity.active_channels": "Canales activos: {count}",
+  "liquidity.outgoing": "Mi lado · Saliente",
+  "liquidity.incoming": "Lado remoto · Entrante",
+  "liquidity.channel_label": "Canal {channel}",
+  "liquidity.distribution": "Saliente: {outgoing} sats ({outgoingPercent} %). Entrante: {incoming} sats ({incomingPercent} %)."
 }

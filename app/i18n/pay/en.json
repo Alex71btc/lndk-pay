@@ -494,8 +494,8 @@
   "companion.confirm_revoke": "Revoke this Android device? It will stop receiving payment notifications.",
   "companion.revoke_failed": "Could not revoke the Android device.",
   "companion.revoked": "Android device revoked.",
-  "liquidity.title": "Liquidity",
-  "liquidity.view": "View liquidity",
+  "liquidity.title": "Channel Liquidity",
+  "liquidity.view": "View channel liquidity",
   "liquidity.note": "Active channel balances in sats. Reserves, pending payments, fees and routes can reduce usable liquidity. Manage channels in your channel tools.",
   "liquidity.loading": "Loading channel balances…",
   "liquidity.empty": "No active channels.",
@@ -507,5 +507,10 @@
   "payment_error.timeout": "Payment timed out.",
   "payment_error.incorrect_details": "Incorrect payment details or invoice no longer payable.",
   "payment_error.lnd_unavailable": "LND data unavailable.",
-  "liquidity.session_expired": "Your session has expired. Please sign in again."
+  "liquidity.session_expired": "Your session has expired. Please sign in again.",
+  "liquidity.active_channels": "Active channels: {count}",
+  "liquidity.outgoing": "My side · Outgoing",
+  "liquidity.incoming": "Remote side · Incoming",
+  "liquidity.channel_label": "Channel {channel}",
+  "liquidity.distribution": "Outgoing: {outgoing} sats ({outgoingPercent}%). Incoming: {incoming} sats ({incomingPercent}%)."
 }

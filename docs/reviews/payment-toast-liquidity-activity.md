@@ -19,7 +19,7 @@ Branch: `codex/payment-toast-liquidity-activity`. Kein Release, Versionsbump ode
   Bei 401/403 werden Toasts entfernt und weitere Abrufe gestoppt.
 - Klick öffnet `/pay?view=activity&payment=<hash>`. Die Suche läuft über die gesamte
   lokale Activity und findet damit auch Einträge außerhalb der ersten Seite.
-- Sichtbare Sprünge oben auf Pay öffnen Activity bzw. Liquidität ohne Reload;
+- Ein sichtbarer Sprung mit Blitz-SVG oben auf Pay öffnet Activity ohne Reload;
   Formulareingaben bleiben dabei erhalten. Das bestehende sats-Kopieren bleibt
   ein natives Button-Element und kopiert reine Ziffern ohne die Zeile zu öffnen.
 - `GET /api/liquidity` liest über die bestehende LND-REST-Verbindung aktive
@@ -42,7 +42,7 @@ auf `OfferError::PaymentFailure`. Daraus wird keine Liquiditätsursache erfunden
 
 ## Automatisierte Prüfung am 16.11.2026
 
-- **99 ausführbare App-Tests bestanden**, darunter 11 neue Tests: getrennte
+- **103 ausführbare App-Tests bestanden**, darunter 15 neue Tests: getrennte
   Liquiditätsfälle, aktive Channels, fehlerhafte Daten, Authentifizierung vor
   LND-Zugriff, no-store, gemeinsamer Toast-Lebenszyklus, Activity-Direktlinks und
   Kopier-Click-Handler. Tests führen Produktionsfunktionen in isolierten Python-
@@ -52,7 +52,7 @@ auf `OfferError::PaymentFailure`. Daraus wird keine Liquiditätsursache erfunden
 - UI-Rohtext-/Schlüsselprüfung, Python-Kompilierung und `git diff --check` bestanden.
 - **Vollständige App-Suite noch offen:** 11 vorhandene Testmodule können wegen
   fehlender Laufzeitabhängigkeiten (u.a. FastAPI/httpx) hier nicht importiert werden.
-  Der komplette Discovery-Lauf meldet deshalb 110 Fälle, davon 11 Importfehler;
+  Der komplette Discovery-Lauf meldet deshalb 114 Fälle, davon 11 Importfehler;
   er ist ausdrücklich nicht vollständig grün. Nach Installation von
   `app/requirements.txt` die vollständige Suite erneut laufen lassen.
 - **Visuelle Abnahme offen:** Chromium-Start scheitert in der Sandbox an
@@ -122,3 +122,40 @@ Zahlungsbackend unabhängig. Die neue Channel-Übersicht ist ausdrücklich
 LND-spezifisch; für Phoenixd Fähigkeiten/Übersicht separat festlegen. API-Version,
 Authentifizierung und unterstützte Zahlarten von Phoenixd müssen im eigenen
 Auftrag geprüft werden. iPhone-Unterstützung bleibt ebenfalls ein eigener Auftrag.
+
+## UI-Nachbesserung nach manuellem Feedback (16.11.2026)
+
+- Ursache des zusammengezogenen Toasts: Die allgemeine Button-Regel in der
+  Konsole setzt `display: inline-flex`. Ein gemeinsamer Toast ohne eigene
+  Flex-Richtung erbte deshalb eine horizontale Anordnung. Das gemeinsame CSS
+  setzt nun ausdrücklich `display:flex; flex-direction:column` und volle Breite
+  für Betrag, Zahlungsart und Kommentar. Die gleiche Regel gilt für alle drei
+  Ansichten; CSS-URL auf `v=2` aktualisiert.
+- Oben nur noch der Activity-Sprung, jetzt mit vorhandenem Blitz-SVG.
+- „Channel Liquidity“ / „Channel-Liquidität“ ist der letzte aufklappbare Abschnitt
+  auf Pay. Die kontextabhängige Fehleraktion bleibt erhalten und öffnet ihn direkt.
+- Eigenes SVG mit blau-gelber Verteilung und gegenläufigen Pfeilen. Grafische
+  Übersicht mit Gesamtsalden, aktiver Channel-Anzahl und einzelnen Channel-Karten.
+  Jede Karte zeigt links ausgehend (blau, eigene Seite), rechts eingehend (gelb,
+  Gegenseite), die sats-Werte und einen proportionalen Balken mit Prozentangaben.
+  Die Breite zeigt die Verteilung innerhalb des jeweiligen Channels, nicht einen
+  Vergleich der absoluten Channel-Größen. Nullsalden bleiben als neutraler Balken
+  sichtbar; bei fehlenden Daten wird weiterhin keine Null-Liquidität erfunden.
+- Vier zusätzliche automatisierte Tests: Verteilung und Grenzfälle (75/25,
+  0/0, 100/0, 0/100), Summen, Textsicherheit, CSS-Abgrenzung zur Konsolen-Regel,
+  Abschnittsreihenfolge, Symbole, Fehler-Link und alle fünf Sprachkataloge.
+- Visuelle Wiederabnahme weiterhin offen: Die lokale HTML-Vorschau durfte vom
+  Browserwerkzeug nicht geöffnet werden (file-Protokoll gesperrt). Die Layout-
+  Korrektur ist durch Quellcode-/Regressionstests geprüft, nicht als Sichttest
+  bestanden markiert.
+
+Erneut manuell prüfen: BOLT12 und Lightning Address mit/ohne Kommentar auf Pay,
+Setup und Konsole; drei Textzeilen auch auf Android, langer Kommentar, Scrollen
+und Kontrast ohne Blur. Danach Channel-Balken und Direktaufruf aus einem passenden
+Zahlungsfehler prüfen. Für das Update auf dem bereits ausgecheckten Testbranch:
+
+```bash
+git pull --ff-only origin codex/payment-toast-liquidity-activity
+```
+
+Anschließend wie bisher lokal neu bauen/starten und Browser/PWA neu laden.

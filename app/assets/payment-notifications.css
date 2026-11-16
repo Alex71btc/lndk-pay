@@ -1,9 +1,11 @@
 .paymentToastRegion { position:fixed; top:max(16px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:10000; display:grid; gap:8px; width:min(420px, calc(100vw - 24px)); max-height:65vh; overflow:auto; pointer-events:none; }
-.paymentToastRegion .paymentToast { pointer-events:auto; width:100%; margin:0; padding:12px 16px; border:1px solid #82c987; border-radius:14px; background:rgba(14,20,28,.94); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); color:#f5f7fa; box-shadow:0 8px 30px #0006; text-align:center; cursor:pointer; font:inherit; }
+.paymentToastRegion .paymentToast { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; box-sizing:border-box; min-width:0; white-space:normal; line-height:1.35; pointer-events:auto; width:100%; margin:0; padding:12px 16px; border:1px solid #82c987; border-radius:14px; background:rgba(14,20,28,.94); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); color:#f5f7fa; box-shadow:0 8px 30px #0006; text-align:center; cursor:pointer; font:inherit; }
 .paymentToastRegion .paymentToast:hover, .paymentToastRegion .paymentToast:focus-visible { background:rgba(14,20,28,.97); outline:2px solid #adf0b0; outline-offset:-3px; transform:none; }
-.paymentToastTitle { display:block; color:#adf0b0; font-weight:800; }
-.paymentToastCategory { display:block; color:#e2e8ef; font-size:.85rem; margin-top:2px; }
-.paymentToastComment { display:block; margin-top:4px; overflow-wrap:anywhere; max-height:8em; overflow:auto; }
+.paymentToastRegion .paymentToastTitle { width:100%; min-width:0; overflow-wrap:anywhere; display:block; color:#adf0b0; font-weight:800; }
+.paymentToastRegion .paymentToastCategory { width:100%; min-width:0; overflow-wrap:anywhere; display:block; color:#e2e8ef; font-size:.85rem; margin-top:2px; }
+.paymentToastRegion .paymentToastComment { width:100%; min-width:0; display:block; margin-top:4px; overflow-wrap:anywhere; max-height:8em; overflow:auto; }
 .activityShortcut { position:relative; width:min(1180px,calc(100% - 24px)); margin:12px auto; text-align:center; }
-.activityShortcut a { display:inline-block; padding:10px; color:inherit; font-weight:700; }
+.activityShortcut a { display:inline-flex; align-items:center; gap:8px; padding:10px; color:inherit; font-weight:700; }
 #liquidityContent { overflow-wrap:anywhere; }
+
+.activityShortcut img { width:18px; height:22px; object-fit:contain; flex:none; }

@@ -1297,7 +1297,9 @@
         outline-offset: 2px;
       }
     </style>
-<link rel="stylesheet" href="/assets/payment-notifications.css?v=1">
+<link rel="stylesheet" href="/assets/payment-notifications.css?v=2">
+<link rel="stylesheet" href="/assets/channel-liquidity.css?v=1">
+<script defer src="/assets/channel-liquidity.js?v=1"></script>
 <script defer src="/assets/payment-notifications.js?v=1"></script>
 </head>
   <body>
@@ -1309,8 +1311,10 @@
 
     <main class="card" style="position: relative">
       <nav class="activityShortcut">
-        <a href="#txHistorySection" data-i18n="title.lightning_activity">Lightning Activity</a>
-        · <a href="#liquiditySection" data-i18n="liquidity.title">Liquidity</a>
+        <a href="#txHistorySection">
+          <img src="/assets/icons/bolt.svg" alt="" aria-hidden="true">
+          <span data-i18n="title.lightning_activity">Lightning Activity</span>
+        </a>
       </nav>
       <div class="titleBlock">
         <div class="langSwitch">
@@ -1771,12 +1775,6 @@
           ></textarea>
         </section>
       </div>
-
-      <details class="section" id="liquiditySection">
-        <summary data-i18n="liquidity.title">Liquidity</summary>
-        <p data-i18n="liquidity.note"></p>
-        <div id="liquidityContent" role="status"></div>
-      </details>
 
       <details class="section" id="txHistorySection">
         <summary>
@@ -2952,6 +2950,16 @@
           placeholder="Hier erscheint die Cloudflare-Antwort..."
           data-i18n-title="hint.tap_copy" title="Zum Kopieren antippen"
         ></textarea>
+      </details>
+      <details class="section" id="liquiditySection">
+        <summary>
+          <span class="sectionTitle">
+            <img src="/assets/icons/channel-liquidity.svg" class="sectionIcon" alt="" aria-hidden="true">
+            <span data-i18n="liquidity.title">Channel Liquidity</span>
+          </span>
+        </summary>
+        <div id="liquidityContent" role="status"></div>
+        <p class="liquidityNote" data-i18n="liquidity.note"></p>
       </details>
     </main>
 
@@ -9600,14 +9608,7 @@
           if ([401, 403].includes(response.status)) throw new Error('session_expired');
           if (!response.ok) throw new Error('unavailable');
           const data = await response.json();
-          content.replaceChildren();
-          if (!data.channels.length) content.textContent = window.__t('liquidity.empty');
-          for (const channel of data.channels) {
-            const row = document.createElement('p');
-            row.textContent = window.__t('liquidity.channel', {channel:channel.channel_id,
-              outgoing:channel.outgoing_sat, incoming:channel.incoming_sat});
-            content.appendChild(row);
-          }
+          window.Bolt12ChannelLiquidity.render(content, data.channels);
         } catch (error) {
           content.textContent = error.message === 'session_expired'
             ? window.__t('liquidity.session_expired') : window.__t('liquidity.unavailable');

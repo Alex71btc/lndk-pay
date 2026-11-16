@@ -494,8 +494,8 @@
   "companion.confirm_revoke": "Dieses Android-Gerät widerrufen? Es erhält dann keine Zahlungsbenachrichtigungen mehr.",
   "companion.revoke_failed": "Android-Gerät konnte nicht widerrufen werden.",
   "companion.revoked": "Android-Gerät widerrufen.",
-  "liquidity.title": "Liquidität",
-  "liquidity.view": "Liquidität ansehen",
+  "liquidity.title": "Channel-Liquidität",
+  "liquidity.view": "Channel-Liquidität ansehen",
   "liquidity.note": "Salden aktiver Channels in sats. Reserven, ausstehende Zahlungen, Gebühren und Routen können die nutzbare Liquidität begrenzen. Verwalte Channels in deinen Channel-Tools.",
   "liquidity.loading": "Channel-Salden werden geladen…",
   "liquidity.empty": "Keine aktiven Channels.",
@@ -507,5 +507,10 @@
   "payment_error.timeout": "Zeitüberschreitung bei der Zahlung.",
   "payment_error.incorrect_details": "Zahlungsdaten ungültig oder Rechnung nicht mehr zahlbar.",
   "payment_error.lnd_unavailable": "LND-Daten nicht verfügbar.",
-  "liquidity.session_expired": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an."
+  "liquidity.session_expired": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.",
+  "liquidity.active_channels": "Aktive Channels: {count}",
+  "liquidity.outgoing": "Meine Seite · Ausgehend",
+  "liquidity.incoming": "Gegenseite · Eingehend",
+  "liquidity.channel_label": "Channel {channel}",
+  "liquidity.distribution": "Ausgehend: {outgoing} sats ({outgoingPercent} %). Eingehend: {incoming} sats ({incomingPercent} %)."
 }

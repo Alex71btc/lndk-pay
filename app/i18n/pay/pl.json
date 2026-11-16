@@ -494,8 +494,8 @@
   "companion.confirm_revoke": "Cofnąć uprawnienia tego urządzenia z Androidem? Przestanie otrzymywać powiadomienia o płatnościach.",
   "companion.revoke_failed": "Nie udało się cofnąć urządzenia z Androidem.",
   "companion.revoked": "Urządzenie z Androidem zostało cofnięte.",
-  "liquidity.title": "Płynność",
-  "liquidity.view": "Zobacz płynność",
+  "liquidity.title": "Płynność kanałów",
+  "liquidity.view": "Zobacz płynność kanałów",
   "liquidity.note": "Salda aktywnych kanałów w sats. Rezerwy, oczekujące płatności, opłaty i trasy mogą ograniczać dostępną płynność. Zarządzaj kanałami w przeznaczonych do tego narzędziach.",
   "liquidity.loading": "Ładowanie sald kanałów…",
   "liquidity.empty": "Brak aktywnych kanałów.",
@@ -507,5 +507,10 @@
   "payment_error.timeout": "Przekroczono czas płatności.",
   "payment_error.incorrect_details": "Nieprawidłowe dane płatności lub faktura nie może już zostać opłacona.",
   "payment_error.lnd_unavailable": "Dane LND niedostępne.",
-  "liquidity.session_expired": "Twoja sesja wygasła. Zaloguj się ponownie."
+  "liquidity.session_expired": "Twoja sesja wygasła. Zaloguj się ponownie.",
+  "liquidity.active_channels": "Aktywne kanały: {count}",
+  "liquidity.outgoing": "Moja strona · Wychodząca",
+  "liquidity.incoming": "Strona zdalna · Przychodząca",
+  "liquidity.channel_label": "Kanał {channel}",
+  "liquidity.distribution": "Wychodząca: {outgoing} sats ({outgoingPercent}%). Przychodząca: {incoming} sats ({incomingPercent}%)."
 }
