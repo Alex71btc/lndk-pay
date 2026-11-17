@@ -1301,6 +1301,7 @@
 <link rel="stylesheet" href="/assets/channel-liquidity.css?v=2">
 <script defer src="/assets/channel-liquidity.js?v=2"></script>
 <script defer src="/assets/payment-notifications.js?v=1"></script>
+    <script src="/assets/lightning-backend.js" defer></script>
 </head>
   <body>
 
@@ -3823,6 +3824,8 @@
           }, 4200);
         }
       }
+
+      window.addEventListener('lightning:toast', event => setStatus(event.detail.message, event.detail.type));
 
       function showErrorDetail(message, liquidity = false) {
         setStatus(window.__t("error.detail", {message}), "error", true);
@@ -6707,6 +6710,10 @@
         return await readJsonOrThrow(response);
       }
 
+      function txHistoryIdentity(item) {
+        return [item.backend_id || "lnd-default", item.direction || "", item.payment_hash || ""].join("|");
+      }
+
       async function loadTxHistory() {
         const data = await fetchTxHistoryPage(0);
         const newestItems = data.items || [];
@@ -6715,13 +6722,13 @@
           txHistoryItems = newestItems;
         } else {
           const newestHashes = new Set(
-            newestItems.map((item) => item.payment_hash).filter(Boolean),
+            newestItems.map(txHistoryIdentity),
           );
 
           const olderItems = txHistoryItems.filter(
             (item) =>
               !item.payment_hash ||
-              !newestHashes.has(item.payment_hash),
+              !newestHashes.has(txHistoryIdentity(item)),
           );
 
           txHistoryItems = [
@@ -6742,18 +6749,18 @@
         const newItems = data.items || [];
 
         const existingHashes = new Set(
-          txHistoryItems.map((item) => item.payment_hash).filter(Boolean),
+          txHistoryItems.map(txHistoryIdentity),
         );
 
         for (const item of newItems) {
           if (
             !item.payment_hash ||
-            !existingHashes.has(item.payment_hash)
+            !existingHashes.has(txHistoryIdentity(item))
           ) {
             txHistoryItems.push(item);
 
             if (item.payment_hash) {
-              existingHashes.add(item.payment_hash);
+              existingHashes.add(txHistoryIdentity(item));
             }
           }
         }
@@ -6847,6 +6854,7 @@
             if (!value) return false;
 
             return (
+              /^(?:lightning:)?ln(?:bc|tb|bcrt)[0-9a-z]+$/i.test(value) ||
               /^[0-9a-f]{64}$/i.test(value) ||
               /^[0-9a-f]{66}$/i.test(value) ||
               /^[0-9a-f]{128}$/i.test(value) ||
@@ -6890,6 +6898,7 @@
           const amountClipboardValue = plainSatsValue(item.amount_sat);
           const txKey = [
             paymentHash,
+            item.backend_id || "lnd-default",
             item.direction || "",
             item.type || "",
             item.method || "",
@@ -6917,9 +6926,12 @@
             donation: `❤️ ${window.__t("history.donation")}`,
           }[method] || method || window.__t("history.unknown_method");
 
+          methodLabel += ` · ${String(item.backend_id || "lnd-default").startsWith("phoenixd-") ? "Phoenixd" : "LND"}`;
+
           const statusLabel = {
             settled: `✅ ${window.__t("history.settled")}`,
             pending: `🟡 ${window.__t("history.pending")}`,
+            expired: `⌛ ${window.__t("history.expired")}`,
             failed: `❌ ${window.__t("history.failed")}`,
           }[item.status] || item.status;
 
@@ -8424,7 +8436,10 @@
           return;
         }
 
-        if (scanTarget === "pay") {
+        if (scanTarget === "lnurl") {
+          const field = document.getElementById('phoenixLnurl');
+          if (field) { field.value = value; field.focus(); }
+        } else if (scanTarget === "pay") {
           payOfferInput.value = value;
           payOfferInput.dispatchEvent(new Event("input", { bubbles: true }));
           setStatus(window.__t("toast.qr_to_pay"));
@@ -8434,11 +8449,13 @@
         }
 
         closeScanner();
+        if (scanTarget === 'lnurl') window.dispatchEvent(new Event('lightning:lnurl-scanned'));
       }
 
+      window.addEventListener('lightning:scan-lnurl', () => openScanner('lnurl'));
       async function openScanner(target) {
         scanTarget = target;
-        scannerTitle.dataset.i18n = target === "pay" ? "scanner.subtitle.pay" : "scanner.subtitle.decode";
+        scannerTitle.dataset.i18n = target === "lnurl" ? "backend.lnurl_tools" : target === "pay" ? "scanner.subtitle.pay" : "scanner.subtitle.decode";
         scannerTitle.textContent = window.__t(scannerTitle.dataset.i18n);
 
         if (
@@ -8798,7 +8815,7 @@
                 "Content-Type": "application/json",
                 "X-CSRF-Token": getCookie("csrf_token"),
               },
-              body: JSON.stringify(payload),
+              body: JSON.stringify({ ...payload, backend_id: window.LightningBackend?.id }),
             });
 
             const data = await readJsonOrThrow(response);
@@ -8916,7 +8933,7 @@
               "Content-Type": "application/json",
               "X-CSRF-Token": getCookie("csrf_token"),
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({ ...payload, backend_id: window.LightningBackend?.id }),
           });
 
           const data = await readJsonOrThrow(response);
@@ -9039,6 +9056,7 @@
               "X-CSRF-Token": getCookie("csrf_token"),
             },
             body: JSON.stringify({
+              backend_id: window.LightningBackend?.id,
               lnurl,
               amount_sat: Number(amountSat),
               comment: payerNote || null,
@@ -9071,6 +9089,10 @@
       }
 
       async function payBolt11Flow() {
+        if (!window.LightningBackend?.id) {
+          setStatus(window.__t("backend.unavailable"), "error");
+          return;
+        }
         const invoice = normalizePaymentInput(payOfferInput.value);
         const btn = payOfferBtn;
 
@@ -9093,7 +9115,7 @@
               "Content-Type": "application/json",
               "X-CSRF-Token": getCookie("csrf_token"),
             },
-            body: JSON.stringify({ invoice }),
+            body: JSON.stringify({ invoice, backend_id: window.LightningBackend?.id, amount_sat: Number(payAmountInput.value) || null }),
           });
           const data = await readJsonOrThrow(response);
           const parsed = safeJsonParse(data?.raw_output);
@@ -9336,6 +9358,7 @@
               "X-CSRF-Token": getCookie("csrf_token"),
             },
             body: JSON.stringify({
+              backend_id: window.LightningBackend?.id,
               target,
               amount_sat: Number(amountSat),
               payer_note: payerNote || null,
@@ -9395,7 +9418,7 @@
             const response = await fetch("/api/decode-offer", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ offer }),
+              body: JSON.stringify({ offer, backend_id: window.LightningBackend?.id }),
             });
 
             const data = await readJsonOrThrow(response);

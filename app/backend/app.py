@@ -36,7 +36,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, Field
 from backend.config import load_config, save_config
-from backend import companion_push
+from backend import companion_push, lightning_backends
 from backend.nwc import (
     list_nwc_connections,
     create_nwc_connection,
@@ -612,6 +612,7 @@ def init_db():
         conn.execute("ALTER TABLE tx_history ADD COLUMN payer_note TEXT")
     except sqlite3.OperationalError:
         pass
+    lightning_backends.migrate_history(conn)
     conn.commit()
     conn.close()
     companion_push.init_db(DB_PATH)
@@ -640,9 +641,9 @@ def save_tx_history_item(item: dict):
                 identifier,
                 created_at,
                 settled_at,
-                raw_json
+                raw_json, backend_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["payment_hash"],
@@ -660,6 +661,7 @@ def save_tx_history_item(item: dict):
                 item.get("created_at"),
                 item.get("settled_at"),
                 json.dumps(item.get("raw_json", {})),
+                item.get("backend_id", "lnd-default"),
             ),
         )
 
@@ -706,6 +708,7 @@ def list_tx_history(
     limit: int = 50,
     offset: int = 0,
     search: str = "",
+    backend_id: str | None = None,
 ):
     safe_limit = max(1, min(int(limit or 50), 200))
     safe_offset = max(0, int(offset or 0))
@@ -741,6 +744,10 @@ def list_tx_history(
         """
 
         params.extend([pattern] * 7)
+
+    if backend_id is not None:
+        where_sql += " AND tx_history.backend_id = ?" if where_sql else " WHERE tx_history.backend_id = ?"
+        params.append(backend_id)
 
     with _db_conn() as conn:
         rows = conn.execute(
@@ -808,6 +815,7 @@ def _collapse_bolt12_outgoing_history(
         if item.get("direction") == "outgoing"
         and item.get("method") == "bolt11"
         and item.get("type") == "payment"
+        and item.get("backend_id", "lnd-default") == "lnd-default"
         and not _is_synthetic_bolt12_outgoing(item)
     ]
     matched_payment_hashes: set[str] = set()
@@ -860,7 +868,8 @@ def _collapse_bolt12_outgoing_history(
     return [
         item
         for item in collapsed
-        if str(item.get("payment_hash") or "") not in matched_payment_hashes
+        if item.get("backend_id", "lnd-default") != "lnd-default"
+        or str(item.get("payment_hash") or "") not in matched_payment_hashes
     ]
 
 def update_tx_history_metadata(
@@ -905,7 +914,7 @@ def update_tx_history_metadata(
             f"""
             UPDATE tx_history
             SET {", ".join(fields)}
-            WHERE payment_hash = ?
+            WHERE payment_hash = ? AND backend_id = 'lnd-default'
             """,
             values,
         )
@@ -1520,6 +1529,7 @@ class NwcUnlockRequest(BaseModel):
     password: str = Field(default="")
 
 class OfferRequest(BaseModel):
+    backend_id: Optional[str] = None
     amount: Optional[int] = Field(
         default=None,
         ge=1,
@@ -1537,6 +1547,7 @@ class OfferResponse(BaseModel):
 
 
 class DecodeRequest(BaseModel):
+    backend_id: Optional[str] = None
     offer: str = Field(min_length=4)
 
 
@@ -1544,6 +1555,8 @@ class DecodeResponse(BaseModel):
     raw_output: str
 
 class PayBolt11Request(BaseModel):
+    backend_id: Optional[str] = None
+    amount_sat: Optional[int] = Field(default=None, ge=1)
     invoice: str = Field(
         min_length=10,
         description="BOLT11 invoice like lnbc...",
@@ -1559,6 +1572,7 @@ class PayKeysendRequest(BaseModel):
     message: Optional[str] = Field(default=None, max_length=300)
 
 class PayOfferRequest(BaseModel):
+    backend_id: Optional[str] = None
     offer: str = Field(
         min_length=4,
         description="Either an lno... offer or a BIP353 human-readable address",
@@ -1567,6 +1581,7 @@ class PayOfferRequest(BaseModel):
     payer_note: Optional[str] = Field(default=None, max_length=300)
 
 class PayAddressRequest(BaseModel):
+    backend_id: Optional[str] = None
     target: str = Field(
         min_length=3,
         description="Lightning Address or BIP353 human-readable address",
@@ -1647,6 +1662,7 @@ class AliasResponse(BaseModel):
     published: bool = False
     last_offer: Optional[str] = None
 class CreateInvoiceRequest(BaseModel):
+    backend_id: Optional[str] = None
     amount_sat: int = Field(ge=1)
     memo: str = Field(default="bolt12-pay", max_length=200)
     expiry: Optional[int] = Field(default=3600, ge=1)
@@ -4321,13 +4337,13 @@ async def setup_status(request: StarletteRequest):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     cfg = load_config()
-    configured = bool(cfg.get("lnurl_base_domain"))
+    configured = bool(cfg.get("lnurl_base_domain")) or bool(lightning_backends.state(cfg).get("phoenixd"))
 
     lnd_version = ""
     native_onion_messaging = False
 
     try:
-        info = await _lnd_getinfo()
+        info = await _lnd_getinfo() if LND_REST_URL else {}
         lnd_version = str(info.get("version") or "")
 
         # Native Onion Messaging is available from LND 0.21 onward.
@@ -4347,12 +4363,114 @@ async def setup_status(request: StarletteRequest):
         "native_onion_messaging": native_onion_messaging,
     }
 
+@app.middleware("http")
+async def guard_phoenix_interactive_methods(request: StarletteRequest, call_next):
+    if request.method == "POST" and request.url.path in {
+        "/api/pay-keysend", "/api/offer",
+    } and lightning_backends.state(load_config()).get("active", "lnd-default") != "lnd-default":
+        return JSONResponse({"detail": "Phoenixd does not provide a Keysend HTTP endpoint."}, status_code=409)
+    return await call_next(request)
+
+
+def _phoenix_backend(instance):
+    return lightning_backends.PhoenixBackend(instance, _db_conn, save_tx_history_item)
+
+
+@app.get("/api/lightning-backend")
+async def get_lightning_backend(request: StarletteRequest):
+    require_pay_auth(request)
+    return JSONResponse(lightning_backends.public_state(load_config()), headers=_no_store_headers())
+
+
+class PhoenixLnurlAction(BaseModel):
+    backend_id: str
+    lnurl: str = Field(min_length=5)
+    action: Literal['withdraw', 'auth']
+
+
+@app.post('/api/lightning/lnurl-info')
+async def lnurl_action_info(payload: PhoenixLnurlAction, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+    from backend.lnurl_actions import lnurl_url
+    url = lnurl_url(payload.lnurl, _decode_lnurl_bech32)
+    from urllib.parse import parse_qs
+    parsed = urlparse(url)
+    return {'domain': parsed.hostname, 'action': 'auth' if parse_qs(parsed.query).get('tag') == ['login'] else 'unknown'}
+
+
+@app.post('/api/lightning/lnurl-action')
+@app.post('/api/phoenixd/lnurl-action')
+async def phoenix_lnurl_action(payload: PhoenixLnurlAction, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+    instance = lightning_backends.selected(load_config(), payload.backend_id)
+    if not instance:
+        from backend import lnurl_actions
+        import sys
+        try:
+            return {'result': await lnurl_actions.execute(sys.modules[__name__], payload.lnurl, payload.action)}
+        except (httpx.HTTPError, ValueError, KeyError):
+            raise HTTPException(502, 'LND LNURL action failed. Check service and signer permissions.') from None
+    client, _ = await lightning_backends.checked_client(instance)
+    try:
+        if payload.action == 'auth':
+            return {'result': await client.lnurl_auth(payload.lnurl)}
+        result = await client.lnurl_withdraw(payload.lnurl)
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(502, 'Phoenixd LNURL action failed or outcome unknown. Check Activity before retrying.') from None
+    from bolt11 import decode
+    try:
+        decoded = decode(result['invoice'])
+    except Exception:
+        raise HTTPException(502, 'Invalid Phoenixd withdraw response') from None
+    _phoenix_backend(instance).store({
+        'backend_id': instance['id'], 'payment_hash': decoded.payment_hash,
+        'direction': 'incoming', 'type': 'invoice', 'method': 'lnurl',
+        'origin': 'web', 'amount_sat': int(decoded.amount_msat or 0) // 1000,
+        'status': 'pending', 'identifier': payload.lnurl,
+        'memo': result.get('description') or '', 'created_at': str(int(time.time())),
+        'raw_json': {**result, 'payment_request': result['invoice']},
+    })
+    return {'result': result}
+
+
+@app.post("/api/setup/lightning-backend/test")
+async def test_lightning_backend(payload: dict, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+    updated = await lightning_backends.configure(load_config(), payload)
+    return {"ok": True, "node_id": updated["lightning_backend"]["phoenixd"]["node_id"]}
+
+
+@app.post("/api/setup/lightning-backend")
+async def save_lightning_backend(payload: dict, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+    async with lightning_backends.CONFIG_LOCK:
+        cfg = load_config()
+        if payload.get("active") == "lnd-default" and not payload.get("url") and not payload.get("password"):
+            settings = lightning_backends.state(cfg)
+            settings["active"] = "lnd-default"
+        else:
+            updated = await lightning_backends.configure(cfg, payload)
+            settings = updated["lightning_backend"]
+        if settings["active"] == "lnd-default" and not LND_REST_URL:
+            raise HTTPException(400, "LND is not configured in this installation")
+        cfg = load_config()
+        cfg["lightning_backend"] = settings
+        save_config(cfg)
+    return JSONResponse(lightning_backends.public_state(cfg), headers=_no_store_headers())
+
+
 @app.get("/api/setup/config")
 def get_setup_config(request: StarletteRequest):
     if _is_pay_ui_enabled():
         require_pay_auth(request)
 
-    return load_config()
+    cfg = load_config()
+    cfg["lightning_backend"] = lightning_backends.public_state(cfg)
+    return cfg
 
 
 @app.get("/api/setup/public-bip353-status")
@@ -4526,19 +4644,44 @@ async def set_setup_config(payload: dict, request: StarletteRequest):
                     [],
                 )
 
+    cfg["lightning_backend"] = lightning_backends.state(load_config())
     save_config(cfg)
 
     return {"ok": True, "public_bip353": public_bip353}
 @app.post("/api/create-offer", response_model=OfferResponse)
-def create_offer(payload: OfferRequest, request: StarletteRequest) -> OfferResponse:
+async def create_offer(payload: OfferRequest, request: StarletteRequest) -> OfferResponse:
     _require_csrf(request)
-    return _create_offer_internal(payload)
+    instance = lightning_backends.selected(load_config(), payload.backend_id)
+    if instance:
+        require_pay_auth(request)
+        if payload.issuer or payload.expiry or payload.quantity is not None:
+            raise HTTPException(400, 'Phoenixd offers do not support issuer, expiry or quantity options')
+        if len(payload.description) > 128:
+            raise HTTPException(400, 'Phoenixd descriptions are limited to 128 characters')
+        client, _ = await lightning_backends.checked_client(instance)
+        offer = await client.create_offer(payload.amount, payload.description)
+        if not isinstance(offer, str) or not offer.startswith('lno1'):
+            raise HTTPException(502, 'Invalid Phoenixd offer response')
+        with _db_conn() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS backend_objects (object_type TEXT, identifier TEXT, backend_id TEXT NOT NULL, PRIMARY KEY(object_type, identifier))')
+            conn.execute('INSERT OR IGNORE INTO backend_objects VALUES (?, ?, ?)', ('offer', offer, instance['id']))
+            conn.commit()
+        return OfferResponse(offer=offer, raw_output=json.dumps({'offer': offer, 'backend_id': instance['id']}))
+    return await asyncio.to_thread(_create_offer_internal, payload)
 
 @app.post("/api/decode-offer", response_model=DecodeResponse)
-def decode_offer(payload: DecodeRequest) -> DecodeResponse:
-    normalized_offer = _normalize_offer_or_hrn(payload.offer)
+async def decode_offer(payload: DecodeRequest) -> DecodeResponse:
+    instance = lightning_backends.selected(load_config(), payload.backend_id)
+    if instance:
+        offer = payload.offer.strip()
+        if '@' in offer:
+            offer = await asyncio.to_thread(_resolve_bip353_address, offer)
+        client, _ = await lightning_backends.checked_client(instance)
+        result = await client.decode_offer(offer)
+        return DecodeResponse(raw_output=json.dumps(result, ensure_ascii=False))
+    normalized_offer = await asyncio.to_thread(_normalize_offer_or_hrn, payload.offer)
     args = _base_command() + ["decode-offer", normalized_offer]
-    raw_output = _run_command(args)
+    raw_output = await asyncio.to_thread(_run_command, args)
     return DecodeResponse(raw_output=raw_output)
 
 
@@ -4564,13 +4707,20 @@ def _pay_offer_command(
 
 
 @app.post("/api/pay-offer", response_model=PayOfferResponse)
-def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferResponse:
+async def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferResponse:
     require_pay_auth(request)
     _require_csrf(request)
+    instance = lightning_backends.selected(load_config(), payload.backend_id)
+    if instance:
+        offer = payload.offer.strip()
+        if '@' in offer:
+            offer = await asyncio.to_thread(_resolve_bip353_address, offer)
+        result = await _phoenix_backend(instance).pay_offer(offer, payload.amount_sat, payload.payer_note, payload.offer)
+        return PayOfferResponse(resolved_offer=offer, raw_output=json.dumps({'mode': 'bolt12', 'payment_result': result}))
     if not ALLOW_PAY_OFFER:
         raise HTTPException(status_code=403, detail="pay-offer endpoint is disabled")
 
-    normalized_offer = _normalize_offer_or_hrn(payload.offer)
+    normalized_offer = await asyncio.to_thread(_normalize_offer_or_hrn, payload.offer)
     args = _pay_offer_command(
         normalized_offer,
         payload.amount_sat,
@@ -4578,7 +4728,7 @@ def pay_offer(payload: PayOfferRequest, request: StarletteRequest) -> PayOfferRe
     )
 
     try:
-        raw_output = _run_command(args)
+        raw_output = await asyncio.to_thread(_run_command, args)
     except HTTPException as exc:
         detail = _payment_failure_detail(str(exc.detail))
         if detail:
@@ -4733,6 +4883,20 @@ async def pay_address(payload: PayAddressRequest, request: StarletteRequest) -> 
     target = payload.target.strip()
     if not target:
         raise HTTPException(status_code=400, detail="target required")
+    instance = lightning_backends.selected(load_config(), payload.backend_id)
+    if instance:
+        if payload.payment_method != 'lnurl':
+            try:
+                offer = await asyncio.to_thread(_resolve_bip353_address, target)
+            except HTTPException as exc:
+                if payload.payment_method == 'bolt12' or exc.status_code not in BIP353_LNURL_FALLBACK_STATUSES:
+                    raise
+            else:
+                result = await _phoenix_backend(instance).pay_offer(offer, payload.amount_sat, payload.payer_note, target)
+                return PayOfferResponse(resolved_offer=offer, raw_output=json.dumps({'mode': 'bip353', 'payment_result': result}))
+        resolved = await _resolve_lnurl_invoice(target=target, amount_sat=payload.amount_sat, payer_note=payload.payer_note)
+        result = await _phoenix_backend(instance).pay(resolved['payment_request'], method='lnurl', counterparty=target)
+        return PayOfferResponse(resolved_offer=target, raw_output=json.dumps({'mode': 'lnurl', 'payment_result': result}))
 
     if payload.payment_method == "lnurl":
         return await _pay_address_via_lnurl(payload)
@@ -4808,7 +4972,11 @@ async def pay_bolt11(payload: PayBolt11Request, request: StarletteRequest) -> Pa
     if not invoice:
         raise HTTPException(status_code=400, detail="invoice required")
 
-    result = await _pay_bolt11_invoice(payment_request=invoice)
+    instance = lightning_backends.selected(load_config(), payload.backend_id)
+    if instance:
+        result = await _phoenix_backend(instance).pay(invoice, payload.amount_sat)
+    else:
+        result = await _pay_bolt11_invoice(payment_request=invoice, amount_sat_override=payload.amount_sat)
 
     raw_output = json.dumps(
         {
@@ -4867,6 +5035,7 @@ class PreviewPayTargetRequest(BaseModel):
     target: str = Field(min_length=3, description="Lightning Address or lnurl1...")
 
 class PayLnurlRequest(BaseModel):
+    backend_id: Optional[str] = None
     lnurl: str
     amount_sat: int
     comment: Optional[str] = None
@@ -4885,6 +5054,16 @@ async def preview_pay_target(
     lowered = target.lower()
 
     if lowered.startswith("lnbc") or lowered.startswith("lntb") or lowered.startswith("lnbcrt"):
+        if lightning_backends.state(load_config()).get("active", "lnd-default") != "lnd-default":
+            from bolt11 import decode
+            try:
+                decoded = decode(target)
+            except Exception:
+                raise HTTPException(400, "Invalid BOLT11 invoice") from None
+            return {"kind": "bolt11", "title": "BOLT11 Invoice",
+                    "amount_sat": int(decoded.amount_msat or 0) // 1000,
+                    "description": decoded.description or "", "destination": decoded.payee or "",
+                    "image_data_url": "", "comment_allowed": 0, "min_sat": "", "max_sat": ""}
         macaroon_hex = _read_macaroon_hex(LND_MACAROON_PATH)
         headers = {"Grpc-Metadata-macaroon": macaroon_hex}
         verify = False if LND_REST_INSECURE else LND_TLS_CERT_PATH
@@ -4964,18 +5143,23 @@ async def pay_lnurl(payload: PayLnurlRequest, request: StarletteRequest) -> PayO
     require_pay_auth(request)
     _require_csrf(request)
 
+    instance = lightning_backends.selected(load_config(), payload.backend_id)
     result = await _resolve_lnurl_bech32_invoice(
         lnurl=payload.lnurl,
         amount_sat=payload.amount_sat,
         comment=payload.comment,
     )
 
-    pay_result = await _pay_bolt11_invoice(
-        payment_request=result["payment_request"],
-        method="lnurl",
-        counterparty=payload.lnurl,
-        memo=payload.comment or ""
-    )
+    if instance:
+        pay_result = await _phoenix_backend(instance).pay(result['payment_request'], method='lnurl', counterparty=payload.lnurl)
+    else:
+        pay_result = await _pay_bolt11_invoice(
+            payment_request=result["payment_request"],
+            method="lnurl",
+            counterparty=payload.lnurl,
+            memo=payload.comment or ""
+        )
+
 
     raw_output = json.dumps(
         {
@@ -5129,11 +5313,16 @@ async def create_invoice(payload: CreateInvoiceRequest, request: StarletteReques
     if _is_pay_ui_enabled() and not _is_pay_session_valid(request):
         raise HTTPException(status_code=401, detail="Authentication required")
     _require_csrf(request)
-    result = await _create_bolt11_invoice(
-        amount_sat=payload.amount_sat,
-        memo=payload.memo,
-        expiry=payload.expiry or 3600,
-    )
+    instance = lightning_backends.selected(load_config(), payload.backend_id)
+    if instance:
+        require_pay_auth(request)
+        result = await _phoenix_backend(instance).create(payload.amount_sat, payload.memo, payload.expiry or 3600)
+    else:
+        result = await _create_bolt11_invoice(
+            amount_sat=payload.amount_sat,
+            memo=payload.memo,
+            expiry=payload.expiry or 3600,
+        )
 
     return CreateInvoiceResponse(
         payment_request=result["payment_request"],
@@ -7903,7 +8092,7 @@ def _upsert_invoice_history(
     existing = None
     with _db_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM tx_history WHERE payment_hash = ?",
+            "SELECT * FROM tx_history WHERE payment_hash = ? AND backend_id = 'lnd-default' AND direction = 'incoming'",
             (payment_hash,),
         ).fetchone()
         if row:
@@ -8008,7 +8197,7 @@ def _upsert_invoice_history(
     return True
 
 
-async def _sync_tx_history_once():
+async def _sync_lnd_tx_history_once():
     invoices = await _list_invoices()
     invoice_items = invoices.get("invoices", [])
     payer_notes = await asyncio.to_thread(
@@ -8036,7 +8225,7 @@ async def _sync_tx_history_once():
 
         with _db_conn() as conn:
             row = conn.execute(
-                "SELECT * FROM tx_history WHERE payment_hash = ?",
+                "SELECT * FROM tx_history WHERE payment_hash = ? AND backend_id = 'lnd-default' AND direction = 'outgoing'",
                 (payment_hash,),
             ).fetchone()
 
@@ -8137,6 +8326,37 @@ async def _sync_tx_history_once():
         count += 1
 
     return count
+
+
+async def _sync_tx_history_once():
+    count = 0
+    failures = []
+    if LND_REST_URL:
+        try:
+            count += await _sync_lnd_tx_history_once()
+            app.state.lnd_history_sync_completed = time.monotonic()
+        except Exception:
+            failures.append("LND")
+    instance = lightning_backends.state(load_config()).get("phoenixd")
+    if instance:
+        try:
+            count += await _phoenix_backend(instance).sync()
+        except Exception:
+            failures.append("Phoenixd")
+    if failures:
+        raise HTTPException(502, "History sync unavailable: " + ", ".join(failures))
+    return count
+
+
+async def sync_lnd_tx_history():
+    """Pinned legacy NWC synchronization must not depend on Phoenixd availability."""
+    async with TX_HISTORY_SYNC_LOCK:
+        last = getattr(app.state, "lnd_history_sync_completed", 0)
+        if last and time.monotonic() - last < TX_HISTORY_SYNC_MIN_INTERVAL:
+            return 0
+        count = await _sync_lnd_tx_history_once()
+        app.state.lnd_history_sync_completed = time.monotonic()
+        return count
 
 
 async def sync_tx_history(*, force: bool = False):
@@ -8575,12 +8795,11 @@ async def startup_background_tasks():
     # LND may still be starting after a host reboot. Do not delay the web app;
     # the background loop performs an immediate first sync and then retries.
     app.state.tx_sync_task = asyncio.create_task(_tx_history_sync_loop())
-    app.state.nostr_secret_store_task = asyncio.create_task(
-        _nostr_secret_store_unlock_loop()
-    )
-    app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
-    app.state.companion_push_task = asyncio.create_task(_companion_push_loop())
-    app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
+    if LND_REST_URL:
+        app.state.nostr_secret_store_task = asyncio.create_task(_nostr_secret_store_unlock_loop())
+        app.state.zap_task = asyncio.create_task(_zap_publisher_loop())
+        app.state.companion_push_task = asyncio.create_task(_companion_push_loop())
+        app.state.nwc_task = asyncio.create_task(start_nwc_runtime())
     app.state.public_bip353_status = {
         "status": "checking",
         "address": "",
@@ -8592,10 +8811,10 @@ async def startup_background_tasks():
         _check_public_bip353_record()
     )
 
-    print("zap publisher loop started", flush=True)
-    print("[Companion push] delivery loop started", flush=True)
-    print("[Nostr keys] automatic LND unlock scheduled", flush=True)
-    print("[NWC] startup task scheduled", flush=True)
+    if LND_REST_URL:
+        print("[LND] Nostr unlock, zap, companion push and NWC workers scheduled", flush=True)
+    else:
+        print("[Lightning] No LND configured; LND-dependent workers disabled", flush=True)
     print("[BIP353 check] startup check scheduled", flush=True)
 
 @app.get("/api/debug/invoices")

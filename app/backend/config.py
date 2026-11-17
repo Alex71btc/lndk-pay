@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import tempfile
 
 CONFIG_PATH = os.getenv("APP_CONFIG_PATH", "/data/config.json")
 
@@ -19,6 +20,7 @@ DEFAULT_CONFIG = {
         "zone_id": "",
         "api_token": ""
     },
+    "lightning_backend": {"active": "lnd-default", "phoenixd": None},
     "aliases": {}
 }
 
@@ -49,5 +51,14 @@ def load_config():
 def save_config(cfg):
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
 
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(cfg, f, indent=2)
+    # Atomic, owner-only file: configuration contains backend API credentials.
+    fd, temporary = tempfile.mkstemp(prefix=".config-", dir=os.path.dirname(CONFIG_PATH))
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(cfg, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, CONFIG_PATH)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)

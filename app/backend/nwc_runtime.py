@@ -894,10 +894,10 @@ async def _handle_lookup_invoice_request(
     matched: dict[str, Any],
     params: dict[str, Any],
 ) -> None:
-    from .app import list_tx_history, sync_tx_history
+    from .app import list_tx_history, sync_lnd_tx_history
 
     event_id = str(event.get("id") or "")
-    await sync_tx_history()
+    await sync_lnd_tx_history()
 
     payment_hash = str(params.get("payment_hash") or "").strip()
 
@@ -911,7 +911,7 @@ async def _handle_lookup_invoice_request(
 
     tx = None
 
-    for item in list_tx_history(500):
+    for item in list_tx_history(500, backend_id="lnd-default"):
         if str(item.get("payment_hash") or "") == payment_hash:
             tx = item
             break
@@ -1027,7 +1027,7 @@ async def _handle_list_transactions_request(
         return
 
     limit = int(params.get("limit") or 50)
-    history = list_tx_history(limit)
+    history = list_tx_history(limit, backend_id="lnd-default")
 
     transactions = []
 

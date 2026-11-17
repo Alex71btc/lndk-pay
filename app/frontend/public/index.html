@@ -758,6 +758,7 @@
     </style>
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
 <script defer src="/assets/payment-notifications.js?v=1"></script>
+  <script src="/assets/lightning-backend.js" defer></script>
 </head>
 <body>
 <main class="card" id="setupCard" hidden style="position:relative;">
@@ -2366,6 +2367,10 @@ function renderAliasList(items) {
     // Invoice helpers
     // ------------------------------------------------------------------
     async function createInvoice() {
+      if (!window.LightningBackend?.id) {
+        setStatus('backend.unavailable', 'error');
+        return;
+      }
       const amountValue = invoiceAmountInput.value.trim();
       const memoValue = invoiceMemoInput.value.trim() || 'bolt12-pay compat';
 
@@ -2385,6 +2390,7 @@ function renderAliasList(items) {
             'X-CSRF-Token': getCookie('csrf_token')
           },
           body: JSON.stringify({
+            backend_id: window.LightningBackend?.id,
             amount_sat: Number(amountValue),
             memo: memoValue,
             expiry: 3600
@@ -2639,7 +2645,7 @@ addressBox.addEventListener('click', async () => {
             'Content-Type': 'application/json',
             'X-CSRF-Token': getCookie('csrf_token')
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ ...payload, backend_id: window.LightningBackend?.id })
         });
 
         const data = await readJsonOrThrow(response);

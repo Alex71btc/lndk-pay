@@ -1,0 +1,24 @@
+# Run from repository root with: scripts/start-phoenixd-test.sh
+name: bolt12-pay-phoenixd-test
+services:
+  pay:
+    build:
+      context: ../app
+      dockerfile: Dockerfile.phoenixd-test
+    ports:
+      - "127.0.0.1:8092:8081"
+    environment:
+      APP_DATA_DIR: /data
+      APP_CONFIG_PATH: /data/config.json
+      CONFIG_JSON_PATH: /data/config.json
+      PAY_UI_PASSWORD: "${PHOENIX_TEST_UI_PASSWORD:?Use scripts/start-phoenixd-test.sh}"
+      BOLT12_PAY_VERSION: phoenixd-prototype
+      LND_REST_URL: ""
+      LNDK_GRPC_HOST: ""
+      ALLOW_PAY_OFFER: "false"
+    volumes:
+      - phoenixd-test-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+volumes:
+  phoenixd-test-data:

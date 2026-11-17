@@ -7,6 +7,15 @@ import backend.app as app_module
 
 
 class PayAddressResolutionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Resolver/CLI calls are mocks here; avoid a real executor thread just
+        # to invoke them (also works in restricted test environments).
+        async def inline_to_thread(function, *args):
+            return function(*args)
+        patcher = patch.object(app_module.asyncio, "to_thread", new=inline_to_thread)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     async def test_reports_both_bolt12_and_lnurl(self):
         lnurl_metadata = {
             "callback": "https://example.com/lnurl/callback",

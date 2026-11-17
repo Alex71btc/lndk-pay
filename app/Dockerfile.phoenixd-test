@@ -1,0 +1,13 @@
+# Independent Python-only test image: no LND/LNDK image or binaries required.
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY VERSION /app/VERSION
+COPY backend /app/backend
+COPY frontend /app/frontend
+COPY assets /app/assets
+COPY defaults /app/defaults
+COPY entrypoint.sh /app/entrypoint.sh
+EXPOSE 8081
+CMD ["sh", "/app/entrypoint.sh"]

@@ -150,8 +150,8 @@ class Bolt12IncomingPayerNoteTests(unittest.TestCase):
             )),
             patch.object(app_module, "_run_command", return_value=output),
         ):
-            self.assertEqual(asyncio.run(app_module._sync_tx_history_once()), 1)
-            self.assertEqual(asyncio.run(app_module._sync_tx_history_once()), 0)
+            self.assertEqual(asyncio.run(app_module._sync_lnd_tx_history_once()), 1)
+            self.assertEqual(asyncio.run(app_module._sync_lnd_tx_history_once()), 0)
 
         item = app_module.list_tx_history()[0]
         self.assertEqual(item["payment_hash"], payment_hash)
