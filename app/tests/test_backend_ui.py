@@ -77,3 +77,31 @@ for(const invoice of ['lnbc210n1abc','lntb1abc','lnbcrt1abc','LIGHTNING:LNBC1ABC
 assert.equal(isTechnicalIdentifier('alice@example.com'),false);
 assert.equal(isTechnicalIdentifier('Coffee donation'),false);
 ''')
+
+    def test_merged_scanner_keeps_lnurl_and_automatic_decode(self):
+        source=(APP/'frontend/admin/index.html').read_text()
+        function=source[source.index('      function applyScanResult('):source.index("      window.addEventListener('lightning:scan-lnurl'")]
+        run('''
+const assert=require('node:assert/strict');
+let scanTarget='lnurl',closed=0,decoded=0,events=[];
+const field={value:'',focus(){}};
+const scannerModal={classList:{contains:()=>true}};
+const normalizeScannedText=x=>x.trim();
+const setStatus=()=>{};
+const window={__t:x=>x,dispatchEvent:e=>events.push(e.type)};
+const document={getElementById:()=>field};
+const payOfferInput={value:'',dispatchEvent(){}};
+const decodeInput={value:''};
+const closeScanner=()=>{closed++};
+const decodeOffer=()=>{assert.ok(closed>0);decoded++};
+''' + function + '''
+applyScanResult(' lnurl1auth ');
+assert.equal(field.value,'lnurl1auth');
+assert.deepEqual(events,['lightning:lnurl-scanned']);
+assert.equal(decoded,0);
+scanTarget='decode';applyScanResult(' lno1offer ');
+assert.equal(decodeInput.value,'lno1offer');assert.equal(decoded,1);
+scanTarget='pay';applyScanResult(' lnbc1invoice ');
+assert.equal(payOfferInput.value,'lnbc1invoice');assert.equal(decoded,1);
+assert.equal(closed,3);
+''')

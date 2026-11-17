@@ -1,5 +1,21 @@
 # Phoenixd BOLT11 milestone — isolated local test
 
+## Integration status — 2026-11-17
+
+Prototype work was committed by the user as `7dca6f2`. The merge of main
+`13bc72b` is in progress. All three content conflicts in the Pay page have been
+resolved in the working tree: the new scanner closes before routing its result,
+retains the LNURL auth flow, automatically decodes offers, and sends the displayed
+backend ID to the decode endpoint. New main UI, liquidity and translation changes
+are included. The Git index still needs the resolved files staged by the user
+before the merge can be committed; this Work session cannot write Git metadata.
+
+Verification: 223 app tests, 11 root/PWA tests, plus a new scanner routing test
+passed. Inline scripts in both pages parse in Node. Translation/UI text checks
+passed. Rebuild the isolated container and verify the combined UI before a
+release. The older notes below describe the prototype's earlier state and are
+superseded by this integration status where applicable.
+
 This is an uncommitted development change on `codex/phoenixd-prototype`, based on
 `90f4ff9`. At inspection, `origin/main` was `13bc72b`: it contains seven commits
 not in the prototype, including v0.3.25 and the latest Pay/QR refinements. They

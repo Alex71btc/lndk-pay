@@ -14,7 +14,7 @@ class ActivityQuickRepayTests(unittest.TestCase):
         cls.html = PAGE.read_text(encoding="utf-8")
 
     def test_version(self):
-        self.assertEqual(VERSION.read_text().strip(), "0.3.24")
+        self.assertEqual(VERSION.read_text().strip(), "0.3.25")
 
     def test_success_opens_and_syncs_activity(self):
         start = self.html.index("function renderSuccessOutput(")
@@ -23,7 +23,7 @@ class ActivityQuickRepayTests(unittest.TestCase):
         self.assertIn('getElementById("txHistorySection")', fragment)
         self.assertIn("if (activity) activity.open = true", fragment)
         self.assertIn("void syncTxHistory()", fragment)
-        self.assertIn("paymentResultOutput.scrollIntoView", fragment)
+        self.assertIn('getElementById("paymentResultSection").scrollIntoView', fragment)
 
     def test_only_reusable_outgoing_targets(self):
         self.assertIn('item.direction === "outgoing"', self.html)
