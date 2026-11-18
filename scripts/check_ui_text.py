@@ -211,7 +211,7 @@ def android(checker, root):
         for el in ElementTree.parse(path).iter():
             for attr in ("text", "hint", "label", "contentDescription", "title"):
                 value = el.get(ns+attr)
-                if value and not value.startswith(("@", "?")):
+                if value and not value.startswith(("@", "?")) and not re.fullmatch(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}", value):
                     checker.check(path.relative_to(root), "Android resource", 1, "raw", value)
 
 
