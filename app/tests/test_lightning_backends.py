@@ -237,7 +237,7 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
             lnd.assert_awaited_once()
         self.assertEqual(self.http_requests,[])
 
-    async def test_phoenix_only_startup_does_not_schedule_lnd_workers(self):
+    async def test_phoenix_only_startup_schedules_wallet_workers_without_lnd(self):
         scheduled=[]
         def capture(coroutine):
             scheduled.append(coroutine.cr_code.co_name)
@@ -245,8 +245,8 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(app_module.asyncio,'create_task',side_effect=capture):
             await app_module.startup_background_tasks()
         self.assertIn('_tx_history_sync_loop',scheduled)
-        self.assertNotIn('_nostr_secret_store_unlock_loop',scheduled)
-        self.assertNotIn('start_nwc_runtime',scheduled)
+        self.assertIn('_nostr_secret_store_unlock_loop',scheduled)
+        self.assertIn('start_nwc_runtime',scheduled)
 
     async def test_preview_uses_local_invoice_decoder(self):
         with patch.object(app_module,'require_pay_auth'), patch.object(app_module,'_read_macaroon_hex',side_effect=AssertionError('LND accessed')):
@@ -308,6 +308,69 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(error.exception.status_code, 409)
             self.assertEqual(client.pay_offer.await_count, 1)
         self.assertEqual(app_module.list_tx_history()[0]['status'], 'pending')
+        self.assertEqual(app_module.list_tx_history()[0]['raw_json']['transport_error'], 'ReadTimeout')
+
+    async def test_offer_explicit_failure_preserves_and_displays_backend_reason(self):
+        client = AsyncMock()
+        client.pay_offer.return_value = {
+            'type': 'payment_failed', 'paymentHash': None,
+            'offerId': 'test-offer-id', 'reason': 'NoResponse',
+        }
+        with patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))):
+            with self.assertRaises(HTTPException) as error:
+                await self.service.pay_offer('lno1test', 21)
+        self.assertEqual(error.exception.status_code, 400)
+        self.assertIn('NoResponse', error.exception.detail)
+        row = app_module.list_tx_history()[0]
+        self.assertEqual(row['status'], 'failed')
+        self.assertEqual(row['raw_json']['reason'], 'NoResponse')
+        self.assertEqual(client.pay_offer.await_count, 1, 'No automatic retry or fallback')
+
+    async def test_offer_retry_keeps_previous_failure_and_uses_new_time_amount_and_note(self):
+        client = AsyncMock()
+        client.pay_offer.return_value = {'reason': 'NoResponse'}
+        with patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))):
+            with patch.object(backends.time, 'time', return_value=1000):
+                with self.assertRaises(HTTPException):
+                    await self.service.pay_offer('lno1test', 23, 'old attempt', 'alice@example.com')
+            client.pay_offer.return_value = {**self.pay_result, 'recipientAmountSat': 5000}
+            with patch.object(backends.time, 'time', return_value=2000):
+                await self.service.pay_offer('lno1test', 5000, None, 'alice@example.com')
+        rows = app_module.list_tx_history()
+        self.assertEqual(len(rows), 2, 'The failed attempt remains in history')
+        settled = self.service.existing(HASH, 'outgoing')
+        self.assertEqual(settled['created_at'], '2000')
+        self.assertEqual(settled['amount_sat'], 5000)
+        self.assertEqual(settled['memo'], '')
+        failed = next(row for row in rows if row['status'] == 'failed')
+        self.assertEqual(failed['created_at'], '1000')
+        self.assertEqual(failed['amount_sat'], 23)
+        self.assertEqual(failed['memo'], 'old attempt')
+
+    async def test_old_offer_attempt_still_blocks_retry_after_upgrade(self):
+        legacy_attempt = 'phoenix-attempt-' + hashlib.sha256(b'lno1test').hexdigest()
+        self.service.store({'backend_id': INSTANCE['id'], 'payment_hash': legacy_attempt,
+                            'direction': 'outgoing', 'type': 'payment', 'method': 'bolt12',
+                            'status': 'pending', 'amount_sat': 21, 'raw_json': {'offer': 'lno1test'}})
+        with patch.object(backends, 'checked_client', AsyncMock()) as client:
+            with self.assertRaises(HTTPException) as error:
+                await self.service.pay_offer('lno1test', 21)
+        self.assertEqual(error.exception.status_code, 409)
+        client.assert_not_awaited()
+
+    async def test_invoice_explicit_failure_displays_backend_reason(self):
+        self.pay_result = {'paymentHash': HASH, 'reason': 'InsufficientBalance'}
+        with self.assertRaises(HTTPException) as error:
+            await self.service.pay(self.invoice)
+        self.assertEqual(error.exception.status_code, 400)
+        self.assertIn('InsufficientBalance', error.exception.detail)
+        self.assertEqual(self.service.existing(HASH, 'outgoing')['status'], 'failed')
+
+    def test_payment_failure_message_is_bounded_and_single_line(self):
+        message = backends.payment_failure_detail({'reason': '\nNoResponse\x00\n' + 'x'*1000}, 'BOLT12')
+        self.assertNotIn('\n', message)
+        self.assertNotIn('\x00', message)
+        self.assertLess(len(message), 320)
 
     async def test_offer_routes_and_lnurl_never_access_lnd(self):
         client = AsyncMock()
@@ -340,3 +403,183 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as err:
                 await app_module.pay_offer(app_module.PayOfferRequest(offer='lno1test',amount_sat=21,backend_id='lnd-default'), request())
             self.assertEqual(err.exception.status_code,409)
+
+    async def test_quick_backend_switch_rejects_stale_page_and_keeps_instance(self):
+        with patch.object(app_module, 'require_pay_auth'), patch.object(app_module, 'LND_REST_URL', 'https://lnd.test'):
+            await app_module.save_lightning_backend({'active':'lnd-default','expected_backend_id':INSTANCE['id']}, request())
+            saved = config.load_config()['lightning_backend']
+            self.assertEqual(saved['active'], 'lnd-default')
+            self.assertEqual(saved['phoenixd'], INSTANCE)
+            with self.assertRaises(HTTPException) as error:
+                await app_module.save_lightning_backend({'active':'phoenixd','expected_backend_id':INSTANCE['id']}, request())
+            self.assertEqual(error.exception.status_code,409)
+            await app_module.save_lightning_backend({'active':'phoenixd','expected_backend_id':'lnd-default'}, request())
+            self.assertEqual(config.load_config()['lightning_backend']['active'], INSTANCE['id'])
+            state = await app_module.get_lightning_backend(request())
+            data = json.loads(state.body)
+            self.assertTrue(data['lnd_configured'])
+            self.assertNotIn('password', data['phoenixd'])
+
+    async def test_withdraw_inspection_never_redeems_and_hides_voucher(self):
+        requests = []
+        def respond(req):
+            requests.append(req)
+            return httpx.Response(200, json={'tag':'withdrawRequest','callback':'https://192.0.2.1:1234/callback/private-token','k1':'private-k1'})
+        with patch.object(app_module, 'require_pay_auth'), patch('backend.app.httpx.AsyncClient',side_effect=lambda **kw:self.client_factory(transport=httpx.MockTransport(respond),**kw)), patch.object(app_module,'_create_bolt11_invoice',AsyncMock()) as create:
+            result = await app_module.inspect_lnurl_withdraw(app_module.PhoenixLnurlAction(backend_id=INSTANCE['id'],lnurl='https://example.com/withdraw/private-voucher',action='withdraw'),request())
+        self.assertEqual(len(requests),1)
+        self.assertEqual(requests[0].method,'GET')
+        self.assertEqual(result['host'],'example.com')
+        self.assertEqual(result['callback_host'],'192.0.2.1:1234')
+        self.assertNotIn('private',json.dumps(result))
+        create.assert_not_awaited()
+
+    async def test_phoenix_alias_publication_and_lnurl_remain_bound_after_switch(self):
+        cfg = config.load_config()
+        cfg['lnurl_base_domain'] = 'phoenixd-test.example.com'
+        cfg['public_bolt12_address'] = 'bolt12@phoenixd-test.example.com'
+        cfg['cloudflare'] = {'zone_name': 'example.com'}
+        config.save_config(cfg)
+        with patch.object(app_module, 'require_pay_auth'):
+            created = app_module.create_alias(app_module.AliasCreateRequest(
+                name='phoenix', description='Phoenix donations', backend_id=INSTANCE['id']), request())
+        self.assertEqual(created['backend_id'], INSTANCE['id'])
+        cfg = config.load_config()
+        cfg['lightning_backend']['active'] = 'lnd-default'
+        config.save_config(cfg)
+        client = AsyncMock()
+        client.create_offer.return_value = 'lno1phoenixoffer'
+        with patch.object(app_module, 'require_pay_auth'), patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))), patch.object(app_module, '_create_offer_internal', side_effect=AssertionError('LNDK accessed')):
+            published = await app_module.publish_alias('phoenix', request())
+            await app_module.refresh_alias_offer('phoenix', request())
+        self.assertEqual(published['last_offer'], 'lno1phoenixoffer')
+        self.assertIn('lno1phoenixoffer', published['dns_content'])
+        self.assertEqual(published['dns_name'], 'phoenix.user._bitcoin-payment.phoenixd-test.example.com')
+        self.assertEqual(published['backend_id'], INSTANCE['id'])
+        with patch.object(app_module, '_nostr_server_pubkey_hex', return_value=''), patch.object(app_module, '_create_bolt11_invoice', side_effect=AssertionError('LND accessed')):
+            result = await app_module.lnurl_callback('phoenix', 21000, None, None, None)
+        self.assertEqual(result['pr'], self.invoice)
+        from urllib.parse import parse_qs
+        fields = parse_qs(self.http_requests[-1].content.decode())
+        self.assertNotIn('description', fields)
+        metadata = app_module.lnurl_pay_metadata('phoenix').metadata
+        self.assertEqual(fields['descriptionHash'][0], hashlib.sha256(metadata.encode()).hexdigest())
+        self.assertEqual(self.service.existing(HASH, 'incoming')['method'], 'lightning_address')
+        self.assertEqual(config.load_config()['lightning_backend']['active'], 'lnd-default')
+
+    async def test_refresh_republishes_legacy_alias_under_full_subdomain(self):
+        cfg = config.load_config()
+        cfg.update(public_bolt12_address='bolt12@wallet.example.com',
+                   lnurl_base_domain='wallet.example.com', dns_mode='cloudflare')
+        cfg['cloudflare'] = {'zone_name': 'example.com', 'zone_id': 'parent-zone-id'}
+        cfg['aliases'] = {'alice': {'backend_id': INSTANCE['id'], 'published': True,
+            'dns_name': 'alice.user._bitcoin-payment.example.com',
+            'last_offer': 'lno1old', 'description': 'Alice'}}
+        config.save_config(cfg)
+        client = AsyncMock()
+        client.create_offer.return_value = 'lno1new'
+        with (patch.object(app_module, 'require_pay_auth'),
+              patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))),
+              patch.object(app_module, '_cloudflare_upsert_txt_record', AsyncMock(return_value={})) as publish):
+            result = await app_module.refresh_alias_offer('alice', request())
+        publish.assert_awaited_once_with(name='alice.user._bitcoin-payment.wallet.example.com',
+                                         content=app_module.build_bip353_txt_value('lno1new'))
+        self.assertFalse(result['dns_needs_republish'])
+        self.assertEqual(config.load_config()['cloudflare']['zone_id'], 'parent-zone-id')
+        self.assertEqual(config.load_config()['aliases']['alice']['dns_name'],
+                         'alice.user._bitcoin-payment.wallet.example.com')
+
+    async def test_legacy_alias_keeps_lnd_and_missing_bound_wallet_never_falls_back(self):
+        cfg = config.load_config()
+        cfg['aliases'] = {'legacy': {'description': 'old address', 'amount_sat': None}}
+        config.save_config(cfg)
+        self.assertEqual(app_module._resolve_lnurl_alias('legacy')['backend_id'], 'lnd-default')
+        with patch.object(app_module, 'require_pay_auth'):
+            with self.assertRaises(HTTPException):
+                app_module.create_alias(app_module.AliasCreateRequest(name='legacy', backend_id=INSTANCE['id']), request())
+        with self.assertRaises(HTTPException):
+            await app_module._create_bound_invoice('phoenixd-removed', amount_sat=21)
+        self.assertEqual(self.http_requests, [])
+
+    async def test_public_offer_and_setup_without_lnd(self):
+        client = AsyncMock()
+        client.create_offer.return_value = 'lno1public'
+        with patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))), patch.object(app_module, '_create_offer_internal', side_effect=AssertionError('LNDK accessed')):
+            result = await app_module._create_bound_offer(app_module.OfferRequest(description='Public'), app_module._public_receiving_backend_id(config.load_config()))
+        self.assertEqual(result.offer, 'lno1public')
+        self.assertEqual(client.create_offer.call_count, 1)
+
+    async def test_phoenix_nwc_invoice_payment_and_history_ignore_spending_selector(self):
+        from backend import nwc_runtime
+        connection = {'backend_id': INSTANCE['id'], 'permissions': {'get_info': True, 'pay_invoice': True, 'get_balance': True}}
+        cfg = config.load_config()
+        cfg['lightning_backend']['active'] = 'lnd-default'
+        config.save_config(cfg)
+        with patch.object(nwc_runtime, '_send_nwc_success', AsyncMock()) as success, patch.object(nwc_runtime, '_send_nwc_error', AsyncMock()) as error, patch.object(app_module, '_create_bolt11_invoice', side_effect=AssertionError('LND accessed')):
+            await nwc_runtime._handle_make_invoice_request(None, {}, connection, {'amount': 21000})
+            self.assertEqual(success.call_args.args[-1]['payment_hash'], HASH)
+            await nwc_runtime._handle_pay_invoice_request(None, {}, connection, {'invoice': self.invoice})
+            self.assertEqual(success.call_args.args[-1]['preimage'], PREIMAGE)
+            self.assertEqual(success.call_args.args[-1]['fees_paid'], 1000)
+            await nwc_runtime._handle_list_transactions_request(None, {}, connection, {})
+            self.assertEqual(len(success.call_args.args[-1]['transactions']), 2)
+            error.assert_not_awaited()
+        self.assertEqual(self.service.existing(HASH, 'outgoing')['origin'], 'nwc')
+
+    async def test_phoenix_nostr_store_unlocks_and_reopens_without_lnd_signer(self):
+        root = Path(self.tmp.name)
+        with patch.object(app_module, 'CONFIG_DIR', root/'config'), patch.object(app_module, 'CONFIG_JSON_PATH', root/'config.json'), patch.object(app_module, 'SECRETS_JSON_PATH', root/'config/secrets.json'), patch.object(app_module, 'NOSTR_SECRET_STORE_KEY', None), patch.object(app_module, '_request_lnd_nostr_shared_key', side_effect=AssertionError('LND signer accessed')):
+            await app_module._unlock_nostr_secret_store_once()
+            key = app_module.NOSTR_SECRET_STORE_KEY
+            app_module.save_secrets({'nostr_server_privkey': '01' * 32})
+            app_module.NOSTR_SECRET_STORE_KEY = None
+            await app_module._unlock_nostr_secret_store_once()
+            self.assertEqual(app_module.NOSTR_SECRET_STORE_KEY, key)
+            self.assertEqual(app_module.load_secrets()['nostr_server_privkey'], '01' * 32)
+            raw = app_module.SECRETS_JSON_PATH.read_text()
+            self.assertNotIn('01' * 32, raw)
+            self.assertIn('local-file-v1', raw)
+            (root/'config/nostr-master.key').unlink()
+            app_module.NOSTR_SECRET_STORE_KEY = None
+            with self.assertRaises(RuntimeError):
+                await app_module._unlock_nostr_secret_store_once()
+
+    async def test_phoenix_zap_lookup_and_push_are_wallet_scoped(self):
+        incoming = self.raw('incoming', preimage=PREIMAGE)
+        client = AsyncMock()
+        client.get_incoming.return_value = incoming
+        with patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))), patch.object(app_module, '_read_macaroon_hex', side_effect=AssertionError('LND accessed')):
+            result = await app_module._lookup_invoice(HASH, INSTANCE['id'])
+        self.assertTrue(result['settled'])
+        self.assertEqual(result['r_preimage'], PREIMAGE)
+        with app_module._db_conn() as conn:
+            events = conn.execute('SELECT payment_hash FROM companion_push_events').fetchall()
+        self.assertEqual([r[0] for r in events], [INSTANCE['id'] + ':' + HASH])
+        app_module.companion_push.queue_settled_payment(app_module.DB_PATH, {
+            'payment_hash': HASH, 'direction': 'incoming', 'status': 'settled', 'amount_sat': 21})
+        with app_module._db_conn() as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM companion_push_events').fetchone()[0], 2)
+
+    async def test_phoenix_bip353_setup_publishes_dns_without_lndk(self):
+        cfg = config.load_config()
+        cfg['aliases'] = {}
+        config.save_config(cfg)
+        client = AsyncMock()
+        client.create_offer.return_value = 'lno1dnsoffer'
+        payload = {'public_bolt12_address': 'alice@example.com',
+                   'lnurl_base_domain': 'example.com', 'dns_mode': 'cloudflare',
+                   'cloudflare': {'enabled': True, 'zone_name': 'example.com',
+                                  'zone_id': 'test-zone', 'api_token': 'fixture-token'}}
+        with patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))), patch.object(app_module, '_create_offer_internal', side_effect=AssertionError('LNDK accessed')), patch.object(app_module, '_cloudflare_lookup_txt_records', AsyncMock(return_value=[])), patch.object(app_module, '_cloudflare_upsert_txt_record', AsyncMock(return_value={})) as dns:
+            result = await app_module.set_setup_config(payload, request())
+        self.assertTrue(result['public_bip353']['published'])
+        self.assertIn('lno1dnsoffer', dns.call_args.kwargs['content'])
+        self.assertEqual(dns.call_args.kwargs['name'], 'alice.user._bitcoin-payment.example.com')
+        self.assertEqual(config.load_config()['public_receiving_backend_id'], INSTANCE['id'])
+
+    async def test_first_phoenix_configuration_starts_workers_without_restart(self):
+        config.save_config({})
+        client = AsyncMock()
+        with patch.object(app_module, 'require_pay_auth'), patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))), patch.object(app_module, '_start_wallet_workers') as start:
+            await app_module.save_lightning_backend({'active': 'phoenixd', 'url': INSTANCE['url'], 'password': INSTANCE['password']}, request())
+        start.assert_called_once()

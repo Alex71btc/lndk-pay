@@ -23,6 +23,25 @@ def lnurl_url(value, decode):
     return url
 
 
+def action_error(exc, backend, action):
+    # Inspect upstream diagnostics without reflecting URLs, vouchers or keys.
+    detail = str(exc).lower()
+    if isinstance(exc, httpx.HTTPStatusError):
+        detail += ' ' + exc.response.text[:8192].lower()
+    if any(marker in detail for marker in ('certificate_verify_failed', 'certificate verify failed',
+            'sslhandshakeexception', 'certpathvalidatorexception', 'trust anchor',
+            'unable to find valid certification path', 'self-signed certificate',
+            'pkix path building failed', 'ip address mismatch', 'hostname mismatch')):
+        return HTTPException(502, 'LNURL TLS certificate is not trusted. Use an HTTPS hostname with a valid certificate, or configure the service CA in the requesting backend.')
+    if isinstance(exc, httpx.ConnectError):
+        return HTTPException(502, backend + ' could not connect to the LNURL service. Check its address, port and TLS certificate.')
+    if isinstance(exc, httpx.TimeoutException):
+        return HTTPException(504, backend + ' LNURL request timed out. Check incoming Activity before retrying a withdrawal.')
+    if isinstance(exc, httpx.HTTPStatusError):
+        return HTTPException(502, backend + ' LNURL request returned HTTP ' + str(exc.response.status_code) + '. Check service reachability and backend logs.')
+    return HTTPException(502, backend + (' LNURL withdrawal failed. Check service metadata/callback and incoming Activity.' if action == 'withdraw' else ' LNURL login failed. Check the service and LND signer permissions if using LND.'))
+
+
 def normalize_signature(signature):
     # LND signrpc returns DER ECDSA despite its protobuf wire-format comment.
     # Normalize to fixed r||s so both representations derive the same identity.

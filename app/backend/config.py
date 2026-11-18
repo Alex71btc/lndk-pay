@@ -8,6 +8,7 @@ CONFIG_PATH = os.getenv("APP_CONFIG_PATH", "/data/config.json")
 
 DEFAULT_CONFIG = {
     "public_bolt12_address": "bolt12@pay.local",
+    "bip353_base_domain": "",  # Empty on legacy installs: derive from the public address.
     "public_lnurl_address": "lnurl@pay.local",
     "lnurl_base_domain": "",
     "lnurl_base_url": "",

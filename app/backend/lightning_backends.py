@@ -1,9 +1,10 @@
-"""Interactive BOLT11 backend selection; public/NWC calls remain pinned to LND.
+"""Wallet selection and persistent ownership for invoices, aliases and NWC.
 
 A Phoenixd instance is bound to its node id. Changing transport or credentials
 never silently turns existing invoices into invoices of a different wallet.
 """
 import asyncio
+import base64
 import copy
 import hashlib
 import json
@@ -45,6 +46,16 @@ def selected(cfg, expected=None):
     return instance
 
 
+def bound(cfg, backend_id):
+    """Resolve a saved object's owner, independently of the current selector."""
+    if backend_id == LND_ID:
+        return None
+    instance = state(cfg).get('phoenixd')
+    if not instance or instance.get('id') != backend_id:
+        raise HTTPException(409, 'The receiving wallet is unavailable; its binding was preserved.')
+    return instance
+
+
 def migrate_history(conn):
     """Transactional migration of the old hash-only key, preserving every column."""
     columns = conn.execute("PRAGMA table_info(tx_history)").fetchall()
@@ -63,12 +74,17 @@ def migrate_history(conn):
         "PRIMARY KEY (backend_id, direction, payment_hash)",
     ])
     names = ", ".join(f'"{c[1]}"' for c in columns)
+    indexes = [row[0] for row in conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='tx_history' AND sql IS NOT NULL"
+    ).fetchall()]
     conn.execute("SAVEPOINT backend_migration")
     try:
         conn.execute("CREATE TABLE tx_history_backend_migration (" + ", ".join(definitions) + ")")
         conn.execute(f"INSERT INTO tx_history_backend_migration ({names}) SELECT {names} FROM tx_history")
         conn.execute("DROP TABLE tx_history")
         conn.execute("ALTER TABLE tx_history_backend_migration RENAME TO tx_history")
+        for sql in indexes:
+            conn.execute(sql)
     except Exception:
         conn.execute("ROLLBACK TO backend_migration")
         raise
@@ -135,10 +151,21 @@ def history_item(raw, direction, instance_id):
     }
 
 
+def payment_failure_detail(result, payment_type):
+    # Phoenixd may return payment_failed with HTTP 200. Keep its reason visible
+    # instead of reducing invoice-request and routing failures to one message.
+    reason = result.get('reason')
+    reason = ' '.join(reason.split()) if isinstance(reason, str) else ''
+    reason = ''.join(char for char in reason if char.isprintable())[:240]
+    suffix = ': ' + reason if reason else ''
+    return f'Phoenixd {payment_type} payment failed{suffix}. See Lightning Activity.'
+
+
 class PhoenixBackend:
-    def __init__(self, instance, db_conn, save_item):
+    def __init__(self, instance, db_conn, save_item, notify_item=None):
         self.instance = copy.deepcopy(instance)
         self.db_conn, self.save_item = db_conn, save_item
+        self.notify_item = notify_item
 
     def existing(self, payment_hash, direction):
         with self.db_conn() as conn:
@@ -163,14 +190,21 @@ class PhoenixBackend:
             if all(comparable.get(k) == v for k, v in item.items()):
                 return False
         self.save_item(item)
+        if self.notify_item:
+            self.notify_item(item, old)
         return True
 
-    async def create(self, amount_sat, memo, expiry):
-        if len(memo) > 128:
+    async def create(self, amount_sat, memo, expiry, *, description_hash=None, method='bolt11', counterparty=''):
+        if not description_hash and len(memo) > 128:
             raise HTTPException(400, "Phoenixd invoice descriptions are limited to 128 characters")
         client, _ = await checked_client(self.instance)
         try:
-            result = await client.create_invoice(amount_sat, memo, expiry=expiry)
+            kwargs = {'expiry': expiry}
+            if description_hash:
+                kwargs['description_hash'] = base64.b64decode(description_hash, validate=True).hex()
+                if len(kwargs['description_hash']) != 64:
+                    raise ValueError('Invalid description hash')
+            result = await client.create_invoice(amount_sat, memo, **kwargs)
         except (httpx.HTTPError, ValueError):
             raise HTTPException(502, "Phoenixd invoice creation failed") from None
         payment_hash, invoice = result.get("paymentHash"), result.get("serialized")
@@ -178,14 +212,14 @@ class PhoenixBackend:
             raise HTTPException(502, "Phoenixd returned an invalid invoice")
         self.store({
             "backend_id": self.instance["id"], "payment_hash": payment_hash,
-            "direction": "incoming", "type": "invoice", "method": "bolt11", "origin": "web",
+            "direction": "incoming", "type": "invoice", "method": method, "origin": "nwc" if method == 'nwc' else "web", "counterparty": counterparty,
             "amount_sat": amount_sat, "status": "pending", "memo": memo,
             "identifier": invoice, "created_at": str(int(time.time())),
             "raw_json": {**result, "payment_request": invoice, "expires_at": int(time.time()) + expiry},
         })
         return {"payment_request": invoice, "payment_hash": payment_hash, "raw": result}
 
-    async def pay(self, invoice, amount_sat=None, *, method="bolt11", counterparty=""):
+    async def pay(self, invoice, amount_sat=None, *, method="bolt11", counterparty="", origin="web"):
         # Decode locally, so no LND connection or credentials are involved.
         from bolt11 import decode
         try:
@@ -207,7 +241,7 @@ class PhoenixBackend:
             client, _ = await checked_client(self.instance)
             item = {
                 "backend_id": self.instance["id"], "payment_hash": payment_hash,
-                "direction": "outgoing", "type": "payment", "method": method, "counterparty": counterparty, "origin": "web",
+                "direction": "outgoing", "type": "payment", "method": method, "counterparty": counterparty, "origin": origin,
                 "amount_sat": amount, "status": "pending", "memo": decoded.description or "",
                 "identifier": invoice, "created_at": str(int(time.time())),
                 "raw_json": {"payment_request": invoice},
@@ -221,7 +255,7 @@ class PhoenixBackend:
             if result.get("reason") and result.get("paymentHash") == payment_hash:
                 item.update(status="failed", raw_json={**result, "payment_request": invoice})
                 self.store(item)
-                raise HTTPException(400, "Phoenixd payment failed. See Lightning Activity for details.")
+                raise HTTPException(400, payment_failure_detail(result, 'BOLT11'))
             # A hash alone is NOT confirmation of settlement. Verify the preimage.
             preimage = result.get("paymentPreimage") or result.get("preimage") or ""
             try:
@@ -233,7 +267,8 @@ class PhoenixBackend:
                             fee_sat=int(result.get("routingFeeSat") or 0),
                             raw_json={**result, "payment_request": invoice, "payment_preimage": preimage})
                 self.store(item)
-                return {**result, "payment_hash": payment_hash, "status": "SUCCEEDED"}
+                return {**result, "payment_hash": payment_hash, "payment_preimage": preimage,
+                        "fee_sat": item['fee_sat'], "status": "SUCCEEDED"}
             # Query the original instance even if Setup changed during the payment.
             try:
                 raw = await client.get_outgoing(payment_hash)
@@ -245,15 +280,30 @@ class PhoenixBackend:
                 raise HTTPException(502, "Phoenixd payment outcome unknown. Check Lightning Activity; do not resend.") from None
             if item["status"] != "settled":
                 raise HTTPException(409, "Phoenixd payment " + item["status"] + ". Check Lightning Activity.")
-            return {**raw, "payment_hash": payment_hash, "status": "SUCCEEDED"}
+            return {**raw, "payment_hash": payment_hash, "payment_preimage": raw.get('preimage', ''),
+                    "fee_sat": item['fee_sat'], "status": "SUCCEEDED"}
 
     async def pay_offer(self, offer, amount_sat, message=None, identifier=None):
         # Offers are reusable; only unresolved submissions block the same target.
-        attempt = 'phoenix-attempt-' + hashlib.sha256(offer.encode()).hexdigest()
+        legacy_attempt = 'phoenix-attempt-' + hashlib.sha256(offer.encode()).hexdigest()
         async with PAYMENT_LOCK:
-            previous = self.existing(attempt, 'outgoing')
-            if previous and previous['status'] == 'pending':
-                raise HTTPException(409, 'Previous payment outcome unknown. Check Activity before retrying.')
+            with self.db_conn() as conn:
+                pending = conn.execute(
+                    "SELECT payment_hash, raw_json FROM tx_history "
+                    "WHERE backend_id=? AND direction='outgoing' AND status='pending' "
+                    "AND payment_hash LIKE 'phoenix-attempt-%'",
+                    (self.instance['id'],),
+                ).fetchall()
+            for previous in pending:
+                try:
+                    previous_offer = json.loads(previous['raw_json'] or '{}').get('offer')
+                except (ValueError, TypeError, AttributeError):
+                    previous_offer = None
+                if previous['payment_hash'] == legacy_attempt or previous_offer == offer:
+                    raise HTTPException(409, 'Previous payment outcome unknown. Check Activity before retrying.')
+            # Each intentional submission has its own identity. Reusing the
+            # offer hash inherited the old failure's timestamp and payer note.
+            attempt = 'phoenix-attempt-' + uuid.uuid4().hex
             client, _ = await checked_client(self.instance)
             try:
                 await client.decode_offer(offer)
@@ -267,14 +317,18 @@ class PhoenixBackend:
             self.store(item)
             try:
                 result = await client.pay_offer(offer, amount_sat, message)
-            except (httpx.HTTPError, ValueError):
+            except (httpx.HTTPError, ValueError) as exc:
+                item['raw_json']['transport_error'] = type(exc).__name__
+                if isinstance(exc, httpx.HTTPStatusError):
+                    item['raw_json']['http_status'] = exc.response.status_code
+                self.store(item)
                 raise HTTPException(502, 'Phoenixd payment outcome unknown. Check Activity; do not resend.') from None
             if not isinstance(result, dict):
                 raise HTTPException(502, 'Phoenixd payment outcome unknown. Check Activity; do not resend.')
             if result.get('reason'):
                 item.update(status='failed', raw_json={**result, 'offer': offer})
                 self.store(item)
-                raise HTTPException(400, 'Phoenixd payment failed. See Lightning Activity.')
+                raise HTTPException(400, payment_failure_detail(result, 'BOLT12'))
             payment_hash = result.get('paymentHash')
             try:
                 confirmed = hashlib.sha256(bytes.fromhex(result.get('paymentPreimage', ''))).hexdigest() == payment_hash

@@ -38,10 +38,13 @@ const doc = {
   addEventListener(event, fn) { if (event === "DOMContentLoaded") ready.push(fn); },
 };
 const store = new Map();
+const windowEvents = {};
 const tab = vm.createContext({
   document: doc, navigator: {languages: ["de-DE"]}, URLSearchParams,
   location: {search: "", origin: "http://localhost"}, console,
-  addEventListener() {}, dispatchEvent() {}, CustomEvent: class {},
+  addEventListener(name, callback) { (windowEvents[name] ||= []).push(callback); },
+  dispatchEvent(event) { for (const callback of windowEvents[event.type] || []) callback(event); },
+  CustomEvent: class { constructor(type) { this.type = type; } },
   localStorage: {getItem: k => store.get(k), setItem: (k, v) => store.set(k, v)},
   fetch(url, options) { requests.push({url, options}); return new Promise(() => {}); },
   setTimeout: () => 1, clearTimeout() {},
@@ -61,6 +64,8 @@ assert.equal(selects[0].children.length, 5);
 const address = "merchant@example.test";
 const offer = "lno1fixture";
 byId("setupBolt12Address").value = address;
+byId("setupBip353Domain").value = 'example.test';
+tab.updateBip353SetupUi();
 byId("setupPassword").value = "editing in progress";
 tab.renderQrForValue(offer, "offer");
 tab.setStatus("alias.created", "ok", true, {name: "<example>"});
@@ -82,6 +87,8 @@ for (const [code, label] of Object.entries({
   assert.equal(byId("verifyAliasDnsBtn").textContent, tab.__t("bip353.verify.checking"));
   assert.equal(byId("statusBar").textContent, tab.__t("alias.created", {name: "<example>"}));
   assert.equal(byId("setupBolt12Address").value, address);
+  assert.equal(byId("setupBip353Domain").value, 'example.test');
+  assert.ok(byId("setupBip353Examples").textContent.includes('example.test'));
   assert.equal(byId("setupPassword").value, "editing in progress");
 }
 

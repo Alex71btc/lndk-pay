@@ -105,3 +105,18 @@ scanTarget='pay';applyScanResult(' lnbc1invoice ');
 assert.equal(payOfferInput.value,'lnbc1invoice');assert.equal(decoded,1);
 assert.equal(closed,3);
 ''')
+
+    def test_backend_navigation_has_labels_with_old_or_missing_catalog(self):
+        source=(APP/'assets/lightning-backend.js').read_text()
+        function=source[source.index('  const navigationFallback'):source.index('  const cookie')]
+        run('''
+const assert=require('node:assert/strict');
+const window={__t:()=>''};
+''' + function + '''
+assert.equal(t('switch'),'Switch');
+assert.equal(t('configure'),'Configure');
+window.__t=key=>key;
+assert.equal(t('switch'),'Switch');
+window.__t=()=> 'Wechseln';
+assert.equal(t('switch'),'Wechseln');
+''')

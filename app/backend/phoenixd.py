@@ -1,4 +1,4 @@
-"""HTTP transport for the opt-in Phoenixd BOLT11 prototype."""
+"""HTTP transport for Phoenixd invoices, offers and LNURL operations."""
 from urllib.parse import urlsplit
 
 import httpx
@@ -33,8 +33,12 @@ class PhoenixdClient:
                     return response.text.strip()
             return response.json()
 
-    async def create_invoice(self, amount_sat: int, description: str, *, expiry: int | None = None) -> dict:
-        data = {"amountSat": amount_sat, "description": description}
+    async def create_invoice(self, amount_sat: int, description: str, *, expiry: int | None = None, description_hash: str | None = None) -> dict:
+        data = {"amountSat": amount_sat}
+        if description_hash:
+            data['descriptionHash'] = description_hash
+        else:
+            data['description'] = description
         if expiry is not None:
             data["expirySeconds"] = expiry
         return await self._request("POST", "createinvoice", data=data)
@@ -57,6 +61,9 @@ class PhoenixdClient:
 
     async def get_info(self) -> dict:
         return await self._request("GET", "getinfo")
+
+    async def get_incoming(self, payment_hash: str) -> dict:
+        return await self._request('GET', f'payments/incoming/{payment_hash}')
 
     async def get_outgoing(self, payment_hash: str) -> dict:
         return await self._request("GET", f"payments/outgoingbyhash/{payment_hash}")

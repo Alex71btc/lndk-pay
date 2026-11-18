@@ -1,0 +1,16 @@
+ARG LNDK_IMAGE=alex71btc/lndk:bolt12-pay-0.3.16-multiarch@sha256:8fee8bd094d7a3e59f596ce978097655ef820a88971aad52d6aac931c1894fb6
+FROM ${LNDK_IMAGE} AS lndkstage
+# Dual-backend UI with the CLI for the existing LNDK sidecar.
+FROM python:3.12-slim
+COPY --from=lndkstage /usr/local/bin/lndk-cli /usr/local/bin/lndk-cli
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY VERSION /app/VERSION
+COPY backend /app/backend
+COPY frontend /app/frontend
+COPY assets /app/assets
+COPY defaults /app/defaults
+COPY entrypoint.sh /app/entrypoint.sh
+EXPOSE 8081
+CMD ["sh", "/app/entrypoint.sh"]

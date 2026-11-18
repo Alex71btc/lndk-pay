@@ -47,6 +47,7 @@ const seenIncomingPaymentIds = new Set();
 const shown = [];
 let persisted = 0;
 function persistSeenIncomingPaymentIds() { persisted++; }
+function refreshSeenIncomingPaymentIds() {}
 function showIncomingPaymentToast(item, id) { shown.push({item, id}); }
 function incomingPaymentIsRecent(item) { return item.recent !== false; }
 """

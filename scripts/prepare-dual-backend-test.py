@@ -61,12 +61,56 @@ def configuration(container):
     }, 'volumes': mounts}}}
 
 
+def full_configuration(container):
+    result = configuration(container)
+    env = dict(v.split('=', 1) for v in container.get('Config', {}).get('Env', []) if '=' in v)
+    host = env.get('LNDK_GRPC_HOST', '')
+    if not host or not urlsplit(host).hostname:
+        raise ValueError('Source container has no LNDK_GRPC_HOST')
+    cert = PurePosixPath(env.get('LNDK_CERT_PATH', ''))
+    service = result['services']['pay']
+    cert_target = '/test-lndk/tls-cert.pem'
+    for mount in container.get('Mounts', []):
+        destination = PurePosixPath(mount['Destination'])
+        if cert == destination or destination in cert.parents:
+            if mount['Type'] == 'volume' and mount.get('Name'):
+                # Only share the LNDK certificate volume, never the app database.
+                if str(destination) == '/data':
+                    raise ValueError('Refusing to share the source application data volume')
+                result['volumes'] = {'source_lndk_tls': {'external': True, 'name': mount['Name']}}
+                service['volumes'].append({'type': 'volume', 'source': 'source_lndk_tls', 'target': '/test-lndk', 'read_only': True})
+                cert_target = '/test-lndk/' + str(cert.relative_to(destination))
+            elif mount['Type'] == 'bind':
+                service['volumes'].append({'type':'bind','source':credential_source(container,str(cert)),
+                    'target':cert_target,'read_only':True,'bind':{'create_host_path':False}})
+            else:
+                raise ValueError('Unsupported LNDK certificate mount')
+            break
+    else:
+        raise ValueError('No LNDK certificate mount found on source container')
+    networks = container.get('NetworkSettings', {}).get('Networks', {})
+    names = [name for name in networks if name not in ('host', 'bridge', 'none')]
+    if len(names) != 1:
+        raise ValueError('Expected one source Compose network for LNDK DNS; configure multiple networks explicitly')
+    result['networks'] = {'default': {'external': True, 'name': names[0]}}
+    service['build'] = {'dockerfile': 'Dockerfile.dual-backend-test'}
+    service['restart'] = 'unless-stopped'
+    service['environment'].update({
+        'LNDK_CLI':'/usr/local/bin/lndk-cli', 'LNDK_GRPC_HOST':host,
+        'LNDK_GRPC_PORT':env.get('LNDK_GRPC_PORT','7000'),
+        'LNDK_NETWORK':env.get('LNDK_NETWORK','bitcoin'),
+        'LNDK_CERT_PATH':cert_target, 'LNDK_MACAROON_PATH':'/test-lnd/admin.macaroon',
+        'ALLOW_PAY_OFFER':'true',
+    })
+    return result
+
+
 def main():
     name = sys.argv[1] if len(sys.argv) > 1 else 'bolt12-pay'
     try:
         result = subprocess.run(['docker', 'inspect', '--type', 'container', name],
                                 capture_output=True, text=True, check=True)
-        print(json.dumps(configuration(json.loads(result.stdout)[0]), indent=2))
+        print(json.dumps((full_configuration if '--full' in sys.argv else configuration)(json.loads(result.stdout)[0]), indent=2))
     except subprocess.CalledProcessError:
         sys.exit('Cannot inspect source container. Check Docker access and the container name (default: bolt12-pay).')
     except (ValueError, KeyError, IndexError) as exc:

@@ -25,9 +25,31 @@ Self-hosted Lightning payment and identity server with next-generation BOLT12 su
 
 ---
 
-## ⚠️ Requirement: LND Lightning node
+## Lightning backends
 
-BOLT12 Pay requires a LND Lightning node with at least one active channel, better a well connected node with multiple channels opened.
+- **LND + LNDK:** use an existing LND node with active channels. LNDK supplies
+  BOLT12 functionality; LND remains responsible for the wallet and channels.
+- **Phoenixd (0.3.26 development):** connect an existing Phoenixd daemon through
+  Setup. The standalone application can create/pay offers, create receiving
+  aliases, publish BIP353 DNS records, receive through LNURL/BOLT11, and serve
+  wallet-bound NWC connections without an LND/LNDK daemon. Phoenixd manages its
+  own channels; its HTTP API does not expose Keysend.
+
+Existing receiving addresses and NWC connections retain their original wallet
+when the active spending backend changes. New aliases and connections use the
+selected wallet. Existing LND-encrypted Nostr identities still need their
+original LND signer; they are never silently replaced in standalone mode.
+
+For the isolated Phoenixd-only source test, run
+`./scripts/start-phoenixd-test.sh` and configure Phoenixd in Setup. Current
+published Umbrel/StartOS packages still use their existing LND dependency;
+standalone source support is not a claim of marketplace availability.
+
+Old payment history upgrades automatically. Before changing its schema, the
+app creates a consistent database/configuration snapshot under
+`APP_DATA_DIR/backups/before-wallet-history-v1`. A normal upgrade does not
+require users to make or restore a manual backup. See
+[integration status and test instructions](docs/phoenixd-prototype-test.md).
 
 ---
 # 🌍 Before You Start

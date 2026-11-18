@@ -782,14 +782,23 @@ async def _handle_pay_invoice_request(
         return
 
     try:
-        pay_result = await _pay_bolt11_invoice(
-            payment_request=invoice,
-            method="nwc",
-            origin="nwc",
-            counterparty=str(matched.get("name") or ""),
-            memo=str(params.get("description") or ""),
-            amount_sat_override=invoice_sat,
-        )
+        backend_id = matched.get('backend_id', 'lnd-default')
+        if backend_id != 'lnd-default':
+            from .app import _phoenix_backend, lightning_backends, load_config
+            instance = lightning_backends.bound(load_config(), backend_id)
+            pay_result = await _phoenix_backend(instance).pay(
+                invoice, invoice_sat, method='nwc', origin='nwc',
+                counterparty=str(matched.get('name') or ''),
+            )
+        else:
+            pay_result = await _pay_bolt11_invoice(
+                payment_request=invoice,
+                method="nwc",
+                origin="nwc",
+                counterparty=str(matched.get("name") or ""),
+                memo=str(params.get("description") or ""),
+                amount_sat_override=invoice_sat,
+            )
 
     except Exception as exc:
         _log(
@@ -850,12 +859,14 @@ async def _handle_make_invoice_request(
     ).strip()
 
     try:
-        invoice = await _create_bolt11_invoice(
-            amount_sat=amount_sat,
-            memo=description,
-            method="nwc",
-            counterparty=str(matched.get("name") or "NWC"),
-        )
+        options = {'amount_sat': amount_sat, 'memo': description, 'method': 'nwc',
+                   'counterparty': str(matched.get('name') or 'NWC')}
+        backend_id = matched.get('backend_id', 'lnd-default')
+        if backend_id != 'lnd-default':
+            from .app import _create_bound_invoice
+            invoice = await _create_bound_invoice(backend_id, **options)
+        else:
+            invoice = await _create_bolt11_invoice(**options)
     except Exception as exc:
         _log(
             f"request {_short_identifier(event_id)} invoice creation failed: "
@@ -897,7 +908,13 @@ async def _handle_lookup_invoice_request(
     from .app import list_tx_history, sync_lnd_tx_history
 
     event_id = str(event.get("id") or "")
-    await sync_lnd_tx_history()
+    backend_id = matched.get('backend_id', 'lnd-default')
+    if backend_id != 'lnd-default':
+        from .app import _phoenix_backend, lightning_backends, load_config
+        instance = lightning_backends.bound(load_config(), backend_id)
+        await _phoenix_backend(instance).sync()
+    else:
+        await sync_lnd_tx_history()
 
     payment_hash = str(params.get("payment_hash") or "").strip()
 
@@ -911,7 +928,7 @@ async def _handle_lookup_invoice_request(
 
     tx = None
 
-    for item in list_tx_history(500, backend_id="lnd-default"):
+    for item in list_tx_history(500, backend_id=backend_id):
         if str(item.get("payment_hash") or "") == payment_hash:
             tx = item
             break
@@ -1027,7 +1044,7 @@ async def _handle_list_transactions_request(
         return
 
     limit = int(params.get("limit") or 50)
-    history = list_tx_history(limit, backend_id="lnd-default")
+    history = list_tx_history(limit, backend_id=matched.get('backend_id', 'lnd-default'))
 
     transactions = []
 

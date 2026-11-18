@@ -1,6 +1,11 @@
-/* Shared Setup/Pay backend selector. Only BOLT11 is enabled for Phoenixd. */
+/* Shared Setup/Pay backend selector for new interactive actions. */
 (() => {
-  const t = (key) => window.__t ? window.__t(`backend.${key}`) : key;
+  const navigationFallback = {switch: 'Switch', configure: 'Configure', setup: 'Setup',
+    switch_lnd: 'Switch to LND', switch_phoenix: 'Switch to Phoenixd'};
+  const t = (key) => {
+    const value = window.__t ? window.__t(`backend.${key}`) : '';
+    return value && value !== `backend.${key}` ? value : navigationFallback[key] || key;
+  };
   const cookie = () => document.cookie.split('; ').find(x => x.startsWith('csrf_token='))?.split('=')[1] || '';
   const api = async (path, payload) => {
     const response = await fetch(path, payload === undefined ? {cache: 'no-store'} : {
@@ -14,6 +19,8 @@
   window.LightningBackend = {id: null};
   let current = null;
   function render() {
+    const liquidity = document.getElementById('liquiditySection');
+    if (liquidity && current) liquidity.hidden = !current.lnd_configured;
     const phoenix = current && current.active !== 'lnd-default';
     const label = current ? (phoenix ? 'Phoenixd' : 'LND') : t('unavailable');
     document.querySelectorAll('[data-lightning-backend-label]').forEach(el => {
@@ -45,6 +52,45 @@
       }
       if (!current || phoenix) identity.append(document.createTextNode(label));
       el.append(caption, identity);
+      if (!el.closest('#lightningBackendPanel')) {
+        const setupLink = document.createElement('a');
+        setupLink.href = '/app?setup=1#lightningBackendPanel';
+        setupLink.textContent = t('configure');
+        setupLink.style.cssText = 'font-size:13px;color:#94a3b8;text-underline-offset:3px';
+        const canSwitch = current && (phoenix ? current.lnd_configured : current.phoenixd?.id);
+        if (canSwitch) {
+          const switchButton = document.createElement('button');
+          switchButton.type = 'button';
+          switchButton.className = 'secondary';
+          switchButton.textContent = t('switch');
+          switchButton.title = t(phoenix ? 'switch_lnd' : 'switch_phoenix');
+          switchButton.setAttribute('aria-label', switchButton.title);
+          switchButton.style.cssText = 'font-size:13px;padding:5px 9px;width:auto;min-height:32px';
+          switchButton.onclick = async () => {
+            const expected = current.active;
+            switchButton.disabled = true;
+            try {
+              await api('/api/setup/lightning-backend', {active: phoenix ? 'lnd-default' : 'phoenixd', expected_backend_id: expected});
+              await refresh();
+              window.dispatchEvent(new CustomEvent('lightning:toast', {detail: {message: t('saved'), type: 'ok'}}));
+            } catch (error) {
+              const notice = document.createElement('span');
+              notice.setAttribute('role', 'alert');
+              notice.textContent = error.message;
+              notice.style.cssText = 'flex-basis:100%;color:#ff7b72;font-size:13px';
+              el.querySelector('[role="alert"]')?.remove();
+              el.append(notice);
+              switchButton.disabled = false;
+            }
+          };
+          el.append(switchButton);
+        }
+        const setupRow = document.createElement('span');
+        setupRow.style.cssText = 'flex-basis:100%;line-height:1.25;margin-top:2px';
+        setupRow.append(setupLink);
+        el.append(setupRow);
+      }
+
 
     });
     document.querySelectorAll('[data-phoenix-tools]').forEach(el => { el.hidden = !current; });
@@ -153,10 +199,24 @@
           <label data-backend-text="lnurl_input" for="phoenixLnurl"></label>
           <input id="phoenixLnurl" type="text" placeholder="lnurl1…" autocomplete="off">
           <div class="row"><button type="button" data-lnurl-scan aria-label="Scan LNURL QR">▣ QR</button><button type="button" data-lnurl-action="withdraw" data-backend-text="withdraw"></button>
-          <button type="button" data-lnurl-action="auth" data-backend-text="auth"></button></div>
+          <button type="button" data-lnurl-action="auth" data-backend-text="auth"></button>
+          <button type="button" class="secondary" data-lnurl-inspect data-backend-text="inspect"></button></div>
           <p role="status" aria-live="polite" id="phoenixLnurlResult" style="margin:0;overflow-wrap:anywhere"></p>
         </div>`;
       payButton.parentElement.insertAdjacentElement('afterend', tools);
+      tools.querySelector('[data-lnurl-inspect]').onclick = async () => {
+        const result = tools.querySelector('#phoenixLnurlResult');
+        result.style.cssText = 'margin:0;overflow-wrap:anywhere';
+        result.textContent = t('working');
+        try {
+          const info = await api('/api/lightning/lnurl-inspect', {backend_id: window.LightningBackend.id,
+            lnurl: tools.querySelector('input').value.trim(), action: 'withdraw'});
+          result.textContent = `${t('inspect_result')}: ${info.host} · HTTP ${info.http_status} · ${info.tag || info.content_type}` +
+            (info.callback_host ? ` · Callback: ${info.callback_host}` : '') +
+            (info.html ? ` · ${t('inspect_html')}` : '') +
+            (info.callback_host && info.callback_host !== info.host ? ` · ${t('inspect_host')}` : '');
+        } catch (error) { result.textContent = error.message; }
+      };
       tools.querySelector('[data-lnurl-scan]').onclick = () => window.dispatchEvent(new Event('lightning:scan-lnurl'));
       window.addEventListener('lightning:lnurl-scanned', async () => {
         try {
@@ -203,6 +263,15 @@
         document.getElementById('lightningBackendSelect').value = current.active === 'lnd-default' ? 'lnd-default' : 'phoenixd';
         document.getElementById('phoenixdUrl').value = current.phoenixd?.url || '';
         updateSelection();
+        if (location.hash === '#lightningBackendPanel') {
+          const scrollToBackend = () => requestAnimationFrame(() => document.getElementById('lightningBackendPanel').scrollIntoView({block: 'start'}));
+          if (setup.hidden) {
+            const observer = new MutationObserver(() => {
+              if (!setup.hidden) { observer.disconnect(); scrollToBackend(); }
+            });
+            observer.observe(setup, {attributes: true, attributeFilter: ['hidden']});
+          } else { scrollToBackend(); }
+        }
       }
     } catch (_) {
       const result = document.getElementById('backendResult');

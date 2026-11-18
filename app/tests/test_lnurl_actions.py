@@ -40,3 +40,14 @@ class LnurlActionTests(unittest.IsolatedAsyncioTestCase):
         from fastapi import HTTPException
         with self.assertRaises(HTTPException):
             lnurl_actions.normalize_signature(b'invalid')
+
+    def test_tls_diagnostics_hide_voucher_and_distinguish_withdraw(self):
+        url='https://service.test/withdraw/private-voucher'
+        request=httpx.Request('POST','http://phoenixd/lnurlwithdraw')
+        response=httpx.Response(400,text='SSLHandshakeException at '+url,request=request)
+        error=lnurl_actions.action_error(httpx.HTTPStatusError('bad request',request=request,response=response),'Phoenixd','withdraw')
+        self.assertIn('certificate',error.detail)
+        self.assertNotIn('private-voucher',error.detail)
+        error=lnurl_actions.action_error(ValueError('bad data'),'LND','withdraw')
+        self.assertIn('withdrawal',error.detail)
+        self.assertNotIn('signer',error.detail)

@@ -4,6 +4,68 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add an optional Phoenixd wallet for interactive BOLT11 and BOLT12 payments,
+  offer creation/decoding, Lightning addresses and LNURL payments.
+- Support Phoenixd-only receiving aliases, public BOLT11/LNURL invoices and
+  BIP353 publication, with each address bound to its original wallet.
+- Support Phoenixd-backed NWC connections and encrypted local Nostr keys when
+  no LND signer is configured, including zap settlement and push notifications.
+- Support LNURL authentication and withdrawal with either LND or Phoenixd,
+  including QR scanning, domain confirmation for login, and visible results.
+- Add Setup navigation and a direct backend switch on Pay and Console.
+- Give Setup an explicit BIP353 domain shared by the default BOLT12 address and
+  all aliases, with live examples and separate explanations for LNURL fallback
+  and Cloudflare zones. Existing configurations retain their derived domain.
+- Check published alias DNS automatically when opening Console or Setup in
+  Cloudflare mode and warn about missing, conflicting or outdated records.
+  Offer an explicit bulk repair that reuses existing offers and wallet bindings,
+  preserves old DNS names and clearly labels the action when replacing a
+  conflicting BIP353 record. Keep unresolved problems reachable after
+  dismissing the dialog and refresh verification after alias changes.
+- Import Phoenixd payment history alongside LND history, preserving the wallet
+  and direction of each transaction.
+
+### Fixed
+
+- Publish alias BIP353 records under the receiving address domain, including
+  subdomains and configurations with a separate LNURL domain. DNS verification
+  checks the canonical address instead of trusting a legacy saved DNS name.
+- Distinguish BIP353 and LNURL addresses in the alias manager. Its address-copy
+  and address-QR actions now use BIP353; intentional separate fallback domains
+  remain supported, and outdated saved DNS names show a republication hint.
+- Use the BIP353 domain for the manual DNS preview and reject inconsistent
+  BIP353 domain/default-address combinations before publishing or saving.
+- Share incoming-payment notification deduplication across tabs and navigation,
+  claim notifications atomically where supported, and suppress stale history
+  replays and unbounded toast stacks.
+- Keep background tabs from consuming browser payment alerts and retain live
+  monitoring across navigation for delayed BOLT12 history imports. Deduplicate
+  repeated rows within one response and start only one monitor per document.
+- Surface Phoenixd's explicit BOLT11/BOLT12 failure reason and retain transport
+  diagnostics for uncertain offer submissions, without retrying payments.
+- Keep separate BOLT12 offer attempts so a later payment cannot inherit an
+  earlier failure's timestamp or payer note; unresolved attempts still block
+  resubmission, including attempts created before the update.
+- Normalize LND signing responses for LNURL authentication and accept known
+  plain-text Phoenixd offer/authentication responses.
+- Explain LNURL TLS and callback failures and add a read-only link inspection.
+- Include the LNDK CLI and reuse the existing LNDK sidecar in the isolated
+  dual-backend test launcher, including after a host restart.
+
+### Upgrade notes
+
+- The next planned app version is 0.3.26. Existing history migrates
+  automatically to wallet/direction/payment-hash keys. Before migration, the
+  app automatically snapshots the database and configuration under
+  `backups/before-wallet-history-v1`; no manual backup is required to upgrade.
+  Returning to the older schema requires restoring that automatic snapshot.
+- Existing LND addresses and NWC connections retain LND. New aliases and NWC
+  connections use the selected wallet and retain it after later switches.
+- Phoenixd Keysend is not exposed by this integration. Real LND LNURL-withdraw
+  settlement against a separate funding node remains unverified.
+
 ## [0.3.25] - 2026-11-16
 
 ### Added

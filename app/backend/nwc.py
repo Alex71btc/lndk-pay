@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import time
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
 
 from coincurve import PrivateKey
 
-NWC_CONNECTIONS_PATH = Path("/data/config/nwc_connections.json")
+NWC_CONNECTIONS_PATH = Path(os.getenv('APP_DATA_DIR', '/data')) / 'config/nwc_connections.json'
 DEFAULT_NWC_RELAY = "wss://relay.getalby.com/v1"
 
 
@@ -35,10 +37,16 @@ def _load_raw() -> list[dict[str, Any]]:
 
 def _save_raw(items: list[dict[str, Any]]) -> None:
     _ensure_parent(NWC_CONNECTIONS_PATH)
-    NWC_CONNECTIONS_PATH.write_text(
-        json.dumps(items, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    fd, temporary = tempfile.mkstemp(prefix='.nwc-', dir=NWC_CONNECTIONS_PATH.parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            json.dump(items, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, NWC_CONNECTIONS_PATH)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def _find_connection_index(items: list[dict[str, Any]], connection_id: str) -> int:
@@ -75,12 +83,14 @@ def create_nwc_connection(
     max_payment_sat: int,
     budget_period: str,
     budget_amount_sat: int,
+    backend_id: str = 'lnd-default',
 ) -> dict[str, Any]:
     now = int(time.time())
     client_secret = secrets.token_hex(32)
     client_pubkey = _derive_nostr_pubkey_from_privkey_hex(client_secret)
 
     item = {
+        'backend_id': backend_id,
         "id": str(uuid.uuid4()),
         "name": name.strip() or "NWC Connection",
         "relay_url": (relay_url or DEFAULT_NWC_RELAY).strip(),

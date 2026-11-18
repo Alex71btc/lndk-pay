@@ -831,6 +831,9 @@ def queue_settled_payment(
     payment_hash = str(item.get("payment_hash") or "").strip()
     if not payment_hash:
         return False
+    backend_id = item.get('backend_id', 'lnd-default')
+    if backend_id != 'lnd-default':
+        payment_hash = f'{backend_id}:{payment_hash}'
     timestamp = int(time.time()) if now is None else int(now)
     event_id = secrets.token_urlsafe(16)
     with _connect(db_path) as connection:

@@ -6,11 +6,11 @@
   <title>BOLT12 Pay</title>
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="/pay.webmanifest" />
-  <script src="/assets/i18n/runtime.js?v=0.3.25"></script>
-  <script src="/assets/i18n/console.js?v=0.3.25"></script>
+  <script src="/assets/i18n/runtime.js?v=0.3.26"></script>
+  <script src="/assets/i18n/console.js?v=0.3.26-2"></script>
   <script>Bolt12I18n.use('console');</script>
   <script
-    src="/pwa-install.js?v=0.3.25"
+    src="/pwa-install.js?v=0.3.26"
     data-manifest="/pay.webmanifest"
     data-label-ready="console.btn.install"
     data-label-checking="console.btn.install_checking"
@@ -494,6 +494,8 @@
       font-size: .82rem;
     }
 
+    [hidden] { display: none !important; }
+
     body.modalOpen {
       overflow: hidden;
     }
@@ -757,8 +759,8 @@
       }
     </style>
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
-<script defer src="/assets/payment-notifications.js?v=1"></script>
-  <script src="/assets/lightning-backend.js" defer></script>
+<script defer src="/assets/payment-notifications.js?v=0.3.26-3"></script>
+  <script src="/assets/lightning-backend.js?v=0.3.26" defer></script>
 </head>
 <body>
 <main class="card" id="setupCard" hidden style="position:relative;">
@@ -847,8 +849,20 @@ protocol.custom-init=39</pre>
 </div>
 </div>
     <section class="section">
-      <label class="label" for="setupBolt12Address" data-i18n="setup.label.bolt12_address"></label>
-      <input id="setupBolt12Address" type="text" data-i18n-placeholder="setup.ph.bolt12_address" />
+      <label class="label" for="setupBip353Domain" data-i18n="setup.label.bip353_base_domain"></label>
+      <input id="setupBip353Domain" type="text" autocapitalize="none" spellcheck="false"
+        aria-describedby="setupBip353DomainHint setupBip353Examples"
+        data-i18n-placeholder="setup.ph.bip353_base_domain" />
+      <div id="setupBip353DomainHint" class="hint" data-i18n="setup.bip353_domain_hint"></div>
+      <div id="setupBip353Examples" class="hint"></div>
+
+      <label class="label" for="setupBolt12Address" style="margin-top:14px;" data-i18n="setup.label.bolt12_address"></label>
+      <input id="setupBolt12Address" type="text" autocapitalize="none" spellcheck="false"
+        aria-describedby="setupBolt12AddressHint setupBip353Mismatch"
+        data-i18n-placeholder="setup.ph.bolt12_address" />
+      <div id="setupBolt12AddressHint" class="hint" data-i18n="setup.bolt12_address_hint"></div>
+      <div id="setupBip353Mismatch" class="hint" role="status" hidden style="color:#ff7b72;"></div>
+      <div class="hint" data-i18n="setup.bip353_domain_change_hint"></div>
 
 <div class="paymentModeLabel"
      data-i18n="setup.paymentModeTitle"></div>
@@ -901,6 +915,7 @@ protocol.custom-init=39</pre>
 
         <label class="label" for="setupLnurlBaseDomain" style="margin-top:14px;" data-i18n="setup.label.lnurl_base_domain"></label>
         <input id="setupLnurlBaseDomain" type="text" data-i18n-placeholder="setup.ph.lnurl_base_domain" />
+        <div class="hint" data-i18n="setup.lnurl_domain_hint"></div>
 
         <label class="label" for="setupLnurlBaseUrl" style="margin-top:14px;" data-i18n="setup.label.lnurl_base_url"></label>
         <input id="setupLnurlBaseUrl" type="text" data-i18n-placeholder="setup.ph.lnurl_base_url" />
@@ -946,6 +961,7 @@ protocol.custom-init=39</pre>
       <div id="cloudflareFields" class="section" hidden>
         <label class="label" data-i18n="setup.label.cf_zone_name"></label>
         <input id="cfZoneName" type="text" data-i18n-placeholder="setup.ph.cf_zone_name">
+        <div class="hint" data-i18n="setup.cf_zone_hint"></div>
 
         <label class="label" style="margin-top:10px;" data-i18n="setup.label.cf_zone_id"></label>
         <input id="cfZoneId" type="text" data-i18n-placeholder="setup.ph.cf_zone_id">
@@ -1040,6 +1056,23 @@ protocol.custom-init=39</pre>
           type="button"
           data-i18n="setup.repair_record.repair"
         ></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="aliasDnsRepairModal" class="setupConfirmModal" aria-hidden="true">
+    <div class="setupConfirmCard" role="dialog" aria-modal="true"
+      aria-labelledby="aliasDnsRepairTitle" aria-describedby="aliasDnsRepairText">
+      <h2 id="aliasDnsRepairTitle" class="setupConfirmTitle" data-i18n="alias.dns_repair.title"></h2>
+      <p id="aliasDnsRepairText" class="setupConfirmText" data-i18n="alias.dns_repair.text"></p>
+      <ul id="aliasDnsRepairItems" class="mono" style="max-height:32vh;overflow:auto;overflow-wrap:anywhere;padding-left:20px;"></ul>
+      <p class="setupConfirmText" data-i18n="alias.dns_repair.hint"></p>
+      <p id="aliasDnsRepairManualHint" class="setupConfirmText" hidden data-i18n="alias.dns_repair.manual"></p>
+      <p id="aliasDnsReplaceHint" class="setupConfirmText" hidden data-i18n="alias.dns_repair.replace_hint"></p>
+      <div id="aliasDnsRepairFeedback" class="hint" role="status"></div>
+      <div class="setupConfirmActions">
+        <button id="aliasDnsRepairLaterBtn" class="secondary" type="button" data-i18n="alias.dns_repair.later"></button>
+        <button id="aliasDnsRepairNowBtn" type="button" data-i18n="alias.dns_repair.repair"></button>
       </div>
     </div>
   </div>
@@ -1193,6 +1226,9 @@ protocol.custom-init=39</pre>
 
       <div class="hint" data-i18n="alias.hint"></div>
 
+      <button id="repairAliasDnsBtn" class="secondary" type="button" hidden
+        data-i18n="alias.dns_repair.review"></button>
+
       <div
         id="aliasDnsVerificationResult"
         class="dnsVerificationResult"
@@ -1277,6 +1313,9 @@ function getCookie(name) {
     const setupCard = document.getElementById('setupCard');
     const payCard = document.getElementById('payCard');
     const setupBolt12Address = document.getElementById('setupBolt12Address');
+    const setupBip353Domain = document.getElementById('setupBip353Domain');
+    const setupBip353Examples = document.getElementById('setupBip353Examples');
+    const setupBip353Mismatch = document.getElementById('setupBip353Mismatch');
     const setupLnurlAddress = document.getElementById('setupLnurlAddress');
     const setupLnurlBaseDomain = document.getElementById('setupLnurlBaseDomain');
     const setupLnurlBaseUrl = document.getElementById('setupLnurlBaseUrl');
@@ -1310,6 +1349,17 @@ function getCookie(name) {
     const verifyAliasDnsBtn = document.getElementById('verifyAliasDnsBtn');
     const aliasDnsVerificationResult = document.getElementById('aliasDnsVerificationResult');
     const aliasList = document.getElementById('aliasList');
+    const repairAliasDnsBtn = document.getElementById('repairAliasDnsBtn');
+    const aliasDnsReplaceHint = document.getElementById('aliasDnsReplaceHint');
+    const aliasDnsRepairModal = document.getElementById('aliasDnsRepairModal');
+    const aliasDnsRepairItems = document.getElementById('aliasDnsRepairItems');
+    const aliasDnsRepairLaterBtn = document.getElementById('aliasDnsRepairLaterBtn');
+    const aliasDnsRepairNowBtn = document.getElementById('aliasDnsRepairNowBtn');
+    const aliasDnsRepairFeedback = document.getElementById('aliasDnsRepairFeedback');
+    const aliasDnsRepairManualHint = document.getElementById('aliasDnsRepairManualHint');
+    let aliasDnsRepairPlan = null;
+    let aliasDnsRepairBusy = false;
+    let aliasDnsRepairPreviousFocus = null;
 
     let statusTimer = null;
     let currentAddress = '';
@@ -1529,8 +1579,32 @@ function getCookie(name) {
       payCard.hidden = false;
     }
 
+    function loadBip353SetupFields(configData) {
+      setupBolt12Address.value = configData.public_bolt12_address || '';
+      loadedSetupBolt12Address = setupBolt12Address.value.trim().toLowerCase();
+      // Existing installations need no domain change or migration step.
+      setupBip353Domain.value = configData.bip353_base_domain ||
+        (loadedSetupBolt12Address.includes('@') ? loadedSetupBolt12Address.split('@')[1] : '');
+      updateBip353SetupUi();
+    }
+
+    function updateBip353SetupUi(syncAddress = false) {
+      const domain = setupBip353Domain.value.trim().toLowerCase().replace(/\.$/, '');
+      if (syncAddress && domain) {
+        const name = setupBolt12Address.value.trim().split('@')[0] || 'bolt12';
+        setupBolt12Address.value = name + '@' + domain;
+      }
+      setLabel(setupBip353Examples, 'setup.bip353_domain_examples', {domain: domain || 'example.com'});
+      const address = setupBolt12Address.value.trim().toLowerCase();
+      const mismatch = Boolean(domain && address.includes('@') && address.split('@')[1] !== domain);
+      setupBip353Mismatch.hidden = !mismatch;
+      setLabel(setupBip353Mismatch, 'error.bip353_domain_mismatch', {domain});
+      setupBolt12Address.setCustomValidity?.(mismatch ? window.__t('error.bip353_domain_mismatch', {domain}) : '');
+      updateDnsModeUi();
+    }
+
     function updateDnsModeUi() {
-      const domain = (setupLnurlBaseDomain.value || 'pay.example.com').trim().toLowerCase();
+      const domain = (setupBip353Domain.value || 'example.com').trim().toLowerCase().replace(/\.$/, '');
       const bolt12Address = (setupBolt12Address.value || 'bolt12@pay.example.com').trim().toLowerCase();
       const user = bolt12Address.includes('@') ? bolt12Address.split('@')[0] : 'bolt12';
 
@@ -1612,6 +1686,7 @@ function getCookie(name) {
         setupRepairRecordPreviousFocus.focus();
         setupRepairRecordPreviousFocus = null;
       }
+      if (!setupRepairInProgress) showPendingAliasDnsWarning();
     }
 
     function showSetupRepairRecordModal(address) {
@@ -1801,6 +1876,12 @@ function getCookie(name) {
       }
 
       renderAppVersion(statusData.app_version);
+      if (statusData.lnd_configured === false) {
+        ['legacyOnionConfig', 'nativeOnionConfig'].forEach(id => {
+          const element = document.getElementById(id);
+          if (element) element.style.display = 'none';
+        });
+      }
 
       // LND 0.21+ uses native Onion Messaging.
       if (statusData.native_onion_messaging) {
@@ -1837,8 +1918,7 @@ function getCookie(name) {
       } catch (e) {
         console.log('Setup config unavailable', e);
       }
-      setupBolt12Address.value = configData.public_bolt12_address || '';
-      loadedSetupBolt12Address = setupBolt12Address.value.trim().toLowerCase();
+      loadBip353SetupFields(configData);
       
       const paymentMode =
         configData.payment_mode || 'compatibility';
@@ -1882,6 +1962,11 @@ async function saveSetup() {
     }
 
     const nextBolt12Address = (setupBolt12Address.value || '').trim().toLowerCase();
+    const nextBip353Domain = (setupBip353Domain.value || '').trim().toLowerCase().replace(/\.$/, '');
+    if (!nextBip353Domain) throw translatedError('error.bip353_domain_required');
+    if (!nextBolt12Address.includes('@') || nextBolt12Address.split('@')[1] !== nextBip353Domain) {
+      throw translatedError('error.bip353_domain_mismatch', {domain: nextBip353Domain});
+    }
     const nextDnsMode = (setupDnsMode.value || 'none').trim().toLowerCase();
     let deletePreviousBip353Record = false;
 
@@ -1898,6 +1983,7 @@ async function saveSetup() {
 
     const payload = {
       public_bolt12_address: nextBolt12Address,
+      bip353_base_domain: nextBip353Domain,
       payment_mode:
         document.querySelector(
           'input[name="paymentMode"]:checked'
@@ -2030,6 +2116,7 @@ function renderAliasList(items) {
   // Keep translator labels separate from user content, including markup-like
   // descriptions. A language switch can then update just the labelled elements.
   const cards = items.map((item) => {
+    const bip353Address = item.bip353_address || item.address;
     const card = document.createElement('div');
     card.className = 'aliasItem';
     card.innerHTML = `
@@ -2047,7 +2134,22 @@ function renderAliasList(items) {
         <div><span class="aliasStatus"></span></div>
       </div>
       <div class="aliasActions"></div>`;
-    card.querySelector('.aliasTitle').textContent = item.address;
+    card.querySelector('.aliasTitle').textContent = window.__t('list.bip353_address') + ' ' + bip353Address;
+    if (item.lnurl_address) {
+      const fallback = document.createElement('div');
+      const label = document.createElement('span');
+      setLabel(label, 'list.lnurl_address');
+      fallback.appendChild(label);
+      const value = document.createElement('span');
+      value.className = 'mono';
+      value.textContent = ' ' + item.lnurl_address;
+      fallback.appendChild(value);
+      card.querySelector('.aliasMeta').prepend(fallback);
+    }
+    const wallet = document.createElement('span');
+    wallet.textContent = ' · ' + window.__t(item.backend_id && item.backend_id !== 'lnd-default' ? 'backend.name_phoenixd' : 'backend.name_lnd');
+    wallet.style.cssText = 'font:inherit;font-size:12px;color:#94a3b8';
+    card.querySelector('.aliasTitle').append(wallet);
     card.querySelector('[data-field="description"]').textContent = item.description || '-';
     const amount = item.amount_sat ? `${item.amount_sat} sats` : '';
     setValueOrLabel(card.querySelector('[data-field="amount"]'), amount, 'list.variable');
@@ -2056,8 +2158,15 @@ function renderAliasList(items) {
     card.querySelector('[data-field="offer"]').textContent =
       item.last_offer ? shortenMiddle(item.last_offer) : '-';
     const status = card.querySelector('.aliasStatus');
-    status.classList.add(item.published ? 'published' : 'draft');
-    setLabel(status, item.published ? 'list.published' : 'list.draft');
+    status.classList.add(item.published && !item.dns_needs_republish ? 'published' : 'draft');
+    setLabel(status, item.dns_needs_republish ? 'list.dns_republish_required' : item.published ? 'list.published' : 'list.draft');
+    if (item.dns_needs_republish) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.style.color = '#fbbf24';
+      setLabel(hint, 'list.dns_republish_hint', {dns_name: item.expected_dns_name});
+      card.querySelector('.aliasMeta').appendChild(hint);
+    }
 
     const actions = card.querySelector('.aliasActions');
     function addAction(key, handler, className = 'secondary') {
@@ -2073,8 +2182,8 @@ function renderAliasList(items) {
     addAction('list.renew_offer', () => refreshAliasOffer(item.name));
     addAction('list.open', () => openAliasPage(item.name));
     addAction('list.copy_link', () => copyAliasPageLink(item.name));
-    addAction('list.address_qr', () => showAliasAddressQr(item.name, item.address));
-    addAction('list.copy_address', () => copyAliasAddress(item.address));
+    addAction('list.address_qr', () => showAliasAddressQr(item.name, bip353Address));
+    addAction('list.copy_address', () => copyAliasAddress(bip353Address));
     if (item.last_offer) {
       addAction('list.offer_qr', () => showAliasOfferQr(item.name, item.last_offer));
       addAction('list.copy_offer', () => copyAliasOffer(item.last_offer));
@@ -2124,6 +2233,7 @@ function renderAliasList(items) {
     }
 
     function renderAliasDnsVerification(data) {
+      repairAliasDnsBtn.hidden = !(data.items || []).some(item => item.needs_update);
       delete aliasDnsVerificationResult.dataset.i18n;
       aliasDnsVerificationResult.hidden = false;
       aliasDnsVerificationResult.innerHTML = '';
@@ -2180,6 +2290,7 @@ function renderAliasList(items) {
         }
 
         renderAliasDnsVerification(data);
+        showAliasDnsWarning(data, true);
         if (data.status === 'completed') {
           const hasProblems =
             (data.summary?.missing || 0) +
@@ -2199,6 +2310,127 @@ function renderAliasList(items) {
       }
     }
 
+    function showAliasDnsWarning(data, force = false) {
+      if (data.status !== 'completed') return;
+      const items = (data.items || []).filter(item => item.needs_update);
+      if (!items.length) return;
+      const fingerprint = data.revision + ':' + items.map(item => item.name + ':' + item.status).join(',');
+      try {
+        if (!force && sessionStorage.getItem('alias_dns_warning_dismissed') === fingerprint) return;
+      } catch (_) {}
+      aliasDnsRepairPlan = {revision: data.revision, items, fingerprint};
+      showPendingAliasDnsWarning();
+    }
+
+    function showPendingAliasDnsWarning() {
+      if (!aliasDnsRepairPlan || aliasDnsRepairBusy ||
+          setupRepairRecordModal.classList.contains('show') ||
+          setupDeleteRecordModal.classList.contains('show')) return;
+      aliasDnsRepairItems.replaceChildren();
+      for (const item of aliasDnsRepairPlan.items) {
+        const row = document.createElement('li');
+        row.style.marginBottom = '12px';
+        const address = document.createElement('div');
+        address.textContent = item.address;
+        const target = document.createElement('div');
+        target.textContent = item.dns_name;
+        const status = document.createElement('span');
+        setLabel(status, verificationStatusPresentation(item.status).key);
+        row.append(address, target, status);
+        aliasDnsRepairItems.appendChild(row);
+      }
+      const replaceable = aliasDnsRepairPlan.items.some(item => item.replaceable);
+      const repairable = aliasDnsRepairPlan.items.some(item => item.repairable);
+      aliasDnsReplaceHint.hidden = !replaceable;
+      aliasDnsRepairNowBtn.hidden = !repairable && !replaceable;
+      aliasDnsRepairNowBtn.disabled = !repairable && !replaceable;
+      setLabel(aliasDnsRepairNowBtn, replaceable ? 'alias.dns_repair.replace' : 'alias.dns_repair.repair');
+      aliasDnsRepairManualHint.hidden = aliasDnsRepairPlan.items.every(item => item.repairable || item.replaceable);
+      if (!aliasDnsRepairModal.classList.contains('show')) {
+        aliasDnsRepairPreviousFocus = document.activeElement;
+        aliasDnsRepairModal.classList.add('show');
+        aliasDnsRepairModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modalOpen');
+        aliasDnsRepairLaterBtn.focus();
+      }
+    }
+
+    function closeAliasDnsWarning(dismiss = true) {
+      if (dismiss && aliasDnsRepairPlan) {
+        try { sessionStorage.setItem('alias_dns_warning_dismissed', aliasDnsRepairPlan.fingerprint); } catch (_) {}
+      }
+      aliasDnsRepairPlan = null;
+      aliasDnsRepairModal.classList.remove('show');
+      aliasDnsRepairModal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('modalOpen');
+      aliasDnsRepairFeedback.textContent = '';
+      delete aliasDnsRepairFeedback.dataset.i18n;
+      delete aliasDnsRepairFeedback.dataset.i18nParams;
+      aliasDnsRepairPreviousFocus?.focus();
+      aliasDnsRepairPreviousFocus = null;
+    }
+
+    async function checkAliasDnsAfterUpdate(force = false, showWarning = true) {
+      if (loadedSetupDnsMode !== 'cloudflare') return;
+      try {
+        const response = await fetch('/api/bip353/verify-published?scope=aliases', {
+          cache: 'no-store', credentials: 'same-origin'
+        });
+        const data = await readJsonOrThrow(response);
+        if (!response.ok) throw new Error(window.__t('bip353.verify.failed'));
+        renderAliasDnsVerification(data);
+        if (showWarning) showAliasDnsWarning(data, force);
+      } catch (error) {
+        console.error('Alias DNS check failed', error);
+      }
+    }
+
+    async function repairAliasDnsFromWarning() {
+      if (aliasDnsRepairBusy || !aliasDnsRepairPlan) return;
+      const selected = aliasDnsRepairPlan.items.filter(item => item.repairable || item.replaceable);
+      const aliases = selected.map(item => item.name);
+      if (!aliases.length) return;
+      const replaceRecords = Object.fromEntries(selected.filter(item => item.replaceable)
+        .map(item => [item.name, item.dns_revision]));
+      aliasDnsRepairBusy = true;
+      aliasDnsRepairNowBtn.disabled = true;
+      aliasDnsRepairLaterBtn.disabled = true;
+      setLabel(aliasDnsRepairNowBtn, 'alias.dns_repair.repairing');
+      try {
+        const response = await fetch('/api/bip353/repair-aliases', {
+          method: 'POST', credentials: 'same-origin',
+          headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCookie('csrf_token') || ''},
+          body: JSON.stringify({revision: aliasDnsRepairPlan.revision, aliases, replace_records: replaceRecords})
+        });
+        const data = await readJsonOrThrow(response);
+        if (!response.ok) throw new Error(data.detail || window.__t('bip353.verify.failed'));
+        closeAliasDnsWarning(false);
+        await loadAliases();
+        await checkAliasDnsAfterUpdate(false, false);
+        setStatus(data.failed ? 'alias.dns_repair.partial' : 'alias.dns_repair.done',
+          data.failed ? 'warn' : 'ok', true, {repaired: data.repaired, failed: data.failed});
+        if (data.failed) await checkAliasDnsAfterUpdate(true);
+      } catch (error) {
+        setLabel(aliasDnsRepairFeedback, 'alias.dns_repair.failed', {detail: errorDetail(error)});
+      } finally {
+        aliasDnsRepairBusy = false;
+        aliasDnsRepairNowBtn.disabled = false;
+        aliasDnsRepairLaterBtn.disabled = false;
+        setLabel(aliasDnsRepairNowBtn, 'alias.dns_repair.repair');
+        showPendingAliasDnsWarning();
+      }
+    }
+
+    aliasDnsRepairLaterBtn.addEventListener('click', () => closeAliasDnsWarning());
+    aliasDnsRepairNowBtn.addEventListener('click', repairAliasDnsFromWarning);
+    repairAliasDnsBtn.addEventListener('click', verifyAliasDnsRecords);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && aliasDnsRepairModal.classList.contains('show') && !aliasDnsRepairBusy) {
+        event.preventDefault();
+        closeAliasDnsWarning();
+      }
+    });
+
     // ------------------------------------------------------------------
     // Alias CRUD
     // ------------------------------------------------------------------
@@ -2213,6 +2445,7 @@ function renderAliasList(items) {
       }
 
       const payload = {
+        backend_id: window.LightningBackend?.id,
         name,
         description,
       };
@@ -2242,8 +2475,7 @@ function renderAliasList(items) {
         aliasAmountInput.value = '';
 
         await loadAliases();
-
-
+        await checkAliasDnsAfterUpdate(false, false);
         setStatus('alias.created', 'ok', false, {name: data.address});
       } catch (error) {
         setStatus('error.create_alias_detail', 'error', true, {detail: errorDetail(error)});
@@ -2266,6 +2498,7 @@ function renderAliasList(items) {
         }
 
         await loadAliases();
+        await checkAliasDnsAfterUpdate(false, false);
         setStatus('alias.published', 'ok', false, {name: data.address});
       } catch (error) {
         setStatus('error.publish_alias_detail', 'error', true, {detail: errorDetail(error)});
@@ -2284,6 +2517,7 @@ function renderAliasList(items) {
         }
 
         await loadAliases();
+        await checkAliasDnsAfterUpdate(false, false);
         setStatus('alias.renewed', 'ok', false, {name: data.address});
       } catch (error) {
         setStatus('error.refresh_offer_detail', 'error', true, {detail: errorDetail(error)});
@@ -2307,6 +2541,7 @@ function renderAliasList(items) {
         }
 
         await loadAliases();
+        await checkAliasDnsAfterUpdate(false, false);
         setStatus('alias.deleted', 'ok', false, {name});
       } catch (error) {
         setStatus('error.delete_alias_detail', 'error', true, {detail: errorDetail(error)});
@@ -2330,6 +2565,7 @@ function renderAliasList(items) {
         }
 
         await loadAliases();
+        await checkAliasDnsAfterUpdate(false, false);
         setStatus('alias.deleted_dns', 'ok', false, {name});
       } catch (error) {
         setStatus('error.delete_dns_detail', 'error', true, {detail: errorDetail(error)});
@@ -2484,6 +2720,7 @@ function renderAliasList(items) {
         }
 
         await loadAliases();
+        await checkAliasDnsAfterUpdate(false, false);
         setStatus('alias.updated', 'ok', false, {name: data.address});
       } catch (error) {
         setStatus('error.edit_alias_detail', 'error', true, {detail: errorDetail(error)});
@@ -2730,13 +2967,18 @@ logoutBtn?.addEventListener('click', async () => {
     });
     setupDnsMode.addEventListener('change', updateDnsModeUi);
     setupLnurlBaseDomain.addEventListener('input', updateDnsModeUi);
-    setupBolt12Address.addEventListener('input', updateDnsModeUi);
+    setupBolt12Address.addEventListener('input', () => updateBip353SetupUi());
+    setupBip353Domain.addEventListener('input', () => updateBip353SetupUi(true));
+    window.addEventListener('i18n:language-changed', () => updateBip353SetupUi());
     createInvoiceBtn.addEventListener('click', createInvoice);
     showInvoiceQrBtn.addEventListener('click', showInvoiceQr);
     copyInvoiceBtn.addEventListener('click', copyInvoice);
     payInvoiceWeblnBtn.addEventListener('click', payInvoiceWithWebln);
     createAliasBtn.addEventListener('click', createAlias);
-    refreshAliasBtn.addEventListener('click', loadAliases);
+    refreshAliasBtn.addEventListener('click', async () => {
+      await loadAliases();
+      await checkAliasDnsAfterUpdate(false, false);
+    });
     verifyAliasDnsBtn.addEventListener('click', verifyAliasDnsRecords);
     openSetupBtn.addEventListener('click', () => {
       window.location.href = `${window.location.pathname}?setup=1`;
@@ -2750,6 +2992,7 @@ logoutBtn?.addEventListener('click', async () => {
 
         if (configured) {
           bip353Status = await loadPublicBip353Status();
+          checkAliasDnsAfterUpdate();
         }
 
         const repairNotice = sessionStorage.getItem('public_bip353_repair_notice');

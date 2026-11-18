@@ -1,27 +1,58 @@
-# Phoenixd BOLT11 milestone — isolated local test
+# Phoenixd integration — local validation
 
-## Integration status — 2026-11-17
+## Current status — 2026-11-17
 
-Prototype work was committed by the user as `7dca6f2`. The merge of main
-`13bc72b` is in progress. All three content conflicts in the Pay page have been
-resolved in the working tree: the new scanner closes before routing its result,
-retains the LNURL auth flow, automatically decodes offers, and sends the displayed
-backend ID to the decode endpoint. New main UI, liquidity and translation changes
-are included. The Git index still needs the resolved files staged by the user
-before the merge can be committed; this Work session cannot write Git metadata.
+Release preparation targets app/Docker/Umbrel 0.3.26 and StartOS 0.3.26:0.
+Publication is paused until the expanded Phoenixd-only workflow has been tested
+on a real daemon. Main UI was merged into the prototype at `5903574`; follow-up
+changes remain uncommitted. No image or package has been published by this session.
 
-Verification: 223 app tests, 11 root/PWA tests, plus a new scanner routing test
-passed. Inline scripts in both pages parse in Node. Translation/UI text checks
-passed. Rebuild the isolated container and verify the combined UI before a
-release. The older notes below describe the prototype's earlier state and are
-superseded by this integration status where applicable.
+The integration supports these Phoenixd-only paths without LND/LNDK credentials:
 
-This is an uncommitted development change on `codex/phoenixd-prototype`, based on
-`90f4ff9`. At inspection, `origin/main` was `13bc72b`: it contains seven commits
-not in the prototype, including v0.3.25 and the latest Pay/QR refinements. They
-have not been merged here because this Work session cannot write Git metadata.
-Do not publish this prototype as a release. Merge current main before preparing
-an integration PR and resolve the payment UI changes explicitly.
+- Interactive BOLT11/BOLT12, offer creation/decoding, BIP353 address payment,
+  LNURL payment, authentication and withdrawal.
+- New aliases are bound to their creating wallet. Publishing or refreshing
+  their offer, LNURL callbacks and public BOLT11 fallback use that saved wallet.
+- BIP353 Setup publication and repair create offers on the public receiving
+  wallet. An existing installation retains its previous receiving binding.
+- New NWC connections retain their wallet for invoices, payments, lookup and
+  transaction history. Existing connections without a binding remain on LND.
+- Phoenixd-only Nostr, zap receipts and Companion push do not require an LND
+  signer. Nostr secrets use AES-GCM with a separate owner-only local wrapping
+  key in the app configuration directory. That key is part of the app backup;
+  it is never derived from the Phoenixd API password. Existing LND-encrypted
+  stores keep their LND binding and are never silently reset.
+- Notifications distinguish wallets, including when payment hashes coincide.
+  LND-only channel configuration is hidden when LND is absent.
+
+Old aliases, invoices, NWC connections and public destinations never follow a
+change to the spending selector. Explicitly create new receiving aliases on
+Phoenixd rather than repointing an existing LND object.
+
+Upgrade from old history schemas is automatic. Before migration the app writes
+a consistent SQLite backup and configuration snapshot to
+`/data/backups/before-wallet-history-v1` (relative to APP_DATA_DIR). Creation is
+atomic; failure leaves the original schema in place. Restart does not overwrite
+the original snapshot. Upgrade, restart and restoration were exercised using
+source versions 0.3.24 and 0.3.25 with populated history, offers, aliases and NWC
+configuration. A downgrade must use that snapshot; it is not an in-place schema
+reversal and will not include activity recorded after the upgrade.
+
+Verification of the expanded scope: 240 app tests and 11 root/PWA tests passed.
+Translation catalogs and UI text checks passed, all inline scripts on Pay and
+Console parse in Node, and whitespace checks passed. Public DNS, payment,
+relay and push transports in these new tests are simulated; no live funds or
+DNS records were changed by this session.
+
+Outstanding real-world checks: create a Phoenixd alias, publish its BIP353
+record, pay its offer and LNURL address externally, then test NWC/zaps/push with
+LND absent and repeat after restart. LND LNURL-withdraw settlement against a
+separate funding node remains unverified. Phoenixd's HTTP API has no Keysend
+endpoint. Unknown payment outcomes are retained and never retried automatically.
+Docker daemon access and Git metadata writes are unavailable to this Work session.
+
+The sections below retain earlier test setup instructions and chronological
+prototype notes. Earlier capability limitations are superseded by this status.
 
 ## Start without touching the existing LND container
 
@@ -324,3 +355,28 @@ response regression, LND auth signature verification and withdraw callback.
 Current main UI integration is still outstanding; this session cannot write
 Git metadata. Commit the prototype changes before merging current main into
 `codex/phoenixd-prototype`; do not merge the unfinished prototype into main.
+
+## Full LNDK support in the isolated dual test (2026-11-17)
+
+The dual launcher now builds `Dockerfile.dual-backend-test`, which includes
+`lndk-cli` from the same pinned image used by the existing LNDK installation.
+It joins the source container's Compose network, mounts its LNDK certificate
+volume read-only, and starts only that project's existing `lndk` sidecar.
+The old web application does not need to run. No second LNDK daemon is created.
+The source container and its sidecar must still exist, even if stopped.
+
+```bash
+cd ~/lndk-pay
+./scripts/start-dual-backend-test.sh
+```
+
+The isolated UI remains on port 8092 and retains its own database, Phoenixd
+settings and test history. LND credentials are mounted read-only. The source
+application's database is never shared. The test UI now has an
+`unless-stopped` restart policy. Restarting the old web application alone does
+not add the previously missing CLI to the test image; rebuild with the command
+above. The Phoenixd-only launcher keeps its independent Python-only image.
+
+Verification: nine helper tests passed; shell syntax and merged Compose
+configuration validated. Building and starting containers requires host Docker
+access and remains a manual check in this session.

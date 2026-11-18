@@ -63,3 +63,21 @@ class DualTestConfigurationTests(unittest.TestCase):
     def test_similar_prefix_is_not_rewritten(self):
         self.container['Mounts'][0]['Source'] = '/host_mnt_other' + str(self.root)
         with self.assertRaises(ValueError): helper.configuration(self.container)
+
+    def test_full_mode_includes_cli_network_and_only_lndk_volume(self):
+        self.container['Config']['Env'] += ['LNDK_GRPC_HOST=https://lndk','LNDK_CERT_PATH=/lndk-data/tls-cert.pem']
+        self.container['Mounts'].append({'Type':'volume','Name':'app_lndk_local_data','Source':'/docker/lndk','Destination':'/lndk-data'})
+        self.container['NetworkSettings']={'Networks':{'app_default':{}}}
+        result=helper.full_configuration(self.container)
+        service=result['services']['pay']
+        self.assertEqual(service['build']['dockerfile'],'Dockerfile.dual-backend-test')
+        self.assertEqual(service['environment']['LNDK_CERT_PATH'],'/test-lndk/tls-cert.pem')
+        self.assertEqual(service['environment']['LNDK_MACAROON_PATH'],'/test-lnd/admin.macaroon')
+        self.assertEqual(result['networks']['default'],{'external':True,'name':'app_default'})
+        self.assertEqual(result['volumes']['source_lndk_tls']['name'],'app_lndk_local_data')
+        self.assertNotIn('/production/data',str(result))
+        self.assertEqual(service['restart'],'unless-stopped')
+        self.assertTrue(all(v['read_only'] for v in service['volumes']))
+
+    def test_full_mode_requires_lndk_configuration(self):
+        with self.assertRaises(ValueError): helper.full_configuration(self.container)

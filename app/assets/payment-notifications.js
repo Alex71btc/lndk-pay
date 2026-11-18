@@ -2,44 +2,62 @@
 (() => {
   'use strict';
   if (!['/pay', '/app'].includes(location.pathname)) return;
+  if (window.__bolt12PaymentNotificationsStarted) return;
+  window.__bolt12PaymentNotificationsStarted = true;
   const paymentToastRegion = document.createElement('div');
   paymentToastRegion.className = 'paymentToastRegion';
   paymentToastRegion.setAttribute('aria-live', 'polite');
   paymentToastRegion.setAttribute('aria-relevant', 'additions');
   document.body.appendChild(paymentToastRegion);
+      // Shared across tabs and page navigation. v1 used sessionStorage, whose
+      // copied tab snapshots replayed payments already shown in another view.
       const INCOMING_PAYMENT_SEEN_STORAGE_KEY =
-        "bolt12pay.incoming-payment-toast.seen.v1";
+        "bolt12pay.incoming-payment-toast.state.v2";
       const INCOMING_PAYMENT_SEEN_LIMIT = 250;
       const INCOMING_PAYMENT_RECENCY_GRACE_MS = 5000;
-      const incomingPaymentMonitoringStartedAt = (() => {
-        try { return Number(sessionStorage.getItem('bolt12pay.incoming-payment-toast.checked')) || Date.now(); }
-        catch (_) { return Date.now(); }
-      })();
+      const INCOMING_PAYMENT_MAX_CATCHUP_MS = 30000;
+      const incomingPaymentPageOpenedAt = Date.now();
+      let incomingPaymentMonitoringStartedAt = incomingPaymentPageOpenedAt;
       let incomingPaymentBaselineReady = false;
-
-      function loadSeenIncomingPaymentIds() {
-        try {
-          const stored = JSON.parse(
-            sessionStorage.getItem(INCOMING_PAYMENT_SEEN_STORAGE_KEY) || "[]",
-          );
-          return new Set(
-            Array.isArray(stored)
-              ? stored.filter((value) => typeof value === "string")
-              : [],
-          );
-        } catch {
-          return new Set();
-        }
+      const seenIncomingPaymentIds = new Set();
+      let paymentToastStorage;
+      try {
+        paymentToastStorage = localStorage;
+        // Access can throw when browser storage is disabled.
+        paymentToastStorage.getItem(INCOMING_PAYMENT_SEEN_STORAGE_KEY);
+      } catch (_) {
+        try { paymentToastStorage = sessionStorage; } catch (_) {}
       }
 
-      const seenIncomingPaymentIds = loadSeenIncomingPaymentIds();
-      try { incomingPaymentBaselineReady = sessionStorage.getItem(INCOMING_PAYMENT_SEEN_STORAGE_KEY) !== null; } catch (_) {}
+      function refreshSeenIncomingPaymentIds() {
+        try {
+          const stored = JSON.parse(
+            paymentToastStorage?.getItem(INCOMING_PAYMENT_SEEN_STORAGE_KEY) || "null",
+          );
+          if (!stored || !Array.isArray(stored.ids)) return;
+          for (const id of stored.ids) {
+            if (typeof id === "string") seenIncomingPaymentIds.add(id);
+          }
+          // Only a recently active view can hand over live monitoring. A new
+          // browser session establishes a baseline instead of replaying history.
+          if (!incomingPaymentBaselineReady &&
+              Number(stored.checkedAt) >= incomingPaymentPageOpenedAt - INCOMING_PAYMENT_MAX_CATCHUP_MS) {
+            incomingPaymentBaselineReady = true;
+            incomingPaymentMonitoringStartedAt = Math.min(
+              incomingPaymentPageOpenedAt,
+              Number(stored.startedAt) || Number(stored.checkedAt),
+            );
+          }
+        } catch (_) { /* Malformed or unavailable storage becomes a new baseline. */ }
+      }
 
       function incomingPaymentId(item) {
         if (item?.direction !== "incoming" || item?.status !== "settled") {
           return "";
         }
-        return String(item.payment_hash || "").trim().toLowerCase();
+        const hash = String(item.payment_hash || "").trim().toLowerCase();
+        if (!hash) return '';
+        return item.backend_id && item.backend_id !== 'lnd-default' ? `${item.backend_id}:${hash}` : hash;
       }
 
       function incomingPaymentIsRecent(item) {
@@ -47,21 +65,23 @@
           parseTxTimestamp(item?.settled_at) ||
           parseTxTimestamp(item?.created_at);
         return (
-          !settledAt ||
+          settledAt &&
           settledAt.getTime() >=
-            incomingPaymentMonitoringStartedAt -
-              INCOMING_PAYMENT_RECENCY_GRACE_MS
+            incomingPaymentMonitoringStartedAt - INCOMING_PAYMENT_RECENCY_GRACE_MS
         );
       }
 
       function persistSeenIncomingPaymentIds() {
         try {
-          const recentIds = Array.from(seenIncomingPaymentIds).slice(
-            -INCOMING_PAYMENT_SEEN_LIMIT,
-          );
-          sessionStorage.setItem(
+          const allIds = Array.from(seenIncomingPaymentIds);
+          const recentIds = allIds.slice(-INCOMING_PAYMENT_SEEN_LIMIT);
+          for (const id of allIds.slice(0, -INCOMING_PAYMENT_SEEN_LIMIT)) {
+            seenIncomingPaymentIds.delete(id);
+          }
+          paymentToastStorage?.setItem(
             INCOMING_PAYMENT_SEEN_STORAGE_KEY,
-            JSON.stringify(recentIds),
+            JSON.stringify({ids: recentIds, checkedAt: Date.now(),
+              startedAt: incomingPaymentMonitoringStartedAt}),
           );
         } catch {}
       }
@@ -97,8 +117,9 @@
         return translationKey ? window.__t(translationKey) : "";
       }
 
-      async function openIncomingPaymentInActivity(paymentHash) {
-        window.location.assign('/pay?view=activity&payment=' + encodeURIComponent(paymentHash));
+      async function openIncomingPaymentInActivity(paymentHash, backendId) {
+        window.location.assign('/pay?view=activity&payment=' + encodeURIComponent(paymentHash)
+          + (backendId ? '&backend=' + encodeURIComponent(backendId) : ''));
       }
 
       function showIncomingPaymentToast(item, paymentHash) {
@@ -142,15 +163,19 @@
           window.clearTimeout(dismissTimer);
           button.remove();
           try {
-            await openIncomingPaymentInActivity(paymentHash);
+            await openIncomingPaymentInActivity(String(item.payment_hash || ''), item.backend_id);
           } catch (error) {
             console.error("Failed to open incoming payment", error);
           }
         });
         paymentToastRegion.appendChild(button);
+        while (paymentToastRegion.children.length > 3) {
+          paymentToastRegion.children[0].remove();
+        }
       }
 
       function processIncomingPaymentNotifications(items) {
+        refreshSeenIncomingPaymentIds();
         const settledIncoming = (Array.isArray(items) ? items : [])
           .map((item) => ({ item, id: incomingPaymentId(item) }))
           .filter(({ id }) => Boolean(id));
@@ -162,10 +187,14 @@
           return [];
         }
 
-        const unseenPayments = settledIncoming.filter(
-          ({ id }) => !seenIncomingPaymentIds.has(id),
-        );
-        for (const { id } of unseenPayments) seenIncomingPaymentIds.add(id);
+        const unseenPayments = [];
+        for (const entry of settledIncoming) {
+          if (seenIncomingPaymentIds.has(entry.id)) continue;
+          // Claim immediately: duplicate rows within one response must not
+          // create two toasts before the remembered IDs have been updated.
+          seenIncomingPaymentIds.add(entry.id);
+          unseenPayments.push(entry);
+        }
 
         // A server restart can backfill older LND history after the page has
         // already established an empty baseline. Remember those rows without
@@ -177,7 +206,7 @@
         for (const { item, id } of newPayments) {
           showIncomingPaymentToast(item, id);
         }
-        if (unseenPayments.length) persistSeenIncomingPaymentIds();
+        persistSeenIncomingPaymentIds();
         return newPayments.map(({ id }) => id);
       }
 
@@ -212,28 +241,50 @@
         return Number.isNaN(date.getTime()) ? null : date;
       }
   let stopped = false;
+  let polling = false;
+  let pollTimer;
+  function schedulePoll() {
+    window.clearTimeout(pollTimer);
+    if (!stopped) pollTimer = window.setTimeout(poll, 5000);
+  }
   async function poll() {
-    if (stopped) return;
+    if (stopped || polling) return;
+    window.clearTimeout(pollTimer);
+    if (document.hidden) {
+      schedulePoll();
+      return;
+    }
+    polling = true;
     try {
       const response = await fetch('/api/tx-history?limit=200', {credentials:'same-origin', cache:'no-store'});
       if ([401,403].includes(response.status)) {
         stopped = true;
         paymentToastRegion.replaceChildren();
-        try {
-          sessionStorage.removeItem(INCOMING_PAYMENT_SEEN_STORAGE_KEY);
-          sessionStorage.removeItem('bolt12pay.incoming-payment-toast.checked');
-        } catch (_) {}
+        // Keep hash-only deduplication across sign-in; never persist details.
         return;
       }
       if (response.ok) {
-        processIncomingPaymentNotifications((await response.json()).items || []);
-        try { sessionStorage.setItem('bolt12pay.incoming-payment-toast.checked', String(Date.now())); } catch (_) {}
+        const items = (await response.json()).items || [];
+        // A hidden tab must not consume notifications intended for the visible
+        // Pay, Console or Setup view, including when focus changed mid-request.
+        const process = () => {
+          if (!document.hidden) processIncomingPaymentNotifications(items);
+        };
+        if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+          await navigator.locks.request(INCOMING_PAYMENT_SEEN_STORAGE_KEY, process);
+        } else {
+          process();
+        }
       }
     } catch (_) { /* Retry transient network errors, never invent events. */ }
-    if (!stopped) window.setTimeout(poll, 5000);
+    finally {
+      polling = false;
+      schedulePoll();
+    }
   }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) paymentToastRegion.replaceChildren();
+    else poll();
   });
   poll();
 })();
