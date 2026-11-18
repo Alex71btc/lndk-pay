@@ -12,7 +12,6 @@ services:
       APP_CONFIG_PATH: /data/config.json
       CONFIG_JSON_PATH: /data/config.json
       PAY_UI_PASSWORD: "${PHOENIX_TEST_UI_PASSWORD:?Use scripts/start-phoenixd-test.sh}"
-      BOLT12_PAY_VERSION: phoenixd-prototype
       LND_REST_URL: ""
       LNDK_GRPC_HOST: ""
       ALLOW_PAY_OFFER: "false"
