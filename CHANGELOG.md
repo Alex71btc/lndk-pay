@@ -74,6 +74,8 @@ All notable changes to this project will be documented in this file.
 - Unwrap LNbits wallet-launch links containing a lightning=LNURL query when
   pasting into LND Auth/Withdraw or inspecting a link, matching QR handling.
   Preserve HTTPS validation and the service's own callback query parameters.
+- Keep the actual backend label on NWC activity rows; the NWC method label
+  previously replaced it, leaving only the user-defined connection name visible.
 - Include the LNDK CLI and reuse the existing LNDK sidecar in the isolated
   dual-backend test launcher, including after a host restart.
 

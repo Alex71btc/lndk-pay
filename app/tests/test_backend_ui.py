@@ -14,6 +14,30 @@ def run(script):
 
 
 class BackendUiTests(unittest.TestCase):
+    def test_nwc_activity_preserves_actual_backend_after_method_override(self):
+        source = (APP/'frontend/admin/index.html').read_text()
+        start = source.index('          const method = item.method;')
+        stop = source.index('          const typeText = {', start)
+        run('''
+const assert = require('node:assert/strict');
+const window = {__t: key => key};
+function labels(item) {
+''' + source[start:stop] + '''
+  return {methodLabel, originLabel};
+}
+// Connection names and the active spending selection must not determine history ownership.
+for (const identity of [{method:'nwc'}, {method:'bolt11',origin:'nwc'}]) {
+  const phoenix = labels({...identity, backend_id:'phoenixd-test',counterparty:'LND named connection'});
+  assert.ok(phoenix.methodLabel.includes('history.nwc'));
+  assert.ok(phoenix.methodLabel.endsWith(' · Phoenixd'));
+  assert.equal(phoenix.originLabel, '');
+  const lnd = labels({...identity, backend_id:'lnd-default',counterparty:'Phoenix named connection'});
+  assert.ok(lnd.methodLabel.endsWith(' · LND'));
+  assert.ok(labels(identity).methodLabel.endsWith(' · LND'), 'Legacy history stays LND');
+}
+assert.ok(labels({method:'bolt12',backend_id:'phoenixd-test'}).methodLabel.endsWith(' · Phoenixd'));
+''')
+
     def test_selection_hides_credentials_without_changing_saved_backend(self):
         source = (APP/'assets/lightning-backend.js').read_text()
         function = source[source.index('  function updateSelection()'):source.index('  async function refresh()')]

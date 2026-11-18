@@ -18,7 +18,7 @@ private Schlüssel nicht in das Testprotokoll kopieren.
   vollständig bestanden (NWC und Phoenixd-only-Neustart gemäß Checkliste).
 - [x] LNURL-withdraw von LNbits auf StartOS zu Phoenixd; nach Einrichtung eines
   gültigen Let’s-Encrypt-Zertifikats erfolgreich, 100 sats als Eingang sichtbar.
-- [x] 304 App-Tests und 11 Root/PWA-Tests sowie Übersetzungs- und UI-Textprüfung.
+- [x] 305 App-Tests und 11 Root/PWA-Tests sowie Übersetzungs- und UI-Textprüfung.
 
 Automatische Tests ersetzen die folgenden Tests gegen echte Backends und Clients
 nicht. Die letzte Vereinfachung des DNS-Dialogs ohne Checkbox ist im genannten
@@ -144,8 +144,18 @@ Backend, auch wenn beide denselben Payment Hash haben.
   direktes BOLT12-Offer und öffentlicher BOLT11-Fallback erfolgreich.
 - [x] Beim Phoenixd-Alias **Offer erneuern** ausführen, während LND ausgewählt ist.
   Das erneuerte Offer wieder bezahlen; Eingang bleibt bei Phoenixd.
-- [ ] Mit LND ausgewählt einen anderen Testalias erstellen/veröffentlichen.
-  Auf Phoenixd wechseln und auch diesen Alias von extern bezahlen.
+- [x] Mit LND ausgewählt einen anderen Testalias erstellen/veröffentlichen.
+  Auf Phoenixd wechseln und auch diesen Alias von extern bezahlen: laut Nutzer
+  bleiben BOLT12/BIP353 und LNURL bei LND. Auch BOLT11-Fallback nach dem Wechsel
+  bestätigt: 24 sats von Phoenixd bezahlt (4 sats Gebühr), auf LND empfangen;
+  Empfangstoast korrekt als LND beschriftet (18.11., Screenshot 12:20 Uhr).
+
+**Browser-Benachrichtigungen:** Nach dem Wechsel auf Phoenixd kamen bei der
+Wiederholung auch für neue LND-Eingänge die Empfangstoasts an. Das zunächst
+beobachtete Ausbleiben ist nicht reproduziert; die Ursache bleibt offen.
+Gleiche Beträge/Vorlagen werden nicht als Duplikate behandelt: maßgeblich sind
+Empfangsbackend und Payment Hash. Der Browser fragt alle fünf Sekunden ab;
+die Historie wird standardmäßig alle zehn Sekunden synchronisiert.
 
 **Erwartet:** Phoenixd-Aliase empfangen weiterhin auf Phoenixd, LND-Aliase auf LND.
 Auch das Erneuern verschiebt keinen Alias zur aktuell ausgewählten Wallet.
@@ -205,24 +215,49 @@ Die LNURL-Betragsgrenzen allein erklären keinen BIP353-Zahlungs-Timeout.
 
 ### D3 — NWC folgt nicht dem Backend-Schalter
 
-- [ ] Auf LND wechseln und über die vorher angelegte Phoenixd-NWC-Verbindung
-  eine kleine externe Rechnung bezahlen. Restbudget berücksichtigen.
-- [ ] Mit LND ausgewählt eine neue NWC-Verbindung anlegen.
-- [ ] Auf Phoenixd wechseln und über diese neue LND-NWC-Verbindung bezahlen.
+- [x] Auf LND wechseln und über die vorher angelegte Phoenixd-NWC-Verbindung
+  bezahlen. Nutzer bestätigt Test 1; Screenshot zeigt 69 sats Ausgang aus der
+  Phoenixd-Testverbindung mit Phoenixd-Rohdaten und einen separaten LND-Eingang.
+- [x] Mit LND ausgewählt eine neue NWC-Verbindung anlegen.
+- [x] Auf Phoenixd wechseln und über diese neue LND-NWC-Verbindung bezahlen.
+  Nutzer bestätigt Test 2; Screenshot zeigt abgeschlossene NWC-Zahlungen über
+  21 und 25 sats aus der LND-Testverbindung.
 
 **Erwartet:** Die erste Verbindung belastet Phoenixd, die zweite LND.
 Guthaben/Budgets und Historie im jeweiligen Client passen zur Verbindung.
 Der Backend-Schalter routet keine bestehende NWC-Verbindung um.
 
+Die App zeigt nach Neubau auch bei NWC-Zeilen das gespeicherte Backend explizit
+an. Zuvor wurde es durch die spezielle NWC-Methodenbeschriftung überschrieben;
+der sichtbare Verbindungsname allein ist kein unabhängiger Backend-Nachweis.
+NWC `list_transactions` enthält beide Richtungen, gefiltert auf das Backend der
+jeweiligen Verbindung. Beim Phoenixd→LND-Test gehört der Eingang deshalb zur
+LND-Historie, der Ausgang zur Phoenixd-Historie. Falls ein vorhandener Eingang
+auf derselben Wallet in Amethyst fehlt, ist die konkrete Clientabfrage separat
+zu prüfen; daraus folgt kein Fehler der Wallet-Zuordnung.
+
 ### D4 — Alte Tabs, Ausfall und Neustart
 
-- [ ] Pay in zwei Tabs öffnen. Im ersten das Backend wechseln. Im zweiten eine
-  noch vorbereitete Aktion auslösen.
-- [ ] Nur in der Testumgebung eines der Backends vorübergehend unerreichbar
+- [x] Pay in zwei Tabs öffnen. Im ersten das Backend wechseln. Im zweiten eine
+  noch vorbereitete Aktion auslösen. Beide Varianten laut Nutzer bestanden:
+  veralteter Wechselversuch und Offer-Erzeugung werden mit Neuladehinweis
+  blockiert (18.11., Screenshots 12:23 Uhr).
+- [ ] Die beiden Hinweise für veraltete Tabs übersetzen: Bei deutscher
+  Oberfläche erscheinen „Lightning backend changed. Reload before continuing.“
+  und „Lightning backend changed. Reload before switching.“ noch auf Englisch.
+- [x] Nur in der Testumgebung eines der Backends vorübergehend unerreichbar
   machen. Eine diesem Backend zugeordnete Aktion versuchen und danach die
-  Erreichbarkeit wiederherstellen.
-- [ ] Die Dual-Test-App neu starten und Wallet-Auswahl, Aliase, NWC-Verbindungen
-  und beide Historien erneut prüfen.
+  Erreichbarkeit wiederherstellen. Laut Nutzer bei LND und Phoenixd wie
+  erwartet fehlgeschlagen, nach Wiederanlauf wieder erfolgreich.
+- [ ] LND-Wiederanlauf ohne Browser-Refresh gezielt wiederholen: Nutzer vermutet,
+  dass die Alias-Erneuerung erst nach Refresh wieder funktionierte; bei
+  Phoenixd sofort. Screenshot zeigt zuvor einen LNDK-DNS-/Verbindungsfehler.
+  Startbereitschaft und Refresh-Effekt sind noch nicht voneinander getrennt.
+  Automatisierte Tests bestätigen Wiederholung nach Fehler ohne Neuladen,
+  unveränderte Alias-Zuordnung und kein Ausweichen auf die andere Wallet.
+- [x] Die Dual-Test-App neu starten und Wallet-Auswahl, Aliase, NWC-Verbindungen
+  und beide Historien erneut prüfen. Laut Nutzer bleiben die Daten erhalten;
+  beide Verbindungen funktionieren weiterhin zum Senden und Empfangen.
 
 **Erwartet:** Ein veralteter Tab fordert zum Neuladen auf oder aktualisiert sich
 vor der Aktion. Keine Zahlung wird unbemerkt aus der anderen Wallet ausgeführt.
@@ -312,7 +347,7 @@ bearbeiten wir gemeinsam nach den Funktionstests. Noch kein Release erfolgt.
 |---|---|---|---|
 | N1–N4 | 18.11.2026 | Phoenixd / Amethyst | Test 1 laut Nutzer vollständig bestanden; normale Historie korrekt |
 | Neustart Phoenixd-only | 18.11.2026 | Phoenixd | Test 2 laut Nutzer vollständig bestanden |
-| D1–D4 | | | |
+| D1–D4 | 18.11.2026 | LND / Phoenixd | Beide Richtungen, gebundene Aliase einschließlich BOLT11 nach Umschalten, NWC, Neustart, veraltete Tabs und Ausfall bestanden; möglicher Refresh-Bedarf nach LND-Wiederanlauf noch prüfen; LND-Toasts bei aktivem Phoenixd bestätigt; Fehlermeldungen noch übersetzen |
 | Nostr/Zaps/Android-Push | | | |
 | LNURL-auth/withdraw | 18.11.2026 | Phoenixd / LND / LNbits StartOS | Withdraw je 100 sats bei Phoenixd und LND (QR) bestätigt; LND COPY LNURL Anfrage nach Wrapper-Fix erfolgreich; Auth offen |
 | Plattform-Update/Pakete | | | |

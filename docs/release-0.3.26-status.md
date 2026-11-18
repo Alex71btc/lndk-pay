@@ -12,7 +12,14 @@ Phoenixd to LND: separate settled outgoing Phoenixd and incoming LND rows,
 with 4 sats routing fees on the Phoenixd outgoing payment. The screenshot at
 08:40 also confirms the reverse 21-sat payment: settled LND outgoing (1 sat fee),
 settled Phoenixd incoming and a receipt toast. D1 is complete in both directions;
-the reverse LND-alias and NWC switching checks remain open.
+the reverse LND-alias check remains open. The user subsequently confirmed both
+NWC switching tests: an existing Phoenixd connection paid with LND selected
+(69 sats, with Phoenixd outgoing data and a separate LND incoming row), and a
+new LND connection paid after switching to Phoenixd (21/25-sat outgoing rows).
+The activity renderer now preserves the stored backend label on NWC rows,
+instead of overwriting it when replacing the payment-method label with NWC.
+NWC history includes both directions for the connection's bound backend; the
+69-sat transfer's incoming LND side does not belong to its Phoenixd history.
 
 Further screenshots confirm that a Phoenixd alias still receives on Phoenixd
 with LND selected, including direct BOLT12 payment after renewing the offer
@@ -150,7 +157,7 @@ key store still needs the original LND to unlock; it is never silently replaced
 with a new identity when LND is removed. A switch to Phoenixd does not move
 funds, old addresses or old NWC connections.
 
-Automatic checks: 304 app tests, 11 root/PWA tests, generated translations,
+Automatic checks: 305 app tests, 11 root/PWA tests, generated translations,
 UI text lint, inline JavaScript parsing, shell syntax, and whitespace passed.
 Upgrade/restart/backup restoration probes used populated databases and
 configuration from both 0.3.24 and 0.3.25. These are fixture-based tests, not

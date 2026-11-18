@@ -6977,8 +6977,6 @@
             donation: `❤️ ${window.__t("history.donation")}`,
           }[method] || method || window.__t("history.unknown_method");
 
-          methodLabel += ` · ${String(item.backend_id || "lnd-default").startsWith("phoenixd-") ? "Phoenixd" : "LND"}`;
-
           const statusLabel = {
             settled: `✅ ${window.__t("history.settled")}`,
             pending: `🟡 ${window.__t("history.pending")}`,
@@ -6997,6 +6995,8 @@
             methodLabel = `🔗 ${window.__t("history.nwc")}`;
             originLabel = "";
           }
+
+          methodLabel += ` · ${String(item.backend_id || "lnd-default").startsWith("phoenixd-") ? "Phoenixd" : "LND"}`;
 
           const typeText = {
             payment: window.__t("history.payment"),

@@ -491,6 +491,45 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.service.existing(HASH, 'incoming')['method'], 'lightning_address')
         self.assertEqual(config.load_config()['lightning_backend']['active'], 'lnd-default')
 
+    async def test_alias_renewal_recovers_after_outage_without_reload_or_wallet_fallback(self):
+        async def inline_thread(function, *args, **kwargs):
+            return function(*args, **kwargs)
+
+        for owner in ('lnd-default', INSTANCE['id']):
+            with self.subTest(owner=owner):
+                cfg = config.load_config()
+                cfg['lightning_backend']['active'] = (
+                    INSTANCE['id'] if owner == 'lnd-default' else 'lnd-default')
+                cfg['dns_mode'] = 'manual'
+                cfg['aliases'] = {'recovery': {'backend_id': owner,
+                    'description': 'Recovery test', 'amount_sat': 24,
+                    'published': True, 'last_offer': 'lno1original'}}
+                config.save_config(cfg)
+                saved = config.load_config()
+                unavailable = HTTPException(502, 'Selected receiving wallet is offline')
+                client = AsyncMock()
+                client.create_offer.return_value = 'lno1recoveredphoenix'
+                lnd_outcomes = ([unavailable, app_module.OfferResponse(
+                    offer='lno1recoveredlnd', raw_output='test')]
+                    if owner == 'lnd-default' else AssertionError('Unexpected LND fallback'))
+                phoenix_outcomes = ([unavailable, (client, NODE)]
+                    if owner == INSTANCE['id'] else AssertionError('Unexpected Phoenixd fallback'))
+                with (patch.object(app_module, 'require_pay_auth'),
+                      patch.object(app_module.asyncio, 'to_thread', AsyncMock(side_effect=inline_thread)),
+                      patch.object(app_module, '_create_offer_internal', side_effect=lnd_outcomes),
+                      patch.object(backends, 'checked_client', AsyncMock(side_effect=phoenix_outcomes)),
+                      patch.object(app_module, '_cloudflare_upsert_txt_record', AsyncMock()) as dns):
+                    with self.assertRaises(HTTPException) as failed:
+                        await app_module.refresh_alias_offer('recovery', request())
+                    self.assertEqual(failed.exception.status_code, 502)
+                    self.assertEqual(config.load_config(), saved)
+                    # Same endpoint and app state: only the transport recovers.
+                    result = await app_module.refresh_alias_offer('recovery', request())
+                    dns.assert_not_awaited()
+                self.assertEqual(result['backend_id'], owner)
+                self.assertNotEqual(result['last_offer'], 'lno1original')
+                self.assertEqual(config.load_config()['lightning_backend'], saved['lightning_backend'])
+
     async def test_refresh_republishes_legacy_alias_under_full_subdomain(self):
         cfg = config.load_config()
         cfg.update(public_bolt12_address='bolt12@wallet.example.com',
@@ -547,6 +586,8 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(success.call_args.args[-1]['fees_paid'], 1000)
             await nwc_runtime._handle_list_transactions_request(None, {}, connection, {})
             self.assertEqual(len(success.call_args.args[-1]['transactions']), 2)
+            self.assertEqual({tx['type'] for tx in success.call_args.args[-1]['transactions']},
+                             {'incoming', 'outgoing'})
             error.assert_not_awaited()
         self.assertEqual(self.service.existing(HASH, 'outgoing')['origin'], 'nwc')
 
