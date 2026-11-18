@@ -24,3 +24,6 @@ devtools/
 *.key
 *.crt
 *.macaroon
+
+# Local Python test environment
+.venv/
