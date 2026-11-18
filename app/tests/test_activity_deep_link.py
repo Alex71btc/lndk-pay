@@ -12,25 +12,40 @@ class ActivityDeepLinkTests(unittest.TestCase):
         script = r'''
 const assert = require('node:assert/strict');
 const hash = 'a'.repeat(64);
-let txHistorySearchQuery = '', txHistoryItems = ['newest'];
+let txHistorySearchQuery = '', txHistoryItems = ['newest'], txHistoryScope = 0, txHistoryHasMore = true;
 const txHistorySearchInput = {value:''};
+const txHistoryWallet = {value:'phoenixd'};
 const section = {open:false};
-const selected = {dataset:{paymentHash:hash},open:false,scrollIntoView(){this.scrolled=true},focus(){this.focused=true}};
-const other = {dataset:{paymentHash:'b'.repeat(64)}};
-const document = {getElementById:()=>section,querySelectorAll:()=>[other,selected]};
+const makeRow = (backend, direction) => ({
+  dataset:{paymentHash:hash, backendId:backend,direction},open:false,
+  closest(){return {classList:{add:(name)=>{this.highlighted=name}}}},
+  scrollIntoView(){this.scrolled=true},focus(){this.focused=true}
+});
+const outgoing = makeRow('lnd-default','outgoing');
+const incoming = makeRow('lnd-default','incoming');
+const phoenix = makeRow('phoenixd-test','incoming');
+const rows = [outgoing,phoenix,incoming];
+const document = {getElementById:()=>section,querySelectorAll:()=>rows};
 let rendered = 0, opened = 0;
 function openPaySection(){opened++}
-const window = {location:{search:'?view=activity&payment='+hash, hash:''},renderTxHistory:async()=>{
+const window = {location:{search:'?view=activity&payment='+hash+'&backend=lnd',hash:''},renderTxHistory:async()=>{
   assert.equal(txHistorySearchQuery,hash,'query searches all history, not just latest page');
   assert.equal(txHistoryItems.length,0);rendered++;
 }};
 '''+function+r'''
 (async()=>{
  await openRequestedPayView();
- assert.equal(selected.open,true);assert.equal(selected.focused,true);assert.equal(selected.scrolled,true);
- assert.equal(other.open,undefined);assert.equal(rendered,1);assert.equal(opened,0);
+ assert.equal(incoming.open,true);assert.equal(incoming.focused,true);assert.equal(incoming.scrolled,true);
+ assert.equal(incoming.highlighted,'txDeepLinkTarget');
+ assert.equal(outgoing.open,false);assert.equal(phoenix.open,false);
+ assert.equal(txHistoryWallet.value,'lnd');assert.equal(rendered,1);assert.equal(opened,0);
+ for(const row of rows){row.open=false}
+ window.location.search='?view=activity&payment='+hash+'&backend=phoenixd';
+ await openRequestedPayView();
+ assert.equal(phoenix.open,true);assert.equal(incoming.open,false);
+ assert.equal(txHistoryWallet.value,'phoenixd');assert.equal(rendered,2);
  window.location.search='?view=activity&payment=invalid';
- await openRequestedPayView();assert.equal(rendered,1);assert.equal(opened,1);
+ await openRequestedPayView();assert.equal(rendered,2);assert.equal(opened,1);
 })().catch(e=>{console.error(e);process.exitCode=1});
 '''
         result = subprocess.run(['node','-'],input=script,text=True,capture_output=True,timeout=10)

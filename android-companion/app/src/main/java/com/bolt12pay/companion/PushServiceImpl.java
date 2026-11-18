@@ -108,6 +108,7 @@ public final class PushServiceImpl extends PushService {
                     payload.optString("method", "lightning"),
                     payload.optString("payment_type", "payment"),
                     payload.optString("backend", ""),
+                    payload.optString("payment_hash", ""),
                     comment);
         } catch (Exception error) {
             new PushSettings(this).setLastError(getString(R.string.push_message_invalid));
@@ -131,6 +132,7 @@ public final class PushServiceImpl extends PushService {
             String method,
             String paymentType,
             String backend,
+            String paymentHash,
             String comment) {
         NotificationManager manager = getSystemService(NotificationManager.class);
         NotificationChannel channel = manager.getNotificationChannel(CHANNEL_ID);
@@ -173,10 +175,17 @@ public final class PushServiceImpl extends PushService {
                                 paymentDescription,
                                 privateComment);
         String serverUrl = new ServerSettings(this).load();
-        Intent open =
-                new Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse((serverUrl == null ? "https://localhost" : serverUrl) + "/pay?view=activity"));
+        Uri.Builder destination = Uri.parse(
+                (serverUrl == null ? "https://localhost" : serverUrl) + "/pay")
+                .buildUpon().clearQuery().appendQueryParameter("view", "activity");
+        // Older servers may omit the hash; keep the normal Activity fallback.
+        if (paymentHash != null && paymentHash.matches("(?i)[0-9a-f]{64}")) {
+            destination.appendQueryParameter("payment", paymentHash.toLowerCase(java.util.Locale.ROOT));
+            if ("lnd".equals(backend) || "phoenixd".equals(backend)) {
+                destination.appendQueryParameter("backend", backend);
+            }
+        }
+        Intent open = new Intent(Intent.ACTION_VIEW, destination.build());
         PendingIntent pendingIntent =
                 PendingIntent.getActivity(
                         this,

@@ -801,6 +801,12 @@ def _payment_payload(event_id: str, item: dict[str, Any]) -> str:
         "method": str(item.get("method") or "lightning")[:40],
         "payment_type": str(item.get("type") or "payment")[:40],
     }
+    # The encrypted UnifiedPush payload may carry the public payment identifier,
+    # which lets Android open the exact receiving row instead of the activity top.
+    # Never include raw transaction metadata, private wallet IDs or preimages.
+    payment_hash = str(item.get('payment_hash') or '').strip().lower()
+    if re.fullmatch(r'[0-9a-f]{64}', payment_hash):
+        payload_data['payment_hash'] = payment_hash
     backend_id = str(item.get('backend_id') or 'lnd-default')
     if backend_id == 'lnd-default':
         payload_data['backend'] = 'lnd'

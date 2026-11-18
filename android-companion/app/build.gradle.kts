@@ -38,6 +38,7 @@ android {
 
     defaultConfig {
         applicationId = "com.bolt12pay.companion"
+        manifestPlaceholders["bolt12PayAppLabel"] = "BOLT12 Pay"
         minSdk = 26
         targetSdk = 36
         versionCode = 16
@@ -62,6 +63,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Opt-in parallel test APK: never replace the published Companion.
+            if (providers.gradleProperty("bolt12PayParallelTest").orNull == "true") {
+                applicationIdSuffix = ".test"
+                manifestPlaceholders["bolt12PayAppLabel"] = "BOLT12 Pay (Test)"
+            }
+        }
         release {
             isMinifyEnabled = false
             if (releaseSigningFile != null) {

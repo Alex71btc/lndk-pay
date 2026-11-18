@@ -690,6 +690,11 @@
         max-width: 100%;
       }
 
+      .historyItem.txDeepLinkTarget {
+        outline: 2px solid var(--accent, #f7931a);
+        outline-offset: 2px;
+      }
+
       .historyItem {
         border: 1px solid var(--border);
         background: #0c1322;
@@ -7250,6 +7255,7 @@
           `;
 
           const rootDetails = div.querySelector(".txDetailsRoot");
+          if (rootDetails) rootDetails.dataset.direction = item.direction || "";
           if (rootDetails && paymentHash) {
             rootDetails.dataset.paymentHash = String(paymentHash).toLowerCase();
             rootDetails.dataset.backendId = item.backend_id || 'lnd-default';
@@ -9894,17 +9900,31 @@
         const payment = params.get('payment');
         const paymentBackend = params.get('backend');
         if (view === 'activity' && payment && /^[0-9a-f]{64}$/i.test(payment)) {
+          // Explicit push targets override any previous UI search and wallet filter.
+          // The server searches the entire history, so older pages remain reachable.
+          txHistoryScope += 1;
           txHistorySearchQuery = payment.toLowerCase();
           txHistoryItems = [];
+          txHistoryHasMore = false;
           if (txHistorySearchInput) txHistorySearchInput.value = txHistorySearchQuery;
+          if (txHistoryWallet) txHistoryWallet.value =
+            paymentBackend === 'lnd' || paymentBackend === 'phoenixd' ? paymentBackend : '';
           document.getElementById(sectionId).open = true;
           try {
             await window.renderTxHistory();
-            const row = Array.from(document.querySelectorAll('details[data-payment-hash]'))
-              .find(el => el.dataset.paymentHash === payment.toLowerCase()
-                && (!paymentBackend || el.dataset.backendId === paymentBackend));
+            const rows = Array.from(document.querySelectorAll('details[data-payment-hash]'));
+            const matching = rows.filter(el => el.dataset.paymentHash === payment.toLowerCase()
+              && (paymentBackend === 'phoenixd'
+                ? el.dataset.backendId?.startsWith('phoenixd-')
+                : paymentBackend === 'lnd'
+                  ? el.dataset.backendId === 'lnd-default'
+                  : !paymentBackend || el.dataset.backendId === paymentBackend));
+            // The same hash can exist as outgoing and incoming in the dual wallet.
+            // A notification always refers to the receiving side.
+            const row = matching.find(el => el.dataset.direction === 'incoming') || matching[0];
             if (row) {
               row.open = true;
+              row.closest('.historyItem')?.classList.add('txDeepLinkTarget');
               row.scrollIntoView({block:'center'});
               row.focus({preventScroll:true});
               return;

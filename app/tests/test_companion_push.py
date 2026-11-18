@@ -104,10 +104,20 @@ class CompanionPushTests(unittest.TestCase):
         self.assertEqual(payload["method"], "bolt12")
         self.assertEqual(payload["comment"], "First line Second line")
         self.assertEqual(payload["comment_source"], "payer_note")
-        self.assertNotIn("payment_hash", payload)
+        self.assertEqual(payload["payment_hash"], "aa" * 32)
         self.assertNotIn("memo", payload)
         self.assertNotIn("payer_note", payload)
         self.assertEqual(delivery_count, 1)
+
+    def test_payload_deep_link_identifier_is_validated_and_normalized(self):
+        item = {"payment_hash": "AB" * 32, "backend_id": "phoenixd-secret"}
+        payload = json.loads(companion_push._payment_payload("event", item))
+        self.assertEqual(payload["payment_hash"], "ab" * 32)
+        self.assertEqual(payload["backend"], "phoenixd")
+        self.assertNotIn("phoenixd-secret", json.dumps(payload))
+        for invalid in ("short", "x" * 64, "ab" * 33, ""):
+            item["payment_hash"] = invalid
+            self.assertNotIn("payment_hash", json.loads(companion_push._payment_payload("event", item)))
 
     def test_payload_backend_is_receiving_family_without_internal_wallet_id(self):
         for backend_id, expected in ((None, "lnd"), ("lnd-default", "lnd"),
