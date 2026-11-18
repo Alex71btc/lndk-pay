@@ -25,7 +25,7 @@ if ! git diff --cached --quiet; then
 fi
 
 # Stage only the implementation and its tests/docs, never generated_images.
-git add -u -- app
+git add -u -- app android-companion
 git add -- app/Dockerfile.phoenixd-test \
   app/Dockerfile.dual-backend-test \
   app/backend/local_secret_key.py app/backend/upgrade_backup.py \
@@ -33,6 +33,9 @@ git add -- app/Dockerfile.phoenixd-test \
   app/tests/test_console_alias_addresses.py \
   app/tests/test_setup_bip353_domain.py \
   app/tests/test_alias_dns_repair.py app/tests/test_alias_dns_warning.py \
+  app/tests/test_nwc_key_bootstrap.py app/tests/test_lnurl_metadata_response.py \
+  app/backend/offer_preview.py app/tests/test_offer_amount_preview.py \
+  tests/test_pwa_handoff_assets.py \
   app/assets/backend-icons app/assets/lightning-backend.js \
   app/backend/lightning_backends.py app/backend/lnurl_actions.py \
   app/tests/test_backend_ui.py app/tests/test_dual_backend_test_config.py \
@@ -41,7 +44,8 @@ git add -- app/Dockerfile.phoenixd-test \
   scripts/prepare-dual-backend-test.py scripts/start-dual-backend-test.sh \
   scripts/start-phoenixd-test.sh scripts/commit-phoenix-and-merge-main.sh \
   scripts/diagnose-bip353.sh
-git add -- CHANGELOG.md README.md docs/release-0.3.26-status.md
+git add -- CHANGELOG.md README.md docs/release-0.3.26-status.md \
+  docs/phoenixd-test-checkliste.md
 git diff --cached --check
 git diff --cached --stat
 if [[ "$commit_only" == true ]]; then

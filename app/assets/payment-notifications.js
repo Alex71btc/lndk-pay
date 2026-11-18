@@ -126,7 +126,9 @@
         if (!paymentToastRegion) return;
 
         const amount = plainSatsValue(item.amount_sat);
-        const category = incomingPaymentCategory(item);
+        const backend = window.__t(String(item.backend_id || 'lnd-default').startsWith('phoenixd-')
+          ? 'backend.name_phoenixd' : 'backend.name_lnd');
+        const category = [incomingPaymentCategory(item), backend].filter(Boolean).join(' · ');
         const comment = String(item.notification_comment || "").trim();
         const button = document.createElement("button");
         button.type = "button";

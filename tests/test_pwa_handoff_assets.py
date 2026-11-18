@@ -3,7 +3,9 @@ import re
 import struct
 import subprocess
 import unittest
+from html import unescape
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,7 +108,10 @@ vm.runInNewContext(SOURCE, context);
         for source in (pay_html, login_html, console_html):
             for asset in re.findall(r'src="(/[^"]+\.js\?v=[^"]+)"', source):
                 if asset.startswith(("/assets/i18n/", "/pwa-install.js")):
-                    self.assertTrue(asset.endswith(f"?v={version}"), asset)
+                    query = parse_qs(urlsplit(unescape(asset)).query)
+                    self.assertEqual(query.get('v'), [version], asset)
+                    if 'rev' in query:
+                        self.assertRegex(query['rev'][0], r'^[0-9]+$', asset)
 
         self.assertIn(f'/assets/i18n/runtime.js?v={version}', pay_html)
         self.assertIn(f'/assets/i18n/pay.js?v={version}', pay_html)

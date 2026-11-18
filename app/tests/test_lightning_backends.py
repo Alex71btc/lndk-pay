@@ -434,6 +434,30 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('private',json.dumps(result))
         create.assert_not_awaited()
 
+    async def test_withdraw_inspection_unwraps_copied_wallet_link_without_invoice(self):
+        target = 'https://service.test/metadata/private-voucher?state=private-state'
+        encoded = app_module.bech32.bech32_encode('lnurl',
+            app_module.bech32.convertbits(target.encode(), 8, 5, True)).upper()
+        requests = []
+
+        def respond(req):
+            requests.append(req)
+            return httpx.Response(200, json={'tag': 'withdrawRequest',
+                'callback': 'https://service.test/callback?token=private-token'})
+
+        with (patch.object(app_module, 'require_pay_auth'),
+              patch('backend.app.httpx.AsyncClient', side_effect=lambda **kw:
+                    self.client_factory(transport=httpx.MockTransport(respond), **kw)),
+              patch.object(app_module, '_create_bolt11_invoice', AsyncMock()) as create):
+            result = await app_module.inspect_lnurl_withdraw(app_module.PhoenixLnurlAction(
+                backend_id='lnd-default', lnurl='https://launch.test?lightning=' + encoded,
+                action='withdraw'), request())
+        self.assertEqual([str(item.url) for item in requests], [target])
+        self.assertEqual(result['host'], 'service.test')
+        self.assertEqual(result['tag'], 'withdrawRequest')
+        self.assertNotIn('private', json.dumps(result))
+        create.assert_not_awaited()
+
     async def test_phoenix_alias_publication_and_lnurl_remain_bound_after_switch(self):
         cfg = config.load_config()
         cfg['lnurl_base_domain'] = 'phoenixd-test.example.com'

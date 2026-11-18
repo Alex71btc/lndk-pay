@@ -50,6 +50,7 @@ const payment = hash => ({payment_hash:hash.repeat(64),direction:'incoming',stat
   pay.setItems([payment('b'),payment('a')]);await pay.poll();
   const toast=pay.body.children[0].children[0];
   assert.ok(toast.children[0].textContent.includes('21000'));
+  assert.ok(toast.children[1].textContent.includes('backend.name_lnd'), 'legacy LND receipts show their backend');
   assert.equal(toast.children[2].textContent,'<img src=x onerror=bad()>','comment is text');
   await toast.handlers.click();
   assert.equal(pay.navigations[0],'/pay?view=activity&payment='+'b'.repeat(64));
@@ -68,6 +69,7 @@ const payment = hash => ({payment_hash:hash.repeat(64),direction:'incoming',stat
   wallets.setItems([{...payment('e'), backend_id:'phoenixd-test'}, payment('e')]);
   await wallets.poll();
   assert.equal(wallets.body.children[0].children.length, 1, 'wallets have independent notification IDs');
+  assert.ok(wallets.body.children[0].children[0].children[1].textContent.includes('backend.name_phoenixd'), 'Phoenixd receipt shows receiving backend');
   await wallets.body.children[0].children[0].handlers.click();
   assert.equal(wallets.navigations[0], '/pay?view=activity&payment='+'e'.repeat(64)+'&backend=phoenixd-test');
   // A long-lived tab must re-read the shared state before claiming a payment.
@@ -129,6 +131,7 @@ const payment = hash => ({payment_hash:hash.repeat(64),direction:'incoming',stat
   navigated.setItems([delayedBolt12]); await navigated.poll();
   assert.equal(navigated.body.children[0].children.length,1,'delayed BOLT12 arrival survives navigation and 30 second delay');
   assert.ok(navigated.body.children[0].children[0].children[1].textContent.includes('bolt12_offer'));
+  assert.ok(navigated.body.children[0].children[0].children[1].textContent.includes('backend.name_phoenixd'));
   await navigated.poll();
   assert.equal(navigated.body.children[0].children.length,1,'delayed arrival is shown only once');
   console.log('notification lifecycle: public exclusion, navigation, wallet ownership, click target, comments, expiry OK');

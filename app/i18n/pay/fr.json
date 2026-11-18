@@ -283,7 +283,7 @@
   "label.nostr_keys_encrypted_unlocked": "🔒 Les clés Nostr sont chiffrées et ont été déverrouillées automatiquement",
   "label.nostr_keys_waiting_for_lnd": "⏳ En attente du déverrouillage des clés Nostr chiffrées",
   "label.nostr_keys_encryption_error": "⚠️ Impossible de déverrouiller les clés Nostr chiffrées",
-  "hint.notification_initialize": "Lors de l’initialisation, BOLT12 Pay vérifie et chiffre votre nsec de notification. Si aucune clé de signature interne n’existe, l’application crée automatiquement la paire de clés nécessaire. LND déverrouille automatiquement les deux clés à chaque redémarrage de l’application ou du nœud. Les clés privées ne sont jamais affichées.",
+  "hint.notification_initialize": "L’initialisation valide et chiffre votre nsec de notification. Le signataire interne est créé automatiquement si nécessaire. Après redémarrage, les clés sont déverrouillées avec le LND d’origine ou, pour une installation autonome, avec une clé locale de l’application. Les clés privées ne sont jamais affichées.",
   "hint.app_signer_keypair": "BOLT12 Pay crée pour cela une paire de clés. Seul le npub public est affiché ici. Le nsec privé reste masqué.",
   "hint.regenerate_app_signer": "À utiliser uniquement si la clé de signature est défectueuse ou compromise. Le nsec de notification reste inchangé.",
   "hint.notification_profile_match": "Utilisez le nsec du profil Nostr dans lequel vous avez indiqué votre adresse Lightning compatible avec les Zaps. Le npub affiché après l’initialisation doit correspondre à l’identité enregistrée.",
@@ -550,5 +550,11 @@
   "backend.inspect_html": "Page web au lieu de métadonnées LNURL : utilisez le QR du bon.",
   "backend.inspect_host": "Hôte callback différent : vérifiez son adresse et son certificat.",
   "backend.name_lnd": "LND",
-  "backend.name_phoenixd": "Phoenixd"
+  "backend.name_phoenixd": "Phoenixd",
+  "hint.nwc_internal_key": "NWC crée automatiquement sa clé interne. Vous n’avez pas besoin de saisir un nsec personnel de notification ni de configurer les notifications Zap.",
+  "label.nostr_keys_unlocked_local": "🔒 Les clés Nostr sont chiffrées et déverrouillées automatiquement avec la clé locale de l’application",
+  "label.nostr_keys_waiting_original_lnd": "⏳ Ce stockage de clés existant nécessite son LND d’origine pour être déverrouillé. Ses clés sont conservées.",
+  "payment_error.offer_amount_too_low": "Montant trop faible : {amount}. Cette offre exige au moins {minimum}.",
+  "preview.lnurl_fixed": "LNURL : exactement {amount}",
+  "preview.bolt12_minimum": "BOLT12 : au moins {amount}"
 }

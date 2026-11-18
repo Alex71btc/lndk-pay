@@ -283,7 +283,7 @@
   "label.nostr_keys_encrypted_unlocked": "🔒 Las claves Nostr están cifradas y se desbloquearon automáticamente",
   "label.nostr_keys_waiting_for_lnd": "⏳ Esperando a desbloquear las claves Nostr cifradas",
   "label.nostr_keys_encryption_error": "⚠️ No se pudieron desbloquear las claves Nostr cifradas",
-  "hint.notification_initialize": "Al inicializar las notificaciones, BOLT12 Pay valida y cifra tu nsec. Si todavía no existe un firmante interno, se genera automáticamente su par de claves en segundo plano. LND desbloquea ambas claves después de cada reinicio de la aplicación o del nodo. Las claves privadas nunca se muestran.",
+  "hint.notification_initialize": "Al inicializar, se valida y cifra el nsec de notificaciones. El firmante interno se crea automáticamente si es necesario. Tras reiniciar, las claves se desbloquean con el LND original o, en una instalación independiente, con una clave local de la app. Las claves privadas nunca se muestran.",
   "hint.app_signer_keypair": "BOLT12 Pay crea un par de claves. Aquí solo se muestra la clave pública npub. La clave privada nsec permanece oculta.",
   "hint.regenerate_app_signer": "Usa esta opción solo si el firmante de la aplicación falla o está comprometido. La nsec de notificaciones permanecerá igual.",
   "hint.notification_profile_match": "Usa la nsec del perfil de Nostr en el que indicaste tu dirección Lightning habilitada para zaps. La npub que se muestra tras la inicialización debe coincidir con la identidad guardada.",
@@ -550,5 +550,11 @@
   "backend.inspect_html": "Página web en lugar de metadatos LNURL: utiliza el QR del cupón.",
   "backend.inspect_host": "Host de callback diferente: comprueba su dirección y certificado.",
   "backend.name_lnd": "LND",
-  "backend.name_phoenixd": "Phoenixd"
+  "backend.name_phoenixd": "Phoenixd",
+  "hint.nwc_internal_key": "NWC crea automáticamente su clave interna. No necesitas introducir un nsec personal de notificaciones ni configurar notificaciones Zap.",
+  "label.nostr_keys_unlocked_local": "🔒 Las claves Nostr están cifradas y se desbloquean automáticamente con la clave local de la app",
+  "label.nostr_keys_waiting_original_lnd": "⏳ Este almacén de claves existente necesita su LND original para desbloquearse. Sus claves se conservan.",
+  "payment_error.offer_amount_too_low": "Importe demasiado bajo: {amount}. Esta oferta requiere al menos {minimum}.",
+  "preview.lnurl_fixed": "LNURL: exactamente {amount}",
+  "preview.bolt12_minimum": "BOLT12: al menos {amount}"
 }

@@ -283,7 +283,7 @@
   "label.nostr_keys_encrypted_unlocked": "🔒 Klucze Nostr są zaszyfrowane i zostały automatycznie odblokowane",
   "label.nostr_keys_waiting_for_lnd": "⏳ Oczekiwanie na odblokowanie zaszyfrowanych kluczy Nostr",
   "label.nostr_keys_encryption_error": "⚠️ Nie udało się odblokować zaszyfrowanych kluczy Nostr",
-  "hint.notification_initialize": "Podczas inicjalizacji BOLT12 Pay sprawdza i szyfruje nsec powiadomień. Jeśli nie istnieje jeszcze wewnętrzny klucz podpisujący, aplikacja automatycznie tworzy potrzebną parę kluczy. LND odblokowuje oba klucze po każdym ponownym uruchomieniu aplikacji lub węzła. Klucze prywatne nigdy nie są wyświetlane.",
+  "hint.notification_initialize": "Inicjalizacja sprawdza i szyfruje nsec powiadomień. Wewnętrzny klucz podpisujący jest tworzony automatycznie w razie potrzeby. Po restarcie klucze odblokowuje pierwotny LND albo, w samodzielnej instalacji, lokalny klucz aplikacji. Klucze prywatne nigdy nie są wyświetlane.",
   "hint.app_signer_keypair": "BOLT12 Pay tworzy w tym celu parę kluczy. Tutaj wyświetlany jest tylko publiczny npub. Prywatny nsec pozostaje ukryty.",
   "hint.regenerate_app_signer": "Użyj tej opcji wyłącznie wtedy, gdy klucz podpisujący aplikacji jest uszkodzony lub przejęty. Nsec powiadomień nie ulegnie zmianie.",
   "hint.notification_profile_match": "Użyj nsec tego samego profilu Nostr, w którym wpisano adres Lightning obsługujący Zapy. Npub wyświetlony po inicjalizacji musi pasować do zapisanej tożsamości.",
@@ -550,5 +550,11 @@
   "backend.inspect_html": "Strona zamiast metadanych LNURL: użyj kodu QR kuponu.",
   "backend.inspect_host": "Inny host callback: sprawdź adres i certyfikat.",
   "backend.name_lnd": "LND",
-  "backend.name_phoenixd": "Phoenixd"
+  "backend.name_phoenixd": "Phoenixd",
+  "hint.nwc_internal_key": "NWC automatycznie tworzy swój wewnętrzny klucz aplikacji. Nie musisz podawać osobistego nsec powiadomień ani konfigurować powiadomień Zap.",
+  "label.nostr_keys_unlocked_local": "🔒 Klucze Nostr są zaszyfrowane i odblokowywane automatycznie lokalnym kluczem aplikacji",
+  "label.nostr_keys_waiting_original_lnd": "⏳ Ten istniejący magazyn kluczy wymaga pierwotnego LND do odblokowania. Jego klucze pozostają zachowane.",
+  "payment_error.offer_amount_too_low": "Zbyt mała kwota: {amount}. Ta oferta wymaga co najmniej {minimum}.",
+  "preview.lnurl_fixed": "LNURL: dokładnie {amount}",
+  "preview.bolt12_minimum": "BOLT12: co najmniej {amount}"
 }

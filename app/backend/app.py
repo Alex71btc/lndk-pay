@@ -37,6 +37,7 @@ from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, Field
 from backend.config import load_config, save_config
 from backend import companion_push, lightning_backends
+from backend.offer_preview import amount_hint as offer_amount_hint
 from backend.nwc import (
     list_nwc_connections,
     create_nwc_connection,
@@ -3224,13 +3225,7 @@ async def _resolve_lnurl_invoice(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LNURL metadata request failed: {exc}") from exc
 
-    try:
-        meta = meta_resp.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail="LNURL metadata returned invalid JSON")
-
-    if meta_resp.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"LNURL metadata error: {meta}")
+    meta = _parse_lnurl_metadata_response(meta_resp)
 
     callback = meta.get("callback")
     min_sendable = int(meta.get("minSendable") or 0)
@@ -3335,6 +3330,30 @@ def _extract_lnurl_metadata_info(metadata_raw: Any) -> dict[str, Any]:
     }
 
 
+def _parse_lnurl_metadata_response(response: httpx.Response) -> dict[str, Any]:
+    # Never expose full URLs, tokens or HTML in errors for payment endpoints.
+    try:
+        host = urlparse(str(response.url)).hostname or 'LNURL service'
+    except RuntimeError:
+        host = 'LNURL service'
+    try:
+        data = response.json()
+    except ValueError:
+        body = response.text[:12000].lower()
+        if 'cloudflare' in body and '1033' in body:
+            raise HTTPException(503, f'LNURL unavailable at {host}: Cloudflare Tunnel error 1033. '
+                                'Start the cloudflared tunnel and try again.') from None
+        raise HTTPException(502, f'LNURL metadata at {host} returned HTTP {response.status_code} '
+                            'without JSON. Check the public URL, tunnel or access/login page.') from None
+    if response.status_code >= 400:
+        raise HTTPException(502, f'LNURL metadata at {host} returned HTTP {response.status_code}.')
+    if not isinstance(data, dict):
+        raise HTTPException(502, f'LNURL metadata at {host} must be a JSON object.')
+    if str(data.get('status') or '').upper() == 'ERROR':
+        raise HTTPException(400, 'LNURL service rejected the metadata request.')
+    return data
+
+
 async def _fetch_lnurl_metadata_from_url(url: str) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
@@ -3342,15 +3361,7 @@ async def _fetch_lnurl_metadata_from_url(url: str) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LNURL metadata request failed: {exc}") from exc
 
-    try:
-        data = resp.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail="LNURL metadata returned invalid JSON")
-
-    if resp.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"LNURL metadata error: {data}")
-
-    return data
+    return _parse_lnurl_metadata_response(resp)
 
 
 def _lightning_address_to_lnurlp_url(target: str) -> str:
@@ -3381,13 +3392,7 @@ async def _resolve_lnurl_bech32_invoice(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LNURL metadata request failed: {exc}") from exc
 
-    try:
-        meta = meta_resp.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail="LNURL metadata returned invalid JSON")
-
-    if meta_resp.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"LNURL metadata error: {meta}")
+    meta = _parse_lnurl_metadata_response(meta_resp)
 
     callback = meta.get("callback")
     min_sendable = int(meta.get("minSendable") or 0)
@@ -5024,6 +5029,7 @@ async def _resolve_pay_address_methods(target: str) -> dict[str, Any]:
             return {
                 "available": True,
                 "resolved_offer": offer,
+                **offer_amount_hint(offer),
                 "error": "",
             }
         except Exception as exc:
@@ -5303,6 +5309,10 @@ async def preview_pay_target(
         raise HTTPException(status_code=400, detail="target required")
 
     lowered = target.lower()
+
+    if lowered.startswith('lno1'):
+        return {'kind': 'bolt12', 'titleKey': 'history.bolt12_offer',
+                **offer_amount_hint(target)}
 
     if lowered.startswith("lnbc") or lowered.startswith("lntb") or lowered.startswith("lnbcrt"):
         if lightning_backends.state(load_config()).get("active", "lnd-default") != "lnd-default":
@@ -9555,6 +9565,8 @@ def _set_nostr_secret_store_status(
 
 def _nostr_secret_store_public_status() -> dict[str, Any]:
     status = dict(NOSTR_SECRET_STORE_STATUS)
+    metadata = _load_json_file(SECRETS_JSON_PATH).get('_encryption') or {}
+    status['provider'] = metadata.get('provider', '') if isinstance(metadata, dict) else ''
     status["locked"] = NOSTR_SECRET_STORE_KEY is None
     status["server_key_from_environment"] = bool(
         str(os.getenv("NOSTR_SERVER_PRIVKEY") or "").strip()
@@ -9826,9 +9838,21 @@ async def _unlock_nostr_secret_store_once() -> None:
         metadata = raw.get("_encryption")
         is_existing_store = isinstance(metadata, dict)
         local_provider = 'local-file-v1'
+        # Early dual-backend tests may have initialized an empty LND-bound
+        # envelope. With no encrypted payload, there is no identity to migrate
+        # or decrypt; a standalone installation can initialize its local key.
+        # An envelope containing ANY encrypted data must keep its original key.
+        if (is_existing_store and metadata.get('version') == NOSTR_SECRET_STORE_VERSION
+                and metadata.get('provider') == NOSTR_SECRET_STORE_PROVIDER
+                and not LND_REST_URL
+                and not any(name.endswith('_encrypted') and value not in (None, '')
+                            for name, value in raw.items())):
+            raw = {name: value for name, value in raw.items() if name != '_encryption'}
+            metadata = None
+            is_existing_store = False
         local_mode = (
             metadata.get('provider') == local_provider if is_existing_store
-            else not LND_REST_URL and bool(lightning_backends.state(load_config()).get('phoenixd'))
+            else not LND_REST_URL
         )
 
         if is_existing_store:
@@ -9949,7 +9973,7 @@ async def _nostr_secret_store_unlock_loop() -> None:
             await asyncio.sleep(10)
             continue
 
-        print("[Nostr keys] encrypted secret store unlocked by LND", flush=True)
+        print("[Nostr keys] encrypted secret store unlocked", flush=True)
         try:
             await reload_nwc_runtime()
         except Exception as exc:
@@ -10142,6 +10166,37 @@ async def api_admin_nwc_connections(request: StarletteRequest):
     return {"connections": out}
 
 
+async def _ensure_nostr_server_key_for_nwc() -> str:
+    """Bootstrap only the internal signer, without requiring a profile nsec."""
+    existing = _nostr_server_pubkey_hex()
+    if existing:
+        return existing
+    try:
+        await _unlock_nostr_secret_store_once()
+    except NostrSecretStoreKeyError as exc:
+        _set_nostr_secret_store_status('error', encrypted=True, detail=str(exc))
+        raise HTTPException(503, f'Cannot unlock the existing Nostr key store: {exc}') from None
+    except Exception:
+        _set_nostr_secret_store_status(
+            'waiting_for_lnd', encrypted=True,
+            detail='The existing Nostr key store needs its original LND to unlock.',
+        )
+        raise HTTPException(503, 'The existing Nostr key store needs its original LND to unlock. '
+                            'Its keys have been preserved; do not reset them to create NWC.') from None
+    async with NOSTR_SECRET_STORE_LOCK:
+        existing = _nostr_server_pubkey_hex()
+        if existing:
+            return existing
+        if list_nwc_connections():
+            raise HTTPException(409, 'Existing NWC connections have no available server key. '
+                                'Restore the original key store before creating a connection.')
+        # Read strictly: never turn an unreadable key store into an empty one.
+        values = _logical_secrets_from_raw(_load_secret_store_raw(), NOSTR_SECRET_STORE_KEY)
+        values['nostr_server_privkey'] = _generate_nostr_private_key_hex()
+        save_secrets(values)
+        return _nostr_server_pubkey_hex()
+
+
 @app.post("/api/admin/nwc/connections")
 async def api_admin_nwc_connections_create(
     payload: NwcConnectionCreateRequest,
@@ -10150,15 +10205,9 @@ async def api_admin_nwc_connections_create(
     require_pay_auth(request)
     require_nwc_auth(request)
 
-    wallet_service_pubkey = _nostr_server_pubkey_hex()
-    if not wallet_service_pubkey:
-        raise HTTPException(
-            status_code=400,
-            detail="No Nostr server private key configured. Generate the server key first.",
-        )
-
     cfg = load_config()
     lightning_backends.selected(cfg, payload.backend_id)
+    wallet_service_pubkey = await _ensure_nostr_server_key_for_nwc()
     item = create_nwc_connection(
     backend_id=lightning_backends.state(cfg).get('active', lightning_backends.LND_ID),
     wallet_service_pubkey=wallet_service_pubkey,

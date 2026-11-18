@@ -499,7 +499,7 @@ The internal app signer is a separate Nostr key pair used to sign Zap receipts. 
 
 If the app signer is faulty or compromised, open **Show app signer** and click **Regenerate app signer**. After confirmation, BOLT12 Pay replaces only the internal signer key pair; the Notification `nsec` remains unchanged. The public signer `npub` changes, and the old signer is no longer used for future Zap receipts.
 
-The Notification `nsec` and the private app-signer key are encrypted with AES-256-GCM before they are written to `/data/config/secrets.json`. LND supplies the node-bound key material needed to unlock them. This happens automatically after every BOLT12 Pay, Umbrel, StartOS, or LND restart, so Zap notifications resume without entering a password. While LND is still starting, the app shows **Waiting for LND** and keeps the notification controls locked.
+The Notification `nsec` and the private app-signer key are encrypted with AES-256-GCM before they are written to `/data/config/secrets.json`. LND installations use node-bound key material; standalone installations use a persistent, owner-only local app key included in the app backup. Keys unlock automatically after restart. Existing LND-encrypted stores keep their original LND binding, even when Phoenixd is selected. While that LND is unavailable, their notification controls remain locked.
 
 The encrypted file is tied to the LND node that created it. If you move BOLT12 Pay to a different LND identity, the old keys cannot be decrypted there. The app then offers **Reset encrypted Nostr keys**. After confirming the reset, enter the Notification `nsec` again; BOLT12 Pay creates the new app signer automatically.
 
@@ -508,7 +508,7 @@ The encrypted file is tied to the LND node that created it. If you move BOLT12 P
 ---
 ## 🔌 Nostr Wallet Connect (NWC)
 
-BOLT12 Pay supports Nostr Wallet Connect (NWC), allowing compatible clients such as Amethyst, Primal and Damus to connect to your self-hosted LND Lightning wallet.
+BOLT12 Pay supports Nostr Wallet Connect (NWC), allowing compatible clients such as Amethyst, Primal and Damus to connect to your LND or Phoenixd wallet. Each connection remains bound to the wallet selected when it was created. The internal app signer is generated automatically on first NWC creation; a personal notification `nsec` and Zap notification setup are not required.
 
 ### Create an NWC connection
 

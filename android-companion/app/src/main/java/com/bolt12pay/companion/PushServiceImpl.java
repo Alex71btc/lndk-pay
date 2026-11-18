@@ -107,6 +107,7 @@ public final class PushServiceImpl extends PushService {
                     Math.max(0, payload.optLong("amount_sat")),
                     payload.optString("method", "lightning"),
                     payload.optString("payment_type", "payment"),
+                    payload.optString("backend", ""),
                     comment);
         } catch (Exception error) {
             new PushSettings(this).setLastError(getString(R.string.push_message_invalid));
@@ -129,6 +130,7 @@ public final class PushServiceImpl extends PushService {
             long amountSat,
             String method,
             String paymentType,
+            String backend,
             String comment) {
         NotificationManager manager = getSystemService(NotificationManager.class);
         NotificationChannel channel = manager.getNotificationChannel(CHANNEL_ID);
@@ -160,6 +162,9 @@ public final class PushServiceImpl extends PushService {
         String amount = NumberFormat.getIntegerInstance().format(amountSat);
         String title = getString(R.string.push_payment_received_title, amount);
         String paymentDescription = describePayment(method, paymentType);
+        if ("lnd".equals(backend) || "phoenixd".equals(backend)) {
+            paymentDescription += " · " + ("lnd".equals(backend) ? "LND" : "Phoenixd");
+        }
         String body =
                 privateComment.isEmpty()
                         ? paymentDescription

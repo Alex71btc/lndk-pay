@@ -81,7 +81,35 @@ for (const code of ["en", "de", "es", "fr", "pl"]) {
   assert.equal(byId("payerNoteInput").value, "keep <private> & exact");
   assert.equal(byId("txHistoryList").children.at(-1).textContent, tab.__t("history.no_transactions"));
   assert.deepEqual(requests, ["/api/setup/config"], "Language selection performed a network request");
+  const amountError = tab.errorToMessage({detail: 'ERROR (INVALID_AMOUNT): Invalid amount: 21000 is less than offer amount 23000'});
+  assert.equal(amountError, tab.__t('payment_error.offer_amount_too_low', {
+    amount: tab.formatSats(21), minimum: tab.formatSats(23),
+  }));
+  assert.ok(!amountError.includes('21000') && !amountError.includes('23000'));
+  assert.equal(tab.errorToMessage('Unrelated error 21000'), 'Unrelated error 21000');
 }
+
+// Suggestions come from the selected protocol's metadata, not from user input.
+const amountInput = byId('payAmountInput');
+amountInput.value = '';
+tab.suggestPayAmount({kind:'bolt12', minimum_amount_msat:23000, suggested_amount_sat:23});
+assert.equal(amountInput.value, '23');
+tab.suggestPayAmount({kind:'bolt12', suggested_amount_sat:21});
+assert.equal(amountInput.value, '23', 'A preview never overwrites an existing amount');
+amountInput.value = '';
+tab.suggestPayAmount({kind:'lightning_address', show_bolt12_badge:true, min_sat:21, max_sat:21, suggested_amount_sat:23});
+assert.equal(amountInput.value, '', 'Different protocol amounts require user selection');
+tab.suggestPayAmount({kind:'lightning_address', show_bolt12_badge:true, min_sat:21, max_sat:21});
+assert.equal(amountInput.value, '', 'LNURL fixed amount is not a BOLT12 minimum');
+tab.suggestPayAmount({kind:'lnurl', min_sat:21, max_sat:21});
+assert.equal(amountInput.value, '21');
+amountInput.value = '';
+tab.renderLoadedPayPreview({kind:'lightning_address', show_bolt12_badge:true,
+  minimum_amount_msat:21000, suggested_amount_sat:21, min_sat:21, max_sat:21});
+assert.equal(amountInput.value, '21');
+assert.ok(byId('payPreviewMeta').textContent.includes(tab.__t('preview.bolt12_minimum', {amount:tab.formatSats(21)})));
+assert.ok(byId('payPreviewMeta').textContent.includes(tab.__t('preview.lnurl_fixed', {amount:tab.formatSats(21)})));
+amountInput.value = '123';
 
 (async () => {
   const dialog = byId("qrActionsDialog");

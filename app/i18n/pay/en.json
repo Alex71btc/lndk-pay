@@ -283,7 +283,7 @@
   "label.nostr_keys_encrypted_unlocked": "🔒 Nostr keys are encrypted and were unlocked automatically",
   "label.nostr_keys_waiting_for_lnd": "⏳ Waiting to unlock the encrypted Nostr keys",
   "label.nostr_keys_encryption_error": "⚠️ The encrypted Nostr keys could not be unlocked",
-  "hint.notification_initialize": "When initialized, BOLT12 Pay validates and encrypts your notification nsec. If no internal app signer exists yet, the required key pair is created automatically in the background. LND automatically unlocks both keys after every app or node restart; private keys are never displayed.",
+  "hint.notification_initialize": "Initialization validates and encrypts your notification nsec. The internal app signer is created automatically if needed. Keys unlock after restart using the original LND or, for a standalone installation, a local app key. Private keys are never displayed.",
   "hint.app_signer_keypair": "BOLT12 Pay creates a key pair for this. Only the public npub is shown here; the private nsec remains hidden.",
   "hint.regenerate_app_signer": "Use this only if the app signer is faulty or compromised. The notification nsec is not changed.",
   "hint.notification_profile_match": "Use the nsec of the same Nostr profile in which you entered your Zap-enabled Lightning Address. The npub shown after initialization must match the saved Identity.",
@@ -550,5 +550,11 @@
   "backend.inspect_html": "Web page instead of LNURL metadata: use the voucher QR code.",
   "backend.inspect_host": "Different callback host: check its address and certificate.",
   "backend.name_lnd": "LND",
-  "backend.name_phoenixd": "Phoenixd"
+  "backend.name_phoenixd": "Phoenixd",
+  "hint.nwc_internal_key": "NWC creates its internal app key automatically. You do not need to enter a personal notification nsec or set up Zap notifications.",
+  "label.nostr_keys_unlocked_local": "🔒 Nostr keys are encrypted and unlocked automatically using the local app key",
+  "label.nostr_keys_waiting_original_lnd": "⏳ This existing key store requires its original LND to unlock. Its keys are preserved.",
+  "payment_error.offer_amount_too_low": "Amount too low: {amount}. This offer requires at least {minimum}.",
+  "preview.lnurl_fixed": "LNURL: exactly {amount}",
+  "preview.bolt12_minimum": "BOLT12: at least {amount}"
 }

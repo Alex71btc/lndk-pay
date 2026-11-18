@@ -109,6 +109,18 @@ class CompanionPushTests(unittest.TestCase):
         self.assertNotIn("payer_note", payload)
         self.assertEqual(delivery_count, 1)
 
+    def test_payload_backend_is_receiving_family_without_internal_wallet_id(self):
+        for backend_id, expected in ((None, "lnd"), ("lnd-default", "lnd"),
+                                     ("phoenixd-private-wallet-id", "phoenixd"),
+                                     ("unknown-private-wallet-id", None)):
+            with self.subTest(backend_id=backend_id):
+                item = {"amount_sat": 21, "backend_id": backend_id}
+                raw = companion_push._payment_payload("event-test", item)
+                payload = json.loads(raw)
+                self.assertEqual(payload.get("backend"), expected)
+                self.assertNotIn("backend_id", payload)
+                self.assertNotIn("private-wallet-id", raw)
+
     def test_comment_sources_distinguish_sender_text_from_invoice_description(self):
         self.assertEqual(
             companion_push._payment_comment_details(

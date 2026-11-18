@@ -26,9 +26,19 @@ All notable changes to this project will be documented in this file.
   dismissing the dialog and refresh verification after alias changes.
 - Import Phoenixd payment history alongside LND history, preserving the wallet
   and direction of each transaction.
+- Preview BOLT12 minimum amounts locally and suggest them in an empty Pay amount
+  field. Distinguish offer minimums from exact LNURL amounts; keep user-entered
+  amounts and do not guess currency, quantity or conflicting protocol amounts.
+- Show the receiving backend consistently in browser receipt toasts and include
+  its family in encrypted Companion push messages. Android display support is
+  prepared in source; it requires an updated Companion APK.
 
 ### Fixed
 
+- Create the internal encrypted app signer automatically on first NWC setup,
+  without requiring a notification nsec or Zap configuration. Standalone mode
+  can initialize an empty legacy LND envelope; existing encrypted identities
+  retain their original key binding. Explain local versus LND key unlocking.
 - Publish alias BIP353 records under the receiving address domain, including
   subdomains and configurations with a separate LNURL domain. DNS verification
   checks the canonical address instead of trusting a legacy saved DNS name.
@@ -51,6 +61,19 @@ All notable changes to this project will be documented in this file.
 - Normalize LND signing responses for LNURL authentication and accept known
   plain-text Phoenixd offer/authentication responses.
 - Explain LNURL TLS and callback failures and add a read-only link inspection.
+- Diagnose Cloudflare Tunnel 1033 and HTML access pages instead of reporting
+  only invalid LNURL JSON, without exposing voucher URLs or response bodies.
+- Display the known BOLT12 invalid-amount error in sats in all five languages,
+  preserving the exact millisatoshi values sent to the backend.
+- Follow validated HTTPS redirects when fetching LND withdrawal metadata and
+  distinguish metadata/callback HTML and proxy errors. Withdrawal callbacks
+  are never automatically followed or retried.
+- Preserve existing LNURL-withdraw callback query parameters when appending
+  the LND invoice and challenge. LNbits voucher state such as id_unique_hash
+  was previously lost, causing the service to reject otherwise valid requests.
+- Unwrap LNbits wallet-launch links containing a lightning=LNURL query when
+  pasting into LND Auth/Withdraw or inspecting a link, matching QR handling.
+  Preserve HTTPS validation and the service's own callback query parameters.
 - Include the LNDK CLI and reuse the existing LNDK sidecar in the isolated
   dual-backend test launcher, including after a host restart.
 

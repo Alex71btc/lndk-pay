@@ -23,7 +23,7 @@
     </script>
     <meta name="theme-color" content="#0f172a" />
     <script src="/assets/i18n/runtime.js?v=0.3.26"></script>
-    <script src="/assets/i18n/pay.js?v=0.3.26"></script>
+    <script src="/assets/i18n/pay.js?v=0.3.26&amp;rev=5"></script>
     <script>window.Bolt12I18n.use("pay");</script>
     <link rel="manifest" href="/pay.webmanifest" />
     <script
@@ -345,6 +345,9 @@
 
       .payInputRow input.copyablePaymentAddress {
         cursor: copy;
+      }
+      .payInputRow input.copyablePaymentAddress:focus {
+        cursor: text;
       }
 
       .payAppVersion {
@@ -1338,7 +1341,7 @@
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
 <link rel="stylesheet" href="/assets/channel-liquidity.css?v=2">
 <script defer src="/assets/channel-liquidity.js?v=4"></script>
-<script defer src="/assets/payment-notifications.js?v=0.3.26-3"></script>
+<script defer src="/assets/payment-notifications.js?v=0.3.26-4"></script>
     <script src="/assets/lightning-backend.js?v=0.3.26" defer></script>
 </head>
   <body>
@@ -2305,6 +2308,7 @@
           >
         </div>
 
+        <div class="hint" data-i18n="hint.nwc_internal_key"></div>
         <div class="row" style="margin-top: 14px">
           <button class="secondary" id="unlockNwcBtn" type="button">
             <span data-i18n="btn.nwc_unlock">Unlock NWC</span>
@@ -4770,6 +4774,7 @@
           renderNwcQr(uri);
 
           await loadNwcConnections();
+          await loadNostrStatus();
           setStatus(window.__t("nwc.created"));
         } catch (err) {
           setStatus(
@@ -7857,6 +7862,26 @@
         if (payPreviewMeta) payPreviewMeta.textContent = "";
       }
 
+      function suggestPayAmount(data) {
+        if (payAmountInput.value.trim() || payAmountInput.disabled) return;
+        const offerAmount = Number(data?.suggested_amount_sat || 0);
+        const lnurlFixed = Number(data?.min_sat) > 0 && Number(data.min_sat) === Number(data?.max_sat)
+          ? Number(data.min_sat) : 0;
+        // A dual address may have different constraints on its two payment paths.
+        const hasBolt12 = data?.kind === "bolt12" || data?.show_bolt12_badge;
+        const suggested = hasBolt12
+          ? (lnurlFixed && lnurlFixed !== offerAmount ? 0 : offerAmount)
+          : lnurlFixed;
+        if (Number.isSafeInteger(suggested) && suggested > 0) {
+          payAmountInput.value = String(suggested);
+        }
+      }
+
+      function renderLoadedPayPreview(data) {
+        suggestPayAmount(data);
+        renderPayPreview(data);
+      }
+
       function renderPayPreview(data) {
         if (!payLivePreview) return;
 
@@ -7890,8 +7915,18 @@
           if (data.kind === "bolt12") metaParts.push(window.__t("history.bolt12_offer"));
         }
         if (data?.amount_sat) metaParts.push(`${formatSats(data.amount_sat)}`);
-        if (data?.min_sat || data?.max_sat)
-          metaParts.push(`${data.min_sat || 0} - ${data.max_sat || 0} sats`);
+        if (data?.min_sat || data?.max_sat) {
+          if (Number(data.min_sat) > 0 && Number(data.min_sat) === Number(data.max_sat)) {
+            metaParts.push(window.__t("preview.lnurl_fixed", {amount: formatSats(data.min_sat)}));
+          } else {
+            metaParts.push(`LNURL: ${data.min_sat || 0} - ${data.max_sat || 0} sats`);
+          }
+        }
+        if (data?.minimum_amount_msat) {
+          metaParts.push(window.__t("preview.bolt12_minimum", {
+            amount: formatSats(Number(data.minimum_amount_msat) / 1000),
+          }));
+        }
         if (data?.comment_allowed)
           metaParts.push(window.__t("preview.comment_limit", {count: data.comment_allowed}));
         if (data?.allows_nostr === true || data?.allowsNostr === true)
@@ -7932,7 +7967,7 @@
           (!rawInput.includes("@") || rawInput.endsWith("@"))
         )
           return;
-        if (!["bolt11", "ambiguous_address", "lnurl"].includes(kind)) return;
+        if (!["bolt11", "bolt12", "ambiguous_address", "lnurl"].includes(kind)) return;
 
         if (kind === "bolt11") {
           payAmountInput.value = "";
@@ -7951,7 +7986,7 @@
             });
 
             const data = await readJsonOrThrow(response);
-            if (inputIsCurrent()) renderPayPreview(data);
+            if (inputIsCurrent()) renderLoadedPayPreview(data);
           } catch {}
           return;
         }
@@ -7970,7 +8005,7 @@
             const lnurl = resolution?.lnurl || {};
 
             if (lnurl.available) {
-              renderPayPreview({
+              renderLoadedPayPreview({
                 kind: "lightning_address",
                 titleKey: "history.lightning_address",
                 description: lnurl.description || "",
@@ -7979,10 +8014,14 @@
                 min_sat: lnurl.min_sat || 0,
                 max_sat: lnurl.max_sat || 0,
                 show_bolt12_badge: bolt12Available,
+                minimum_amount_msat: resolution?.bolt12?.minimum_amount_msat,
+                suggested_amount_sat: resolution?.bolt12?.suggested_amount_sat,
               });
             } else if (bolt12Available) {
-              renderPayPreview({
+              renderLoadedPayPreview({
                 kind: "bolt12",
+                minimum_amount_msat: resolution?.bolt12?.minimum_amount_msat,
+                suggested_amount_sat: resolution?.bolt12?.suggested_amount_sat,
                 titleKey: "pay.preview.bolt12_address",
                 description: "",
                 image_data_url: "",
@@ -7993,7 +8032,7 @@
           return;
         }
 
-        if (kind === "lnurl") {
+        if (kind === "lnurl" || kind === "bolt12") {
           try {
             const response = await fetch("/api/preview-pay-target", {
               method: "POST",
@@ -8002,7 +8041,7 @@
             });
 
             const data = await readJsonOrThrow(response);
-            if (inputIsCurrent()) renderPayPreview(data);
+            if (inputIsCurrent()) renderLoadedPayPreview(data);
           } catch {}
           return;
         }
@@ -8027,26 +8066,35 @@
         return "";
       }
 
+      function formatPaymentError(message) {
+        const text = String(message);
+        // LNDK/Phoenixd's INVALID_AMOUNT response uses millisatoshis.
+        // Convert only this known error; leave all payment request values intact.
+        const amounts = text.match(/invalid amount:\s*(\d+)\s+is less than offer amount\s+(\d+)/i);
+        if (amounts && amounts.slice(1).every(value => Number.isSafeInteger(Number(value)))) {
+          return window.__t("payment_error.offer_amount_too_low", {
+            amount: formatSats(Number(amounts[1]) / 1000),
+            minimum: formatSats(Number(amounts[2]) / 1000),
+          });
+        }
+        return text;
+      }
+
       function errorToMessage(error) {
         if (!error) return window.__t("error.unknown");
-
-        if (typeof error === "string") return error;
-
+        if (typeof error === "string") return formatPaymentError(error);
         if (error instanceof Error)
-          return error.message || window.__t("error.unknown");
-
+          return formatPaymentError(error.message || window.__t("error.unknown"));
         if (typeof error === "object") {
-          if (typeof error.detail === "string") return error.detail;
-          if (typeof error.error === "string") return error.error;
-          if (typeof error.message === "string") return error.message;
-
+          if (typeof error.detail === "string") return formatPaymentError(error.detail);
+          if (typeof error.error === "string") return formatPaymentError(error.error);
+          if (typeof error.message === "string") return formatPaymentError(error.message);
           try {
             return JSON.stringify(error);
           } catch {
             return String(error);
           }
         }
-
         return String(error);
       }
 
@@ -8128,10 +8176,14 @@
         if (nostrSecretStoreStatus) {
           const statusKey =
             secretStoreState === "unlocked"
-              ? "label.nostr_keys_encrypted_unlocked"
+              ? (secretStore.provider === 'local-file-v1'
+                  ? 'label.nostr_keys_unlocked_local'
+                  : "label.nostr_keys_encrypted_unlocked")
               : secretStoreState === "error"
                 ? "label.nostr_keys_encryption_error"
-                : "label.nostr_keys_waiting_for_lnd";
+                : secretStore.provider === 'lnd-ecdh-v1'
+                  ? 'label.nostr_keys_waiting_original_lnd'
+                  : "label.nostr_keys_waiting_for_lnd";
           nostrSecretStoreStatus.dataset.i18n = statusKey;
           nostrSecretStoreStatus.textContent = window.__t(statusKey);
         }

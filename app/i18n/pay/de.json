@@ -283,7 +283,7 @@
   "label.nostr_keys_encrypted_unlocked": "🔒 Nostr-Schlüssel sind verschlüsselt und wurden automatisch entsperrt",
   "label.nostr_keys_waiting_for_lnd": "⏳ Die verschlüsselten Nostr-Schlüssel werden entsperrt",
   "label.nostr_keys_encryption_error": "⚠️ Die verschlüsselten Nostr-Schlüssel konnten nicht entsperrt werden",
-  "hint.notification_initialize": "Beim Initialisieren prüft und verschlüsselt BOLT12 Pay deinen Notification-nsec. Falls noch kein interner App-Signierer existiert, wird das benötigte Schlüsselpaar automatisch im Hintergrund erzeugt. LND entsperrt beide Schlüssel nach jedem App- oder Node-Neustart automatisch; die privaten Schlüssel werden nie angezeigt.",
+  "hint.notification_initialize": "Beim Initialisieren prüft und verschlüsselt BOLT12 Pay deinen Notification-nsec. Der interne App-Signierer wird bei Bedarf automatisch erzeugt. Nach einem Neustart entsperrt der ursprüngliche LND die Schlüssel oder bei einer eigenständigen Installation ein lokaler App-Schlüssel. Private Schlüssel werden nie angezeigt.",
   "hint.app_signer_keypair": "BOLT12 Pay erzeugt dafür ein Schlüsselpaar. Hier wird nur der öffentliche npub angezeigt; der private nsec bleibt verborgen.",
   "hint.regenerate_app_signer": "Nur verwenden, wenn der App-Signierer fehlerhaft oder kompromittiert ist. Der Notification-nsec wird dabei nicht verändert.",
   "hint.notification_profile_match": "Verwende den nsec desselben Nostr-Profils, in dem du deine Zap-fähige Lightning Address eingetragen hast. Der nach dem Initialisieren angezeigte npub muss zur gespeicherten Identity passen.",
@@ -550,5 +550,11 @@
   "backend.inspect_html": "Webseite statt LNURL-Metadaten: den Voucher-QR-Code verwenden.",
   "backend.inspect_host": "Abweichender Callback-Host: dessen Adresse und Zertifikat prüfen.",
   "backend.name_lnd": "LND",
-  "backend.name_phoenixd": "Phoenixd"
+  "backend.name_phoenixd": "Phoenixd",
+  "hint.nwc_internal_key": "NWC erzeugt seinen internen App-Schlüssel automatisch. Dafür musst du keinen persönlichen Notification-nsec eingeben und keine Zap-Benachrichtigungen einrichten.",
+  "label.nostr_keys_unlocked_local": "🔒 Nostr-Schlüssel sind verschlüsselt und werden mit dem lokalen App-Schlüssel automatisch entsperrt",
+  "label.nostr_keys_waiting_original_lnd": "⏳ Dieser vorhandene Schlüsselspeicher benötigt seinen ursprünglichen LND zum Entsperren. Seine Schlüssel bleiben erhalten.",
+  "payment_error.offer_amount_too_low": "Betrag zu niedrig: {amount}. Dieses Offer verlangt mindestens {minimum}.",
+  "preview.lnurl_fixed": "LNURL: genau {amount}",
+  "preview.bolt12_minimum": "BOLT12: mindestens {amount}"
 }

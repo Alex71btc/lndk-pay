@@ -801,6 +801,11 @@ def _payment_payload(event_id: str, item: dict[str, Any]) -> str:
         "method": str(item.get("method") or "lightning")[:40],
         "payment_type": str(item.get("type") or "payment")[:40],
     }
+    backend_id = str(item.get('backend_id') or 'lnd-default')
+    if backend_id == 'lnd-default':
+        payload_data['backend'] = 'lnd'
+    elif backend_id.startswith('phoenixd-'):
+        payload_data['backend'] = 'phoenixd'
     comment, comment_source = _payment_comment_details(item)
     if comment:
         payload_data["comment"] = comment

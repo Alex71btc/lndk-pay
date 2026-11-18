@@ -36,6 +36,10 @@ async def main():
             'bolt12_error': result['bolt12']['error'][:500],
             'offer_length': len(offer),
             'offer_sha256': hashlib.sha256(offer.encode()).hexdigest() if offer else '',
+            'saved_alias_offer_sha256': hashlib.sha256(alias['last_offer'].encode()).hexdigest()
+                if isinstance(alias, dict) and alias.get('last_offer') else '',
+            'dns_offer_matches_saved_alias': offer == alias.get('last_offer')
+                if offer and isinstance(alias, dict) and alias.get('last_offer') else None,
             'lnurl_error': result['lnurl']['error'][:500],
             'lnurl_min_sat': result['lnurl']['min_sat'],
             'lnurl_max_sat': result['lnurl']['max_sat'],
