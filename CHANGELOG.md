@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.3.26] - 2026-11-18
 
 ### Added
 
@@ -32,8 +32,8 @@ All notable changes to this project will be documented in this file.
   field. Distinguish offer minimums from exact LNURL amounts; keep user-entered
   amounts and do not guess currency, quantity or conflicting protocol amounts.
 - Show the receiving backend consistently in browser receipt toasts and include
-  its family in encrypted Companion push messages. Android display support is
-  prepared in source; it requires an updated Companion APK.
+  its family in encrypted Companion push messages. Android Companion 1.1.4 displays the receiving backend and
+  opens the matching payment directly in Lightning Activity.
 
 ### Fixed
 
@@ -81,17 +81,26 @@ All notable changes to this project will be documented in this file.
 - Include the LNDK CLI and reuse the existing LNDK sidecar in the isolated
   dual-backend test launcher, including after a host restart.
 
+### Release highlights
+
+- Android Companion 1.1.4 with payment-specific notification deep links,
+  automatic transaction highlighting and preserved full history.
+- Wallet filters and date-based CSV export in Lightning Activity.
+- Improved Setup layout with backend selection first.
+- Live-tested Phoenixd-only, LND and dual-backend operation.
+- Existing Umbrel installations retain their LND integration;
+  Phoenixd is available as an additional backend.
+
 ### Upgrade notes
 
-- The next planned app version is 0.3.26. Existing history migrates
+- App version 0.3.26. Existing history migrates
   automatically to wallet/direction/payment-hash keys. Before migration, the
   app automatically snapshots the database and configuration under
   `backups/before-wallet-history-v1`; no manual backup is required to upgrade.
   Returning to the older schema requires restoring that automatic snapshot.
 - Existing LND addresses and NWC connections retain LND. New aliases and NWC
   connections use the selected wallet and retain it after later switches.
-- Phoenixd Keysend is not exposed by this integration. Real LND LNURL-withdraw
-  settlement against a separate funding node remains unverified.
+- Phoenixd Keysend is not exposed by this integration. LNURL-withdraw and LNURL-auth have been tested with both LND and Phoenixd.
 
 ## [0.3.25] - 2026-11-16
 
