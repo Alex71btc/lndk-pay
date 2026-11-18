@@ -164,8 +164,11 @@
         </div></fieldset>
         <div class="row"><button id="saveBackendBtn" type="button" data-backend-text="save"></button></div>
         <p id="backendResult" role="status" style="overflow-wrap:anywhere"></p>`;
-      // This section has its own Save button; public addresses are untouched.
-      setup.append(panel);
+      // Backend choice comes before domain/DNS settings on a fresh installation.
+      // Keep both Save buttons independent; do not reset the selected wallet.
+      const generalSetup = setup.querySelector(':scope > section.section');
+      if (generalSetup) setup.insertBefore(panel, generalSetup);
+      else setup.append(panel);
       const result = panel.querySelector('#backendResult');
       async function submit(test) {
         const buttons = panel.querySelectorAll('button');

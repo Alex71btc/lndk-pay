@@ -14,6 +14,20 @@ def run(script):
 
 
 class BackendUiTests(unittest.TestCase):
+    def test_setup_starts_with_backend_and_keeps_version_footer_last(self):
+        setup = (APP / 'frontend/public/index.html').read_text()
+        script = (APP / 'assets/lightning-backend.js').read_text()
+        # Backend panel belongs after the setup heading, before the general settings.
+        self.assertIn("setup.querySelector(':scope > section.section')", script)
+        self.assertIn('setup.insertBefore(panel, generalSetup)', script)
+        self.assertIn('if (generalSetup)', script)
+        self.assertIn("panel.id = 'lightningBackendPanel'", script)
+        self.assertIn('id="saveBackendBtn"', script)
+        self.assertIn('id="saveSetupBtn"', setup)
+        setup_body = setup.split('<main class="card" id="setupCard"', 1)[1].split('</main>', 1)[0]
+        self.assertLess(setup_body.index('id="saveSetupBtn"'), setup_body.index('id="setupAppVersion"'))
+        self.assertIn('<section class="section">', setup_body)
+
     def test_nwc_activity_preserves_actual_backend_after_method_override(self):
         source = (APP/'frontend/admin/index.html').read_text()
         start = source.index('          const method = item.method;')
