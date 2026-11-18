@@ -26,6 +26,8 @@ All notable changes to this project will be documented in this file.
   dismissing the dialog and refresh verification after alias changes.
 - Import Phoenixd payment history alongside LND history, preserving the wallet
   and direction of each transaction.
+- Filter Lightning Activity by wallet and export the selected wallets and date
+  range as CSV. Preserve both sides of payments between wallets.
 - Preview BOLT12 minimum amounts locally and suggest them in an empty Pay amount
   field. Distinguish offer minimums from exact LNURL amounts; keep user-entered
   amounts and do not guess currency, quantity or conflicting protocol amounts.

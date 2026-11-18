@@ -74,10 +74,10 @@ const assert=require('node:assert/strict');
 const hash='a'.repeat(64);
 const lnd={backend_id:'lnd-default',direction:'incoming',payment_hash:hash};
 const phoenix={backend_id:'phoenixd-test',direction:'outgoing',payment_hash:hash};
-let txHistoryItems=[lnd],txHistoryHasMore=true;
+let txHistoryItems=[lnd],txHistoryHasMore=true,txHistoryScope=0;
 const TX_HISTORY_PAGE_SIZE=50;
 let next={items:[phoenix],has_more:false};
-const fetchTxHistoryPage=async()=>next;
+let fetchTxHistoryPage=async()=>next;
 ''' + functions + '''
 (async()=>{
  await loadMoreTxHistory();
@@ -88,7 +88,55 @@ const fetchTxHistoryPage=async()=>next;
  assert.equal(txHistoryItems[0].status,'settled');
  assert.equal(txHistoryItems[1].backend_id,'lnd-default');
  await loadMoreTxHistory(); assert.equal(txHistoryItems.length,2);
+ let finishOldRequest;
+ fetchTxHistoryPage=()=>new Promise(resolve=>{finishOldRequest=resolve});
+ const oldRequest=loadMoreTxHistory();
+ txHistoryScope++;
+ txHistoryItems=[phoenix];
+ finishOldRequest({items:[lnd],has_more:false});
+ assert.equal(await oldRequest,null);
+ assert.deepEqual(txHistoryItems,[phoenix]);
 })().catch(e=>{console.error(e);process.exitCode=1});
+''')
+
+    def test_activity_export_uses_wallet_and_local_calendar_day(self):
+        source = (APP / 'frontend/admin/index.html').read_text()
+        handler = source[source.index('      const txHistoryExportForm ='):source.index('      const txHistorySection =')]
+        run('''
+const assert = require('node:assert/strict');
+process.env.TZ = 'Europe/Berlin';
+let submit, requested, filename;
+const button = {disabled:false};
+const fields = {
+ txHistoryExportForm:{addEventListener:(name,fn)=>{submit=fn},querySelector:()=>button},
+ txHistoryExportFrom:{value:'2026-03-29'},
+ txHistoryExportTo:{value:'2026-03-29'},
+ txHistoryExportStatus:{hidden:true},
+};
+const txHistoryWallet = {value:'phoenixd'};
+const document = {
+ getElementById:id=>fields[id],
+ createElement:()=>({click(){filename=this.download}}),
+};
+const window = {__t:key=>key};
+const fetch = async (path) => {
+ requested = new URL(path,'http://localhost');
+ return new Response('wallet\\r\\nPhoenixd\\r\\n',{headers:{'content-type':'text/csv'}});
+};
+''' + handler + '''
+(async()=>{
+ await submit({preventDefault(){},submitter:button});
+ const params=requested.searchParams;
+ assert.equal(params.get('wallet'),'phoenixd');
+ assert.equal(params.get('since'),String(Date.parse('2026-03-28T23:00:00Z')/1000));
+ assert.equal(params.get('before'),String(Date.parse('2026-03-29T22:00:00Z')/1000));
+ assert.equal(filename,'bolt12-pay-activity.csv');
+ assert.equal(button.disabled,false);
+ fields.txHistoryExportFrom.value='2026-03-30';
+ await submit({preventDefault(){},submitter:button});
+ assert.equal(fields.txHistoryExportStatus.textContent,'history.export_invalid_dates');
+ assert.equal(fields.txHistoryExportStatus.hidden,false);
+})().catch(error=>{console.error(error);process.exitCode=1});
 ''')
 
     def test_invoice_strings_are_technical_but_addresses_remain_visible(self):

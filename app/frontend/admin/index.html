@@ -23,7 +23,7 @@
     </script>
     <meta name="theme-color" content="#0f172a" />
     <script src="/assets/i18n/runtime.js?v=0.3.26"></script>
-    <script src="/assets/i18n/pay.js?v=0.3.26&amp;rev=5"></script>
+    <script src="/assets/i18n/pay.js?v=0.3.26&amp;rev=6"></script>
     <script>window.Bolt12I18n.use("pay");</script>
     <link rel="manifest" href="/pay.webmanifest" />
     <script
@@ -254,6 +254,35 @@
         gap: 12px;
         flex-wrap: wrap;
         margin-top: 14px;
+      }
+
+      .txHistoryControls,
+      .txHistoryExport .row {
+        align-items: end;
+      }
+
+      .txHistoryControls label,
+      .txHistoryExport label {
+        display: grid;
+        gap: 4px;
+        margin: 0;
+      }
+
+      #txHistoryWallet {
+        color: var(--text);
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: inherit;
+      }
+
+      #txHistorySearchInput {
+        flex: 1 1 15rem;
+      }
+
+      .txHistoryExport {
+        margin: 12px 0;
       }
 
       button {
@@ -1826,15 +1855,40 @@
           </span>
         </summary>
 
-      <div class="row" style="margin-top: 12px;">
+      <div class="row txHistoryControls">
+        <label for="txHistoryWallet">
+          <span data-i18n="history.wallet_filter">Wallet</span>
+          <select id="txHistoryWallet">
+            <option value="" data-i18n="history.wallet_all">All</option>
+            <option value="lnd" data-i18n="backend.name_lnd">LND</option>
+            <option value="phoenixd" data-i18n="backend.name_phoenixd">Phoenixd</option>
+          </select>
+        </label>
         <input
           id="txHistorySearchInput"
           type="search"
           data-i18n-placeholder="history.search_placeholder"
+          data-i18n-aria-label="history.search_placeholder"
           placeholder="Transaktionen durchsuchen..."
           autocomplete="off"
         />
       </div>
+
+      <details class="txHistoryExport txSubDetails">
+        <summary><span data-i18n="history.export_csv">CSV export</span></summary>
+        <form id="txHistoryExportForm" class="row">
+          <label for="txHistoryExportFrom">
+            <span data-i18n="history.export_from">From</span>
+            <input id="txHistoryExportFrom" type="date" />
+          </label>
+          <label for="txHistoryExportTo">
+            <span data-i18n="history.export_to">Through</span>
+            <input id="txHistoryExportTo" type="date" />
+          </label>
+          <button class="secondary" type="submit" data-i18n="history.export_download">Download CSV</button>
+        </form>
+        <p class="small" id="txHistoryExportStatus" role="status" hidden></p>
+      </details>
 
       <div id="txHistoryList" class="historyList"></div>
 
@@ -6663,6 +6717,7 @@
       let txHistoryItems = [];
       let txHistoryHasMore = true;
       let txHistorySearchQuery = "";
+      let txHistoryScope = 0;
       function plainSatsValue(value) {
         const numericValue = Number(value);
         if (!Number.isFinite(numericValue)) return "0";
@@ -6733,8 +6788,6 @@
         offset = 0,
         searchQuery = txHistorySearchQuery,
       ) {
-        console.time("GET /api/tx-history");
-
         const params = new URLSearchParams({
           limit: String(TX_HISTORY_PAGE_SIZE),
           offset: String(offset),
@@ -6742,6 +6795,9 @@
 
         if (searchQuery) {
           params.set("q", searchQuery);
+        }
+        if (txHistoryWallet.value) {
+          params.set("wallet", txHistoryWallet.value);
         }
 
         const response = await fetch(
@@ -6751,8 +6807,6 @@
             cache: "no-store",
           },
         );
-
-        console.timeEnd("GET /api/tx-history");
 
         if (!response.ok) {
           throw new Error(window.__t("history.load_failed"));
@@ -6766,7 +6820,9 @@
       }
 
       async function loadTxHistory() {
+        const scope = txHistoryScope;
         const data = await fetchTxHistoryPage(0);
+        if (scope !== txHistoryScope) return null;
         const newestItems = data.items || [];
 
         if (!txHistoryItems.length) {
@@ -6796,7 +6852,9 @@
       }
 
       async function loadMoreTxHistory() {
+        const scope = txHistoryScope;
         const data = await fetchTxHistoryPage(txHistoryItems.length);
+        if (scope !== txHistoryScope) return null;
         const newItems = data.items || [];
 
         const existingHashes = new Set(
@@ -6851,7 +6909,8 @@
       }
 
       window.renderTxHistory = async function renderTxHistory() {
-        renderTxHistoryItems(await loadTxHistory());
+        const items = await loadTxHistory();
+        if (items) renderTxHistoryItems(items);
       };
 
       function renderTxHistoryItems(items) {
@@ -7294,8 +7353,8 @@
           btn.disabled = true;
 
           try {
-            await loadMoreTxHistory();
-            await window.renderTxHistory();
+            const items = await loadMoreTxHistory();
+            if (items) renderTxHistoryItems(items);
           } catch (error) {
             console.error("Failed to load older tx history:", error);
           } finally {
@@ -7306,26 +7365,80 @@
       const txHistorySearchInput =
         document.getElementById("txHistorySearchInput");
 
+      const txHistoryWallet = document.getElementById("txHistoryWallet");
       let txHistorySearchTimer = null;
 
-      txHistorySearchInput?.addEventListener("input", () => {
-        if (txHistorySearchTimer) {
-          clearTimeout(txHistorySearchTimer);
+      async function reloadTxHistoryScope() {
+        clearTimeout(txHistorySearchTimer);
+        txHistorySearchQuery = txHistorySearchInput.value.trim();
+        txHistoryScope += 1;
+        txHistoryItems = [];
+        txHistoryHasMore = false;
+        renderTxHistoryItems(txHistoryItems);
+
+        try {
+          await window.renderTxHistory();
+        } catch (error) {
+          console.error("Failed to reload tx history:", error);
+        }
+      }
+
+      txHistorySearchInput.addEventListener("input", () => {
+        clearTimeout(txHistorySearchTimer);
+        txHistorySearchTimer = setTimeout(reloadTxHistoryScope, 250);
+      });
+      txHistoryWallet.addEventListener("change", reloadTxHistoryScope);
+
+      const txHistoryExportForm = document.getElementById("txHistoryExportForm");
+      txHistoryExportForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const from = document.getElementById("txHistoryExportFrom").value;
+        const to = document.getElementById("txHistoryExportTo").value;
+        const status = document.getElementById("txHistoryExportStatus");
+        if (from && to && from > to) {
+          status.textContent = window.__t("history.export_invalid_dates");
+          status.hidden = false;
+          return;
         }
 
-        txHistorySearchTimer = setTimeout(async () => {
-          txHistorySearchQuery =
-            txHistorySearchInput.value.trim();
+        const params = new URLSearchParams();
+        if (txHistoryWallet.value) params.set("wallet", txHistoryWallet.value);
+        // The selected dates are local calendar days. The upper limit is midnight
+        // at the start of the following day, including across DST transitions.
+        if (from) {
+          const start = new Date(from + "T00:00:00");
+          params.set("since", String(start.getTime() / 1000));
+        }
+        if (to) {
+          const end = new Date(to + "T00:00:00");
+          end.setDate(end.getDate() + 1);
+          params.set("before", String(end.getTime() / 1000));
+        }
 
-          txHistoryItems = [];
-          txHistoryHasMore = true;
-
-          try {
-            await window.renderTxHistory();
-          } catch (error) {
-            console.error("Failed to search tx history:", error);
+        const button = event.submitter || txHistoryExportForm.querySelector("button");
+        status.hidden = true;
+        button.disabled = true;
+        try {
+          const response = await fetch("/api/tx-history/export.csv?" + params, {
+            credentials: "same-origin",
+            cache: "no-store",
+          });
+          if (!response.ok || !response.headers.get("content-type")?.startsWith("text/csv")) {
+            throw new Error("Activity export failed");
           }
-        }, 250);
+
+          const url = URL.createObjectURL(await response.blob());
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "bolt12-pay-activity.csv";
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (error) {
+          status.textContent = window.__t("history.export_failed");
+          status.hidden = false;
+        } finally {
+          button.disabled = false;
+        }
       });
 
       const txHistorySection =
@@ -7333,6 +7446,8 @@
 
       txHistorySection?.addEventListener("toggle", async () => {
         if (!txHistorySection.open) {
+          clearTimeout(txHistorySearchTimer);
+          txHistoryScope += 1;
           txHistoryItems = [];
           txHistoryHasMore = true;
           txHistorySearchQuery = "";

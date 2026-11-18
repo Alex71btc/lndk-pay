@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import json
 import math
 import os
@@ -28,7 +29,7 @@ import base64
 import bech32
 import sqlite3
 from datetime import datetime, timezone
-from io import BytesIO
+from io import BytesIO, StringIO
 from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.responses import FileResponse, Response, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -715,14 +716,28 @@ def _log_tx(
         "raw_json": raw_json or {},
     })
 
+HistoryWallet = Literal["lnd", "phoenixd"]
+
+
 def list_tx_history(
     limit: int = 50,
     offset: int = 0,
     search: str = "",
     backend_id: str | None = None,
+    *,
+    wallet: HistoryWallet | None = None,
 ):
     safe_limit = max(1, min(int(limit or 50), 200))
     safe_offset = max(0, int(offset or 0))
+    items = _read_tx_history(search, backend_id, wallet)
+    return items[safe_offset : safe_offset + safe_limit]
+
+
+def _read_tx_history(
+    search: str = "",
+    backend_id: str | None = None,
+    wallet: HistoryWallet | None = None,
+):
     search_value = str(search or "").strip().lower()
 
     where_sql = ""
@@ -760,6 +775,11 @@ def list_tx_history(
         where_sql += " AND tx_history.backend_id = ?" if where_sql else " WHERE tx_history.backend_id = ?"
         params.append(backend_id)
 
+    if wallet is not None:
+        where_sql += " AND " if where_sql else " WHERE "
+        where_sql += "tx_history.backend_id GLOB ?"
+        params.append("phoenixd-*" if wallet == "phoenixd" else lightning_backends.LND_ID)
+
     with _db_conn() as conn:
         rows = conn.execute(
             f"""
@@ -781,9 +801,7 @@ def list_tx_history(
 
         items.append(item)
 
-    items = _collapse_bolt12_outgoing_history(items)
-
-    return items[safe_offset : safe_offset + safe_limit]
+    return _collapse_bolt12_outgoing_history(items)
 
 
 BOLT12_OUTGOING_MATCH_WINDOW_SECONDS = 30
@@ -879,8 +897,13 @@ def _collapse_bolt12_outgoing_history(
     return [
         item
         for item in collapsed
-        if item.get("backend_id", "lnd-default") != "lnd-default"
-        or str(item.get("payment_hash") or "") not in matched_payment_hashes
+        if not (
+            item.get("backend_id", "lnd-default") == "lnd-default"
+            and item.get("direction") == "outgoing"
+            and item.get("method") == "bolt11"
+            and item.get("type") == "payment"
+            and str(item.get("payment_hash") or "") in matched_payment_hashes
+        )
     ]
 
 def update_tx_history_metadata(
@@ -9144,6 +9167,7 @@ def api_get_tx_history(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     q: str = Query(default="", max_length=300),
+    wallet: HistoryWallet | None = None,
 ):
     require_pay_auth(request)
 
@@ -9151,6 +9175,7 @@ def api_get_tx_history(
         limit=limit,
         offset=offset,
         search=q,
+        wallet=wallet,
     )
 
     for item in items:
@@ -9165,6 +9190,95 @@ def api_get_tx_history(
         },
         headers=_no_store_headers(),
     )
+
+def _activity_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+
+    raw = str(value).strip()
+    try:
+        if re.fullmatch(r"\d+(?:\.\d+)?", raw):
+            seconds = float(raw)
+            if seconds <= 0:
+                return None
+            if seconds >= 1e17:
+                seconds /= 1e9
+            elif seconds >= 1e14:
+                seconds /= 1e6
+            elif seconds >= 1e11:
+                seconds /= 1e3
+            return datetime.fromtimestamp(seconds, timezone.utc)
+
+        date = datetime.fromisoformat(raw)
+        return date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date.astimezone(timezone.utc)
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
+def _csv_text(value: Any) -> str:
+    # User-supplied memos, payer notes, and identifiers are spreadsheet text.
+    text = str(value or "")
+    if text.startswith(("\t", "\r", "\n")) or text.lstrip().startswith(("=", "+", "-", "@", "＝", "＋", "－", "＠")):
+        return "'" + text
+    return text
+
+
+@app.get("/api/tx-history/export.csv")
+def api_export_tx_history(
+    request: StarletteRequest,
+    wallet: HistoryWallet | None = None,
+    since: int | None = Query(default=None, ge=0),
+    before: int | None = Query(default=None, ge=0),
+):
+    require_pay_auth(request)
+    if since is not None and before is not None and since >= before:
+        raise HTTPException(422, "Invalid activity date range")
+
+    csv_file = StringIO(newline="")
+    writer = csv.writer(csv_file)
+    writer.writerow([
+        "created_at_utc", "settled_at_utc", "wallet", "backend_id", "direction",
+        "amount_sat", "fee_sat", "method", "status", "payment_hash",
+        "counterparty", "memo", "payer_note",
+    ])
+    for item in _read_tx_history(wallet=wallet):
+        created = _activity_datetime(item.get("created_at"))
+        settled = _activity_datetime(item.get("settled_at"))
+        date = created or settled
+        if since is not None or before is not None:
+            if date is None:
+                continue
+            timestamp = date.timestamp()
+            if (since is not None and timestamp < since) or (before is not None and timestamp >= before):
+                continue
+
+        backend_id = item.get("backend_id") or lightning_backends.LND_ID
+        payment_hash = (item.get("raw_json") or {}).get("lnd_payment_hash") or item.get("payment_hash")
+        writer.writerow([
+            created.isoformat() if created else "",
+            settled.isoformat() if settled else "",
+            "Phoenixd" if backend_id.startswith("phoenixd-") else "LND",
+            _csv_text(backend_id),
+            _csv_text(item.get("direction")),
+            item.get("amount_sat"),
+            item.get("fee_sat"),
+            _csv_text(item.get("method")),
+            _csv_text(item.get("status")),
+            _csv_text(payment_hash),
+            _csv_text(item.get("counterparty") or item.get("identifier")),
+            _csv_text(item.get("memo")),
+            _csv_text(item.get("payer_note")),
+        ])
+
+    return Response(
+        csv_file.getvalue().encode("utf-8-sig"),
+        media_type="text/csv",
+        headers={
+            **_no_store_headers(),
+            "Content-Disposition": 'attachment; filename="bolt12-pay-activity.csv"',
+        },
+    )
+
 
 @app.post("/api/admin/sync-tx-history")
 async def api_sync_tx_history(request: StarletteRequest):
