@@ -72,6 +72,94 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
                 'isPaid': True, 'receivedSat': 21, 'requestedSat': 21, 'sent': 22, 'fees': 1000,
                 'createdAt': 1700000000000, 'completedAt': 1700000001000, **kwargs}
 
+    def pair_companion(self):
+        push = app_module.companion_push
+        token, _ = push.create_pairing_token(app_module.DB_PATH)
+        push.register_device(
+            app_module.DB_PATH, pairing_token=token, name='Test Companion',
+            endpoint='https://push.example.com/phoenixd-test',
+            p256dh=base64.urlsafe_b64encode(b'\x04' + b'\x11' * 64).decode().rstrip('='),
+            auth=base64.urlsafe_b64encode(b'\x22' * 16).decode().rstrip('='),
+        )
+
+    async def test_phoenix_history_import_with_paired_companion(self):
+        self.pair_companion()
+        push = app_module.companion_push
+        instance = {**INSTANCE, 'id': 'phoenixd-import'}
+        service = app_module._phoenix_backend(instance)
+        start = push.phoenixd_push_start(app_module.DB_PATH, instance['id'])
+        missing_time_hash = 'ab' * 32
+        live = self.raw('incoming', completedAt=start + 1)
+        historical = [
+            self.raw('incoming', paymentHash=f'{i:064x}', completedAt=start - 1)
+            for i in range(100)
+        ]
+        client = AsyncMock()
+        client.list_incoming.side_effect = [
+            historical,
+            [self.raw('incoming', paymentHash=missing_time_hash, completedAt=None), live],
+        ]
+        client.list_outgoing.return_value = []
+        with patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))):
+            self.assertEqual(await service.sync(), 102)
+            self.assertEqual([call.kwargs['offset'] for call in client.list_incoming.await_args_list], [0, 100])
+        sender = AsyncMock()
+        self.assertEqual(await push.dispatch_due(
+            app_module.DB_PATH, vapid_private_key='test', vapid_subject='mailto:test@example.com',
+            sender=sender,
+        ), 1)
+        self.assertEqual(json.loads(sender.await_args.kwargs['data'])['payment_hash'], HASH)
+        self.assertEqual(len(app_module.list_tx_history(limit=200)), 102)
+
+        app_module.init_db()
+        with patch.object(time, 'time_ns', return_value=(start + 60_000) * 1_000_000):
+            restarted = app_module._phoenix_backend(instance)
+            self.assertEqual(push.phoenixd_push_start(app_module.DB_PATH, instance['id']), start)
+        self.incoming = [live, {**historical[0], 'description': 'History metadata updated'}]
+        await restarted.sync()
+        self.assertEqual(await push.dispatch_due(
+            app_module.DB_PATH, vapid_private_key='test', vapid_subject='mailto:test@example.com',
+            sender=sender,
+        ), 0)
+        sender.assert_awaited_once()
+
+    async def test_upgrade_discards_legacy_phoenix_pushes_only(self):
+        self.pair_companion()
+        push = app_module.companion_push
+        now = int(time.time())
+        for payment_hash, completed_at in (
+            (HASH, (now - 3600) * 1000), ('ab' * 32, now * 1000), ('cd' * 32, None),
+        ):
+            item = backends.history_item(
+                self.raw('incoming', paymentHash=payment_hash, completedAt=completed_at),
+                'incoming', INSTANCE['id'],
+            )
+            app_module.save_tx_history_item(item)
+            push.queue_settled_payment(app_module.DB_PATH, item, now=now)
+        push.queue_settled_payment(app_module.DB_PATH, {
+            'payment_hash': HASH, 'direction': 'incoming', 'status': 'settled', 'amount_sat': 21,
+        }, now=now)
+        with app_module._db_conn() as conn:
+            conn.execute("""
+                UPDATE companion_push_deliveries SET status = 'retry', attempts = 1
+                WHERE event_id = (SELECT id FROM companion_push_events WHERE payment_hash = ?)
+            """, (INSTANCE['id'] + ':' + HASH,))
+
+        push.discard_legacy_phoenixd_deliveries(app_module.DB_PATH)
+        push.discard_legacy_phoenixd_deliveries(app_module.DB_PATH)
+        sender = AsyncMock()
+        self.assertEqual(await push.dispatch_due(
+            app_module.DB_PATH, vapid_private_key='test', vapid_subject='mailto:test@example.com',
+            sender=sender, now=now,
+        ), 2)
+        payloads = [json.loads(call.kwargs['data']) for call in sender.await_args_list]
+        self.assertEqual(
+            {(item['backend'], item['payment_hash']) for item in payloads},
+            {('lnd', HASH), ('phoenixd', 'ab' * 32)},
+        )
+        self.assertEqual(len(app_module.list_tx_history()), 3)
+        self.assertEqual(len(push.list_devices(app_module.DB_PATH)), 1)
+
     async def test_create_receive_pay_and_activity_without_lnd(self):
         with patch.object(app_module, '_read_macaroon_hex', side_effect=AssertionError('LND accessed')):
             with patch.object(app_module, 'require_pay_auth'):
@@ -610,7 +698,7 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
                 await app_module._unlock_nostr_secret_store_once()
 
     async def test_phoenix_zap_lookup_and_push_are_wallet_scoped(self):
-        incoming = self.raw('incoming', preimage=PREIMAGE)
+        incoming = self.raw('incoming', preimage=PREIMAGE, completedAt=time.time_ns() // 1_000_000)
         client = AsyncMock()
         client.get_incoming.return_value = incoming
         with patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))), patch.object(app_module, '_read_macaroon_hex', side_effect=AssertionError('LND accessed')):

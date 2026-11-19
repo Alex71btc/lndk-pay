@@ -4609,11 +4609,20 @@ async def guard_phoenix_interactive_methods(request: StarletteRequest, call_next
 
 
 def _phoenix_backend(instance):
-    return lightning_backends.PhoenixBackend(instance, _db_conn, save_tx_history_item, _queue_wallet_payment_notification)
+    push_start = companion_push.phoenixd_push_start(DB_PATH, instance['id'])
+
+    def notify(item, previous):
+        _queue_wallet_payment_notification(item, previous, push_start)
+
+    return lightning_backends.PhoenixBackend(instance, _db_conn, save_tx_history_item, notify)
 
 
-def _queue_wallet_payment_notification(item, previous):
+def _queue_wallet_payment_notification(item, previous, push_start_ms):
     if item.get('direction') != 'incoming' or item.get('status') != 'settled':
+        return
+    # Use settlement time. An invoice created before attachment can be paid later.
+    completed_at = item['raw_json'].get('completedAt')
+    if completed_at is None or int(completed_at) < push_start_ms:
         return
     try:
         if companion_push.queue_settled_payment(DB_PATH, item, allow_create=not previous or previous.get('status') != 'settled'):
@@ -4740,6 +4749,8 @@ async def save_lightning_backend(payload: dict, request: StarletteRequest):
             raise HTTPException(400, "LND is not configured in this installation")
         cfg = load_config()
         cfg["lightning_backend"] = settings
+        if settings.get('phoenixd'):
+            companion_push.phoenixd_push_start(DB_PATH, settings['phoenixd']['id'])
         save_config(cfg)
         if not had_wallet and settings.get('phoenixd'):
             _start_wallet_workers()
@@ -8113,6 +8124,7 @@ async def api_liquidity(request: StarletteRequest):
 async def _lookup_invoice(payment_hash, backend_id='lnd-default'):
     instance = lightning_backends.bound(load_config(), backend_id)
     if instance:
+        backend = _phoenix_backend(instance)
         client, _ = await lightning_backends.checked_client(instance)
         normalized_hash = _normalize_payment_hash(payment_hash)
         raw = await client.get_incoming(normalized_hash)
@@ -8125,7 +8137,7 @@ async def _lookup_invoice(payment_hash, backend_id='lnd-default'):
                 valid = False
             if not valid:
                 raise HTTPException(502, 'Phoenixd returned an invalid settlement preimage')
-        _phoenix_backend(instance).store(lightning_backends.history_item(raw, 'incoming', backend_id))
+        backend.store(lightning_backends.history_item(raw, 'incoming', backend_id))
         return {**raw, 'settled': raw.get('isPaid') is True,
                 'state': 'SETTLED' if raw.get('isPaid') else 'OPEN',
                 'r_preimage': raw.get('preimage') or '',
@@ -9125,10 +9137,14 @@ def _start_wallet_workers():
 @app.on_event("startup")
 async def startup_background_tasks():
     init_db()
+    companion_push.discard_legacy_phoenixd_deliveries(DB_PATH)
+    phoenixd = lightning_backends.state(load_config()).get('phoenixd')
+    if phoenixd:
+        companion_push.phoenixd_push_start(DB_PATH, phoenixd['id'])
     # LND may still be starting after a host reboot. Do not delay the web app;
     # the background loop performs an immediate first sync and then retries.
     app.state.tx_sync_task = asyncio.create_task(_tx_history_sync_loop())
-    if LND_REST_URL or lightning_backends.state(load_config()).get('phoenixd'):
+    if LND_REST_URL or phoenixd:
         _start_wallet_workers()
     app.state.public_bip353_status = {
         "status": "checking",
@@ -9141,7 +9157,7 @@ async def startup_background_tasks():
         _check_public_bip353_record()
     )
 
-    if LND_REST_URL or lightning_backends.state(load_config()).get('phoenixd'):
+    if LND_REST_URL or phoenixd:
         print("[Lightning] Nostr unlock, zap, companion push and NWC workers scheduled", flush=True)
     else:
         print("[Lightning] No wallet configured; wallet workers disabled", flush=True)

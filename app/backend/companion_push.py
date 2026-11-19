@@ -32,6 +32,9 @@ MAX_PUSH_ATTEMPTS = 12
 VAPID_PRIVATE_KEY_FIELD = "companion_vapid_private_key"
 MAX_PUSH_COMMENT_CHARS = 160
 PUSH_ENRICHMENT_DELAY_SECONDS = 0
+# Old versions did not record when a Phoenixd wallet was attached. Allow for
+# polling and clock skew when identifying historical events in their queues.
+LEGACY_PHOENIXD_QUEUE_GRACE_SECONDS = 5 * 60
 
 
 class UnsafePushEndpointError(ValueError):
@@ -237,7 +240,53 @@ def init_db(db_path: Path | str) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_companion_deliveries_due
             ON companion_push_deliveries(status, next_attempt_at);
+
+            CREATE TABLE IF NOT EXISTS companion_phoenixd_push_start (
+                backend_id TEXT PRIMARY KEY,
+                started_at_ms INTEGER NOT NULL
+            );
             """
+        )
+
+
+def phoenixd_push_start(db_path: Path | str, backend_id: str) -> int:
+    """Remember when this app began observing the wallet, across restarts."""
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT started_at_ms FROM companion_phoenixd_push_start WHERE backend_id = ?",
+            (backend_id,),
+        ).fetchone()
+        if row is None:
+            connection.execute(
+                "INSERT OR IGNORE INTO companion_phoenixd_push_start (backend_id, started_at_ms) VALUES (?, ?)",
+                (backend_id, time.time_ns() // 1_000_000),
+            )
+            row = connection.execute(
+                "SELECT started_at_ms FROM companion_phoenixd_push_start WHERE backend_id = ?",
+                (backend_id,),
+            ).fetchone()
+        return int(row["started_at_ms"])
+
+
+def discard_legacy_phoenixd_deliveries(db_path: Path | str) -> None:
+    """Stop historical events left in the queue by an older app version."""
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            UPDATE companion_push_deliveries
+            SET status = 'dead', last_error = 'Historical Phoenixd payment'
+            WHERE status IN ('pending', 'retry') AND event_id IN (
+                SELECT e.id
+                FROM companion_push_events e
+                JOIN tx_history h
+                  ON h.backend_id = substr(e.payment_hash, 1, instr(e.payment_hash, ':') - 1)
+                 AND h.payment_hash = substr(e.payment_hash, instr(e.payment_hash, ':') + 1)
+                 AND h.direction = 'incoming'
+                WHERE e.payment_hash GLOB 'phoenixd-*:*'
+                  AND COALESCE(CAST(h.settled_at AS INTEGER), 0) < e.created_at - ?
+            )
+            """,
+            (LEGACY_PHOENIXD_QUEUE_GRACE_SECONDS,),
         )
 
 

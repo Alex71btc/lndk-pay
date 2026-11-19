@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.27] - 2026-11-19
+
+### Fixed
+
+- Import existing Phoenixd payments into Lightning Activity without sending
+  historical Android Companion notifications. Incoming payments settled after
+  the wallet is attached can still notify during the initial sync.
+- On upgrade, cancel pending or retrying historical Phoenixd deliveries left
+  by older versions while preserving payment history and paired devices.
+
 ## [0.3.26] - 2026-11-18
 
 ### Added
