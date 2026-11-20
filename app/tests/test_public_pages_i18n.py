@@ -126,9 +126,58 @@ class PublicPageI18nTests(unittest.IsolatedAsyncioTestCase):
         for element in ("aliasLnurlQr", "aliasOfferQr", "aliasGenerateBolt11Btn", "aliasBolt11AmountInput"):
             self.assertNotIn(element, page.by_id)
 
+    async def test_deactivated_phoenix_alias_keeps_offer_and_bip353_without_invoice_endpoints(self):
+        backend_id = "phoenixd-alice"
+        self.config["aliases"]["alice"]["backend_id"] = backend_id
+        self.config["aliases"]["bob"] = {"last_offer": "lno1lnd"}
+        self.config["lightning_backend"] = {"active": "lnd-default", "phoenixd": {
+            "id": backend_id, "paused": True,
+        }}
+
+        response = await self.get("/alias/alice")
+        self.assertEqual(response.status_code, 200)
+        page = self.check_catalog(response, "alias")
+        self.assertEqual(page.by_id["aliasOfferWalletBtn"]["data-wallet-target"], "lno1test")
+        self.assertEqual(page.by_id["aliasOpenWalletBtn"]["data-wallet-target"], "alice@bip.example")
+        self.assertEqual(page.by_id["aliasSubline"]["data-i18n"], "page.private_subline")
+        self.assertNotIn("aliasLnurlQr", page.by_id)
+        self.assertNotIn("aliasGenerateBolt11Btn", page.by_id)
+        self.assertNotIn("/api/alias/alice/bolt11-fallback", response.text)
+        self.assertIn("aliasGenerateBolt11Btn", Elements((await self.get("/alias/bob")).text).by_id)
+
+        discovery_url = "/.well-known/bolt12-pay/alice"
+        discovery = (await self.get(discovery_url)).json()
+        self.assertEqual([method["type"] for method in discovery["methods"]], ["bolt12_offer"])
+        self.assertEqual(discovery["addresses"]["bip353"], "alice@bip.example")
+        self.assertIsNone(discovery["qr"]["bolt11_fallback"])
+        self.assertEqual((await self.get("/.well-known/lnurlp/alice")).status_code, 404)
+        self.assertEqual((await self.get("/api/lnurl/callback/alice?amount=21000")).status_code, 404)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=backend.app), base_url="http://test"
+        ) as client:
+            fallback = await client.post("/api/alias/alice/bolt11-fallback", json={})
+        self.assertEqual(fallback.status_code, 404)
+
+        settings = self.config["lightning_backend"]
+        settings["hidden_phoenixd_aliases"] = [backend_id]
+        self.assertEqual((await self.get("/alias/alice")).status_code, 404)
+        self.assertEqual((await self.get(discovery_url)).status_code, 404)
+        landing = (await self.get("/")).text
+        self.assertNotIn("/alias/alice", landing)
+        self.assertIn("/alias/bob", landing)
+        settings["phoenixd"] = None
+        self.assertEqual((await self.get("/alias/alice")).status_code, 404)
+
+        settings["phoenixd"] = {"id": backend_id}
+        activated = await self.get("/alias/alice")
+        self.assertIn("aliasLnurlQr", Elements(activated.text).by_id)
+        self.assertIn("aliasGenerateBolt11Btn", Elements(activated.text).by_id)
+        self.assertEqual((await self.get("/.well-known/lnurlp/alice")).status_code, 200)
+
     async def test_invoice_language_switch_preserves_pending_request_and_result(self):
         self.config["aliases"]["alice"]["amount_sat"] = None
         response = await self.get("/alias/alice")
+        endpoint = Elements(response.text).by_id["aliasGenerateBolt11Btn"]["data-endpoint"]
         scripts = re.findall(r"<script>(.*?)</script>", response.text, flags=re.S)
         body_script = next(script for script in scripts if "function generateBolt11Fallback" in script)
         wallet_script = next(script for script in scripts if "function payBolt11Invoice" in script)
@@ -158,6 +207,7 @@ const setTimeout = () => 1, clearTimeout = () => {};
   loadCallbacks.forEach(cb => cb());
   assert.equal(requests.length, 0);
   const button = nodes.get('aliasGenerateBolt11Btn');
+  button.dataset.endpoint = """ + json.dumps(endpoint) + """;
   const amount = document.getElementById('aliasBolt11AmountInput');
   amount.value = '0';
   await button.onclick();

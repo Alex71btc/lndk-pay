@@ -22,12 +22,12 @@
       })();
     </script>
     <meta name="theme-color" content="#0f172a" />
-    <script src="/assets/i18n/runtime.js?v=0.3.27"></script>
-    <script src="/assets/i18n/pay.js?v=0.3.27&amp;rev=6"></script>
+    <script src="/assets/i18n/runtime.js?v=0.3.28"></script>
+    <script src="/assets/i18n/pay.js?v=0.3.28&amp;rev=10"></script>
     <script>window.Bolt12I18n.use("pay");</script>
     <link rel="manifest" href="/pay.webmanifest" />
     <script
-      src="/pwa-install.js?v=0.3.27"
+      src="/pwa-install.js?v=0.3.28"
       data-manifest="/pay.webmanifest"
       data-label-ready="nav.install"
       data-label-checking="nav.install_checking"
@@ -1375,8 +1375,8 @@
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
 <link rel="stylesheet" href="/assets/channel-liquidity.css?v=2">
 <script defer src="/assets/channel-liquidity.js?v=4"></script>
-<script defer src="/assets/payment-notifications.js?v=0.3.27-4"></script>
-    <script src="/assets/lightning-backend.js?v=0.3.27" defer></script>
+<script defer src="/assets/payment-notifications.js?v=0.3.28-4"></script>
+    <script src="/assets/lightning-backend.js?v=0.3.28&amp;rev=3" defer></script>
 </head>
   <body>
 
@@ -3167,6 +3167,12 @@
         <p class="scannerHint" data-i18n="setup.repair_record.hint">
           Erst nach deiner Bestätigung erzeugt die App ein neues wiederverwendbares Offer und veröffentlicht den TXT-Eintrag.
         </p>
+        <p id="publicBip353RepairUnavailable" class="scannerHint" hidden data-i18n="setup.repair_record.phoenixd_unavailable">
+          Die bisherige Phoenixd-Wallet ist getrennt oder deaktiviert.
+        </p>
+        <p id="publicBip353RepairLndHint" class="scannerHint" hidden data-i18n="setup.repair_record.lnd_hint">
+          Wenn du LND auswählst, gehen neue Zahlungen über diese BIP353-Adresse an LND.
+        </p>
         <div class="row" style="margin-top:18px">
           <button
             id="publicBip353RepairLaterBtn"
@@ -3182,6 +3188,9 @@
             data-i18n="setup.repair_record.repair"
           >
             TXT-Eintrag neu erstellen
+          </button>
+          <button id="publicBip353RepairLndBtn" class="secondary" type="button" hidden data-i18n="setup.repair_record.repair_lnd">
+            Mit LND neu erstellen
           </button>
         </div>
       </div>
@@ -3602,6 +3611,7 @@
       const publicBip353RepairNowBtn = document.getElementById(
         "publicBip353RepairNowBtn",
       );
+      const publicBip353RepairLndBtn = document.getElementById("publicBip353RepairLndBtn");
       let publicBip353RepairPreviousFocus = null;
       let publicBip353RepairInProgress = false;
 
@@ -3966,7 +3976,7 @@
         }
       }
 
-      function showPublicBip353RepairModal(address) {
+      function showPublicBip353RepairModal(data) {
         if (
           !publicBip353RepairModal ||
           publicBip353RepairModal.classList.contains("show")
@@ -3974,7 +3984,13 @@
           return;
         }
 
-        publicBip353RepairAddress.textContent = address || DEFAULT_ADDRESS;
+        const walletAvailable = data.receiving_wallet_available !== false;
+        publicBip353RepairAddress.textContent = data.address;
+        publicBip353RepairNowBtn.hidden = !walletAvailable;
+        publicBip353RepairLndBtn.hidden = !data.can_recreate_with_lnd;
+        publicBip353RepairLndBtn.classList.toggle("secondary", walletAvailable);
+        document.getElementById("publicBip353RepairUnavailable").hidden = walletAvailable;
+        document.getElementById("publicBip353RepairLndHint").hidden = !data.can_recreate_with_lnd;
         publicBip353RepairPreviousFocus = document.activeElement;
         publicBip353RepairModal.classList.add("show");
         publicBip353RepairModal.setAttribute("aria-hidden", "false");
@@ -3990,7 +4006,7 @@
         const data = await readJsonOrThrow(response);
 
         if (data.status === "missing") {
-          showPublicBip353RepairModal(data.address);
+          showPublicBip353RepairModal(data);
         } else if (data.status === "invalid") {
           setStatus(window.__t("setup.repair_record.invalid"), "warn", true);
         } else if (
@@ -4045,21 +4061,25 @@
         }
       });
 
-      publicBip353RepairNowBtn?.addEventListener("click", async () => {
+      async function recreatePublicBip353Record(useLnd) {
         if (publicBip353RepairInProgress) return;
 
+        const button = useLnd ? publicBip353RepairLndBtn : publicBip353RepairNowBtn;
         publicBip353RepairInProgress = true;
         publicBip353RepairLaterBtn.disabled = true;
         publicBip353RepairNowBtn.disabled = true;
-        setUiText(publicBip353RepairNowBtn, "setup.repair_record.repairing");
+        publicBip353RepairLndBtn.disabled = true;
+        setUiText(button, "setup.repair_record.repairing");
 
         try {
           const response = await fetch("/api/setup/public-bip353-repair", {
             method: "POST",
             credentials: "same-origin",
             headers: {
+              "Content-Type": "application/json",
               "X-CSRF-Token": getCookie("csrf_token") || "",
             },
+            body: JSON.stringify({address: publicBip353RepairAddress.textContent, use_lnd: useLnd}),
           });
           const started = await readJsonOrThrow(response);
           const data =
@@ -4082,9 +4102,13 @@
           publicBip353RepairInProgress = false;
           publicBip353RepairLaterBtn.disabled = false;
           publicBip353RepairNowBtn.disabled = false;
-          setUiText(publicBip353RepairNowBtn, "setup.repair_record.repair");
+          publicBip353RepairLndBtn.disabled = false;
+          setUiText(button, useLnd ? "setup.repair_record.repair_lnd" : "setup.repair_record.repair");
         }
-      });
+      }
+
+      publicBip353RepairNowBtn?.addEventListener("click", () => recreatePublicBip353Record(false));
+      publicBip353RepairLndBtn?.addEventListener("click", () => recreatePublicBip353Record(true));
 
       publicBip353RepairModal?.addEventListener("click", (event) => {
         if (

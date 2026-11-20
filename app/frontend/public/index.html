@@ -6,11 +6,11 @@
   <title>BOLT12 Pay</title>
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="/pay.webmanifest" />
-  <script src="/assets/i18n/runtime.js?v=0.3.27"></script>
-  <script src="/assets/i18n/console.js?v=0.3.27&amp;rev=2"></script>
+  <script src="/assets/i18n/runtime.js?v=0.3.28"></script>
+  <script src="/assets/i18n/console.js?v=0.3.28&amp;rev=6"></script>
   <script>Bolt12I18n.use('console');</script>
   <script
-    src="/pwa-install.js?v=0.3.27"
+    src="/pwa-install.js?v=0.3.28"
     data-manifest="/pay.webmanifest"
     data-label-ready="console.btn.install"
     data-label-checking="console.btn.install_checking"
@@ -759,8 +759,8 @@
       }
     </style>
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
-<script defer src="/assets/payment-notifications.js?v=0.3.27-4"></script>
-  <script src="/assets/lightning-backend.js?v=0.3.27" defer></script>
+<script defer src="/assets/payment-notifications.js?v=0.3.28-4"></script>
+  <script src="/assets/lightning-backend.js?v=0.3.28&amp;rev=3" defer></script>
 </head>
 <body>
 <main class="card" id="setupCard" hidden style="position:relative;">
@@ -1044,6 +1044,8 @@ protocol.custom-init=39</pre>
       ></p>
       <div id="setupRepairRecordAddress" class="setupConfirmAddress mono"></div>
       <p class="setupConfirmText" data-i18n="setup.repair_record.hint"></p>
+      <p id="setupRepairRecordUnavailable" class="setupConfirmText" hidden data-i18n="setup.repair_record.phoenixd_unavailable"></p>
+      <p id="setupRepairRecordLndHint" class="setupConfirmText" hidden data-i18n="setup.repair_record.lnd_hint"></p>
       <div class="setupConfirmActions">
         <button
           id="setupRepairRecordLaterBtn"
@@ -1056,6 +1058,7 @@ protocol.custom-init=39</pre>
           type="button"
           data-i18n="setup.repair_record.repair"
         ></button>
+        <button id="setupRepairRecordLndBtn" class="secondary" type="button" hidden data-i18n="setup.repair_record.repair_lnd"></button>
       </div>
     </div>
   </div>
@@ -1329,6 +1332,7 @@ function getCookie(name) {
     const setupRepairRecordAddress = document.getElementById('setupRepairRecordAddress');
     const setupRepairRecordLaterBtn = document.getElementById('setupRepairRecordLaterBtn');
     const setupRepairRecordNowBtn = document.getElementById('setupRepairRecordNowBtn');
+    const setupRepairRecordLndBtn = document.getElementById('setupRepairRecordLndBtn');
     const manualDnsHint = document.getElementById('manualDnsHint');
     const manualDnsExampleName = document.getElementById('manualDnsExampleName');
     const lnurlSettingsBlock = document.getElementById('lnurlSettingsBlock');
@@ -1689,10 +1693,16 @@ function getCookie(name) {
       if (!setupRepairInProgress) showPendingAliasDnsWarning();
     }
 
-    function showSetupRepairRecordModal(address) {
+    function showSetupRepairRecordModal(data) {
       if (setupRepairRecordModal.classList.contains('show')) return;
 
-      setupRepairRecordAddress.textContent = address;
+      const walletAvailable = data.receiving_wallet_available !== false;
+      setupRepairRecordAddress.textContent = data.address;
+      setupRepairRecordNowBtn.hidden = !walletAvailable;
+      setupRepairRecordLndBtn.hidden = !data.can_recreate_with_lnd;
+      setupRepairRecordLndBtn.classList.toggle('secondary', walletAvailable);
+      document.getElementById('setupRepairRecordUnavailable').hidden = walletAvailable;
+      document.getElementById('setupRepairRecordLndHint').hidden = !data.can_recreate_with_lnd;
       setupRepairRecordPreviousFocus = document.activeElement;
       setupRepairRecordModal.classList.add('show');
       setupRepairRecordModal.setAttribute('aria-hidden', 'false');
@@ -1768,21 +1778,25 @@ function getCookie(name) {
       if (!setupRepairInProgress) closeSetupRepairRecordModal();
     });
 
-    setupRepairRecordNowBtn.addEventListener('click', async () => {
+    async function recreatePublicBip353Record(useLnd) {
       if (setupRepairInProgress) return;
 
+      const button = useLnd ? setupRepairRecordLndBtn : setupRepairRecordNowBtn;
       setupRepairInProgress = true;
       setupRepairRecordLaterBtn.disabled = true;
       setupRepairRecordNowBtn.disabled = true;
-      setLabel(setupRepairRecordNowBtn, 'setup.repair_record.repairing');
+      setupRepairRecordLndBtn.disabled = true;
+      setLabel(button, 'setup.repair_record.repairing');
 
       try {
         const response = await fetch('/api/setup/public-bip353-repair', {
           method: 'POST',
           credentials: 'same-origin',
           headers: {
+            'Content-Type': 'application/json',
             'X-CSRF-Token': getCookie('csrf_token') || ''
-          }
+          },
+          body: JSON.stringify({address: setupRepairRecordAddress.textContent, use_lnd: useLnd})
         });
         const started = await readJsonOrThrow(response);
         const data =
@@ -1801,9 +1815,13 @@ function getCookie(name) {
         setupRepairInProgress = false;
         setupRepairRecordLaterBtn.disabled = false;
         setupRepairRecordNowBtn.disabled = false;
-        setLabel(setupRepairRecordNowBtn, 'setup.repair_record.repair');
+        setupRepairRecordLndBtn.disabled = false;
+        setLabel(button, useLnd ? 'setup.repair_record.repair_lnd' : 'setup.repair_record.repair');
       }
-    });
+    }
+
+    setupRepairRecordNowBtn.addEventListener('click', () => recreatePublicBip353Record(false));
+    setupRepairRecordLndBtn.addEventListener('click', () => recreatePublicBip353Record(true));
 
     setupRepairRecordModal.addEventListener('click', event => {
       if (event.target === setupRepairRecordModal && !setupRepairInProgress) {
@@ -1839,7 +1857,7 @@ function getCookie(name) {
       }
 
       if (data.status === 'missing') {
-        showSetupRepairRecordModal(data.address || loadedSetupBolt12Address);
+        showSetupRepairRecordModal(data);
       } else if (data.status === 'invalid') {
         setStatus('setup.repair_record.invalid', 'warn', true);
       } else if (data.status === 'error' || data.status === 'configuration_error') {

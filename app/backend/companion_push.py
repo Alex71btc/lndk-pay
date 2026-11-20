@@ -290,6 +290,29 @@ def discard_legacy_phoenixd_deliveries(db_path: Path | str) -> None:
         )
 
 
+def stop_phoenixd_deliveries(db_path: Path | str, backend_id: str, *, delete_history: bool = False) -> None:
+    prefix = backend_id + ":"
+    with _connect(db_path) as connection:
+        if delete_history:
+            connection.execute("DELETE FROM tx_history WHERE backend_id = ?", (backend_id,))
+            connection.execute(
+                "DELETE FROM companion_push_events WHERE substr(payment_hash, 1, ?) = ?",
+                (len(prefix), prefix),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE companion_push_deliveries
+                SET status = 'dead', last_error = 'Phoenixd connection paused or removed'
+                WHERE status IN ('pending', 'retry') AND event_id IN (
+                    SELECT id FROM companion_push_events WHERE substr(payment_hash, 1, ?) = ?
+                )
+                """,
+                (len(prefix), prefix),
+            )
+        connection.execute("DELETE FROM companion_phoenixd_push_start WHERE backend_id = ?", (backend_id,))
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -989,12 +1012,13 @@ async def dispatch_due(
     limit: int = 20,
     sender: Callable[..., Awaitable[Any]] = secure_webpush_async,
     now: int | None = None,
+    allow_delivery: Callable[[str], bool] | None = None,
 ) -> int:
     timestamp = int(time.time()) if now is None else int(now)
     with _connect(db_path) as connection:
         rows = connection.execute(
             """
-            SELECT d.event_id, d.device_id, d.attempts, e.payload,
+            SELECT d.event_id, d.device_id, d.attempts, e.payload, e.payment_hash,
                    c.endpoint, c.p256dh, c.auth
             FROM companion_push_deliveries d
             JOIN companion_push_events e ON e.id = d.event_id
@@ -1010,6 +1034,18 @@ async def dispatch_due(
 
     delivered = 0
     for row in rows:
+        if allow_delivery and not allow_delivery(row["payment_hash"]):
+            continue
+        if ":" in row["payment_hash"]:
+            # A previous send in this batch can yield to a pause or removal.
+            with _connect(db_path) as connection:
+                due = connection.execute(
+                    """SELECT 1 FROM companion_push_deliveries
+                       WHERE event_id = ? AND device_id = ? AND status IN ('pending', 'retry')""",
+                    (row["event_id"], row["device_id"]),
+                ).fetchone()
+            if not due:
+                continue
         attempts = int(row["attempts"]) + 1
         try:
             await sender(
@@ -1046,6 +1082,7 @@ async def dispatch_due(
                     UPDATE companion_push_deliveries
                     SET status = ?, attempts = ?, next_attempt_at = ?, last_error = ?
                     WHERE event_id = ? AND device_id = ?
+                      AND status IN ('pending', 'retry')
                     """,
                     (
                         "dead" if permanent else "retry",
@@ -1074,6 +1111,7 @@ async def dispatch_due(
                 SET status = 'delivered', attempts = ?, delivered_at = ?,
                     last_error = NULL
                 WHERE event_id = ? AND device_id = ?
+                  AND status IN ('pending', 'retry')
                 """,
                 (attempts, timestamp, row["event_id"], row["device_id"]),
             )

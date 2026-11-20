@@ -28,6 +28,7 @@ import hashlib
 import base64
 import bech32
 import sqlite3
+from functools import wraps
 from datetime import datetime, timezone
 from io import BytesIO, StringIO
 from fastapi import FastAPI, HTTPException, Query, Depends
@@ -530,6 +531,13 @@ def init_db():
             address TEXT NOT NULL,
             dns_name TEXT NOT NULL,
             created_at TEXT NOT NULL
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS backend_objects (
+            object_type TEXT, identifier TEXT, backend_id TEXT NOT NULL,
+            PRIMARY KEY (object_type, identifier)
         )
     """)
 
@@ -1272,6 +1280,15 @@ def save_offer_history_item(item: dict):
                 str(item.get("createdAt") or item.get("created_at") or "").strip(),
             ),
         )
+
+
+def _offer_backend_id(offer: str) -> str:
+    with _db_conn() as conn:
+        row = conn.execute(
+            "SELECT backend_id FROM backend_objects WHERE object_type='offer' AND identifier=?",
+            (offer,),
+        ).fetchone()
+    return row[0] if row else lightning_backends.LND_ID
 
 
 def delete_offer_history_item(item_id: str):
@@ -2180,8 +2197,12 @@ def _extract_offer(raw_output: str) -> str:
     raise HTTPException(status_code=500, detail="Could not parse offer from lndk-cli output")
 
 
+def _normalize_dns_txt_record(txt_value: str) -> str:
+    return re.sub(r'"\s*"', "", txt_value.strip().strip('"')).strip()
+
+
 def _extract_offer_from_txt_record(txt_value: str) -> Optional[str]:
-    value = re.sub(r'"\s*"', "", txt_value.strip().strip('"')).strip()
+    value = _normalize_dns_txt_record(txt_value)
     if not value:
         return None
 
@@ -2546,17 +2567,21 @@ def _lnurl_metadata_json(identifier: str, description: str) -> str:
         ensure_ascii=False,
     )
 
-def _resolve_lnurl_alias(username: str) -> dict[str, Any]:
+def _resolve_lnurl_alias(username: str, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     user = _normalize_lnurl_username(username)
     identifier = _lnurl_identifier(user)
 
-    cfg = load_config()
+    if cfg is None:
+        cfg = load_config()
     saved_alias = (cfg.get('aliases') or {}).get(user)
     if isinstance(saved_alias, dict):
         return {'username': user, 'identifier': identifier,
                 'description': saved_alias.get('description') or LNURL_DEFAULT_DESCRIPTION,
                 'fixed_amount_sat': saved_alias.get('amount_sat'),
                 'backend_id': saved_alias.get('backend_id', lightning_backends.LND_ID)}
+
+    if user in cfg.get('retired_payment_aliases', []):
+        raise HTTPException(status_code=404, detail=f"LNURL alias not found: {user}")
 
     alias_entry = LNURL_ALIAS_MAP.get(user)
     if alias_entry is not None:
@@ -2586,6 +2611,15 @@ def _resolve_lnurl_alias(username: str) -> dict[str, Any]:
         }
 
     raise HTTPException(status_code=404, detail=f"LNURL alias not found: {user}")
+
+
+def _receiving_lnurl_alias(username: str) -> dict[str, Any]:
+    cfg = load_config()
+    alias = _resolve_lnurl_alias(username, cfg)
+    backend_id = alias.get("backend_id") or _public_receiving_backend_id(cfg)
+    if not lightning_backends.can_issue_public_invoice(cfg, backend_id):
+        raise HTTPException(status_code=404, detail="LNURL is unavailable for this alias")
+    return {**alias, "backend_id": backend_id}
 
 
 def _lnurl_callback_url(username: str) -> str:
@@ -2620,6 +2654,9 @@ def _payment_target_discovery(username: str) -> dict[str, Any]:
     lnurl_domain = get_lnurl_base_domain()
     bip353_domain = get_bip353_base_domain()
     if isinstance(configured_alias, dict):
+        if lightning_backends.alias_page_hidden(cfg, configured_alias):
+            raise HTTPException(status_code=404, detail="Alias not found")
+        backend_id = configured_alias.get("backend_id", lightning_backends.LND_ID)
         if lnurl_domain:
             identifier = f"{user}@{lnurl_domain}"
         elif bip353_domain:
@@ -2632,7 +2669,8 @@ def _payment_target_discovery(username: str) -> dict[str, Any]:
         fixed_amount_sat = configured_alias.get("amount_sat")
         offer = str(configured_alias.get("last_offer") or "").strip()
     else:
-        alias = _resolve_lnurl_alias(user)
+        alias = _resolve_lnurl_alias(user, cfg)
+        backend_id = alias.get("backend_id") or _public_receiving_backend_id(cfg)
         identifier = alias["identifier"]
         description = alias["description"]
         fixed_amount_sat = alias["fixed_amount_sat"]
@@ -2666,9 +2704,12 @@ def _payment_target_discovery(username: str) -> dict[str, Any]:
             }
         )
 
+    invoice_fallback_enabled = (
+        not privacy_mode_enabled() and lightning_backends.can_issue_public_invoice(cfg, backend_id)
+    )
     lnurl_base_url = get_lnurl_base_url()
     lnurl_enabled = bool(
-        not privacy_mode_enabled()
+        invoice_fallback_enabled
         and lnurl_domain
         and lnurl_base_url.startswith("https://")
     )
@@ -2723,7 +2764,7 @@ def _payment_target_discovery(username: str) -> dict[str, Any]:
         primary_qr = None
     fallback_endpoint = (
         f"/api/alias/{user}/bolt11-fallback"
-        if isinstance(configured_alias, dict) and not privacy_mode_enabled()
+        if isinstance(configured_alias, dict) and invoice_fallback_enabled
         else None
     )
     return {
@@ -3638,8 +3679,8 @@ async def _create_bound_offer(payload, backend_id, cfg=None):
     offer = await client.create_offer(payload.amount, payload.description)
     if not isinstance(offer, str) or not offer.startswith('lno1'):
         raise HTTPException(502, 'Invalid Phoenixd offer response')
+    lightning_backends.bound(load_config(), backend_id)
     with _db_conn() as conn:
-        conn.execute('CREATE TABLE IF NOT EXISTS backend_objects (object_type TEXT, identifier TEXT, backend_id TEXT NOT NULL, PRIMARY KEY(object_type, identifier))')
         conn.execute('INSERT OR IGNORE INTO backend_objects VALUES (?, ?, ?)', ('offer', offer, instance['id']))
     return OfferResponse(offer=offer, raw_output=json.dumps({'offer': offer, 'backend_id': instance['id']}))
 
@@ -3660,6 +3701,15 @@ def qr_data(data: str) -> str:
     qr.save(buffer, format="PNG")
     encoded = base64.b64encode(buffer.getvalue()).decode()
     return f"data:image/png;base64,{encoded}"
+
+
+def _serialize_offer_publication(handler):
+    @wraps(handler)
+    async def locked(*args, **kwargs):
+        async with lightning_backends.CONFIG_LOCK:
+            return await handler(*args, **kwargs)
+
+    return locked
 
 def _require_cloudflare_config(
     cloudflare_config: Optional[dict[str, Any]] = None,
@@ -3773,6 +3823,7 @@ async def _cloudflare_delete_txt_record(
     *,
     name: str,
     cloudflare_config: Optional[dict[str, Any]] = None,
+    expected_offers: set[str] | None = None,
 ) -> dict[str, Any]:
     cf = _require_cloudflare_config(cloudflare_config)
     headers = {
@@ -3784,9 +3835,22 @@ async def _cloudflare_delete_txt_record(
         cloudflare_config=cf,
     )
     deleted_ids = []
+    retained_bolt12 = False
+    expected_contents = (
+        {_normalize_dns_txt_record(build_bip353_txt_value(offer)) for offer in expected_offers}
+        if expected_offers is not None else None
+    )
 
     async with httpx.AsyncClient(timeout=20) as client:
         for record in existing:
+            if expected_contents is not None:
+                if (str(record.get("name", "")).rstrip(".").lower() != name.rstrip(".").lower()
+                    or str(record.get("type", "")).upper() != "TXT"):
+                    continue
+                content = str(record.get("content", ""))
+                if _normalize_dns_txt_record(content) not in expected_contents:
+                    retained_bolt12 |= bool(_extract_offer_from_txt_record(content))
+                    continue
             record_id = record.get("id")
             if not record_id:
                 continue
@@ -3810,6 +3874,7 @@ async def _cloudflare_delete_txt_record(
         "ok": True,
         "name": name,
         "deleted_record_ids": deleted_ids,
+        **({"retained_bolt12": retained_bolt12} if expected_offers is not None else {}),
     }
 
 
@@ -3938,16 +4003,29 @@ async def _check_public_bip353_record() -> dict[str, Any]:
         f"[BIP353 check] {status}: {_redacted_bip353_dns_name(dns_name)}",
         flush=True,
     )
-    return _set_public_bip353_runtime_status(
+    result = _set_public_bip353_runtime_status(
         status,
         address=address,
         dns_name=dns_name,
     )
+    if status == "missing":
+        backend_id = _public_receiving_backend_id(cfg)
+        result["receiving_wallet_available"] = lightning_backends.can_issue_public_invoice(cfg, backend_id)
+        result["can_recreate_with_lnd"] = bool(LND_REST_URL and backend_id != lightning_backends.LND_ID)
+    return result
 
 
-async def _repair_public_bip353_record() -> dict[str, Any]:
+class PublicBip353RepairRequest(BaseModel):
+    address: str
+    use_lnd: bool = False
+
+
+@_serialize_offer_publication
+async def _repair_public_bip353_record(payload: PublicBip353RepairRequest | None = None) -> dict[str, Any]:
     async with PUBLIC_BIP353_REPAIR_LOCK:
         status = await _check_public_bip353_record()
+        if payload and payload.address != status["address"]:
+            raise HTTPException(409, "The public BOLT12 address changed. Reload before continuing.")
         if status["status"] == "present":
             return {"ok": True, "created": False, "status": status}
         if status["status"] == "invalid":
@@ -3976,9 +4054,15 @@ async def _repair_public_bip353_record() -> dict[str, Any]:
                 detail="Setup changed while the BIP353 record was being checked; please try again",
             )
 
+        backend_id = _public_receiving_backend_id(cfg)
+        if payload and payload.use_lnd:
+            if not LND_REST_URL:
+                raise HTTPException(409, "LND is not configured in this installation.")
+            backend_id = lightning_backends.LND_ID
+
         offer_response = await _create_bound_offer(
             OfferRequest(amount=None, description=address),
-            _public_receiving_backend_id(cfg), cfg,
+            backend_id, cfg,
         )
 
         # A record may have appeared while the user was confirming the repair.
@@ -4016,6 +4100,11 @@ async def _repair_public_bip353_record() -> dict[str, Any]:
             cloudflare_config=cloudflare_config,
             existing_records=latest_records,
         )
+        if payload and payload.use_lnd:
+            # A different settings handler may have saved unrelated fields during the DNS call.
+            latest_cfg = load_config()
+            latest_cfg["public_receiving_backend_id"] = backend_id
+            save_config(latest_cfg)
         current = _set_public_bip353_runtime_status(
             "present",
             address=address,
@@ -4051,9 +4140,9 @@ def _public_bip353_repair_job_snapshot() -> dict[str, Any]:
     return dict(PUBLIC_BIP353_REPAIR_JOB)
 
 
-async def _run_public_bip353_repair_job() -> None:
+async def _run_public_bip353_repair_job(payload: PublicBip353RepairRequest | None) -> None:
     try:
-        result = await _repair_public_bip353_record()
+        result = await _repair_public_bip353_record(payload)
         _set_public_bip353_repair_job(
             "completed",
             created=bool(result.get("created")),
@@ -4083,15 +4172,15 @@ async def _run_public_bip353_repair_job() -> None:
         )
 
 
-def _start_public_bip353_repair_job() -> dict[str, Any]:
+def _start_public_bip353_repair_job(payload: PublicBip353RepairRequest | None) -> dict[str, Any]:
     global PUBLIC_BIP353_REPAIR_TASK
 
     if PUBLIC_BIP353_REPAIR_TASK and not PUBLIC_BIP353_REPAIR_TASK.done():
-        return _public_bip353_repair_job_snapshot()
+        raise HTTPException(409, "A public BIP353 repair is already running.")
 
     job = _set_public_bip353_repair_job("running", http_status=202)
     PUBLIC_BIP353_REPAIR_TASK = asyncio.create_task(
-        _run_public_bip353_repair_job()
+        _run_public_bip353_repair_job(payload)
     )
     return job
 
@@ -4277,6 +4366,7 @@ async def _verify_published_bip353_records(scope: str) -> dict[str, Any]:
     }
 
 
+@_serialize_offer_publication
 async def _repair_alias_dns_records(payload: AliasDnsRepairRequest) -> dict[str, Any]:
     async with ALIAS_BIP353_REPAIR_LOCK:
         cfg = load_config()
@@ -4388,7 +4478,7 @@ def lnurl_pay_metadata(username: str) -> LnurlPayMetadataResponse:
             detail="LNURL disabled by privacy mode",
         )
 
-    alias = _resolve_lnurl_alias(username)
+    alias = _receiving_lnurl_alias(username)
     min_sendable = LNURL_MIN_SENDABLE_MSAT
     max_sendable = LNURL_MAX_SENDABLE_MSAT
 
@@ -4442,7 +4532,7 @@ async def lnurl_callback(
             detail="LNURL disabled by privacy mode",
         )
 
-    alias = _resolve_lnurl_alias(username)
+    alias = _receiving_lnurl_alias(username)
 
     min_sendable = LNURL_MIN_SENDABLE_MSAT
     max_sendable = LNURL_MAX_SENDABLE_MSAT
@@ -4483,9 +4573,8 @@ async def lnurl_callback(
         description_hash_b64 = _sha256_b64(nostr.encode("utf-8"))
         memo = ""
 
-    receiving_backend_id = alias.get('backend_id') or _public_receiving_backend_id(load_config())
     invoice = await _create_bound_invoice(
-        receiving_backend_id,
+        alias['backend_id'],
         amount_sat=amount_sat,
         memo=memo,
         description_hash=description_hash_b64,
@@ -4609,12 +4698,22 @@ async def guard_phoenix_interactive_methods(request: StarletteRequest, call_next
 
 
 def _phoenix_backend(instance):
+    def require_connected():
+        connected = lightning_backends.connected_phoenixd(load_config())
+        if not connected or (connected['id'], connected.get('revision')) != (
+            instance['id'], instance.get('revision'),
+        ):
+            raise HTTPException(409, 'The Phoenixd connection has changed.')
+
+    require_connected()
     push_start = companion_push.phoenixd_push_start(DB_PATH, instance['id'])
 
     def notify(item, previous):
         _queue_wallet_payment_notification(item, previous, push_start)
 
-    return lightning_backends.PhoenixBackend(instance, _db_conn, save_tx_history_item, notify)
+    return lightning_backends.PhoenixBackend(
+        instance, _db_conn, save_tx_history_item, notify, require_connected,
+    )
 
 
 def _queue_wallet_payment_notification(item, previous, push_start_ms):
@@ -4735,7 +4834,7 @@ async def save_lightning_backend(payload: dict, request: StarletteRequest):
     _require_csrf(request)
     async with lightning_backends.CONFIG_LOCK:
         cfg = load_config()
-        had_wallet = bool(LND_REST_URL or lightning_backends.state(cfg).get('phoenixd'))
+        had_wallet = bool(LND_REST_URL or lightning_backends.connected_phoenixd(cfg))
         expected = payload.get("expected_backend_id")
         if expected is not None and expected != lightning_backends.state(cfg).get("active", "lnd-default"):
             raise HTTPException(409, "Lightning backend changed. Reload before switching.")
@@ -4749,12 +4848,166 @@ async def save_lightning_backend(payload: dict, request: StarletteRequest):
             raise HTTPException(400, "LND is not configured in this installation")
         cfg = load_config()
         cfg["lightning_backend"] = settings
-        if settings.get('phoenixd'):
+        phoenixd = lightning_backends.connected_phoenixd(cfg)
+        if phoenixd:
             companion_push.phoenixd_push_start(DB_PATH, settings['phoenixd']['id'])
         save_config(cfg)
-        if not had_wallet and settings.get('phoenixd'):
+        if not had_wallet and phoenixd:
             _start_wallet_workers()
     return JSONResponse(lightning_backends.public_state(cfg), headers=_no_store_headers())
+
+
+class PhoenixConnectionAction(BaseModel):
+    action: Literal['pause', 'resume', 'remove']
+    backend_id: str
+    revision: str | None = None
+    delete_history: bool = False
+    hide_alias_pages: bool | None = None
+    delete_publications: bool = False
+
+
+async def _delete_phoenixd_publications(cfg, backend_id):
+    """Withdraw only locally tracked publications for the selected wallet."""
+    aliases = {
+        name: alias for name, alias in (cfg.get('aliases') or {}).items()
+        if alias.get('backend_id') == backend_id
+    }
+    with _db_conn() as conn:
+        registered_offers = {row[0] for row in conn.execute(
+            "SELECT identifier FROM backend_objects WHERE object_type='offer' AND backend_id=?",
+            (backend_id,),
+        )}
+    offers = registered_offers | {alias['last_offer'] for alias in aliases.values() if alias.get('last_offer')}
+    cloudflare = _saved_cloudflare_config(cfg)
+    records: dict[str, set[str]] = {}
+    for name, alias in aliases.items():
+        if offer := alias.get('last_offer'):
+            dns_names = {alias.get('dns_name'), _alias_dns_name(name)} - {None, ''}
+            if cloudflare['zone_name']:
+                # Older versions also published at the zone root for aliases
+                # whose receiving domain was a subdomain.
+                dns_names.add(f"{name}.user._bitcoin-payment.{cloudflare['zone_name']}")
+            for dns_name in dns_names:
+                records.setdefault(dns_name, set()).add(offer)
+    for item in list_all_history_bip353():
+        if item['offer'] in offers and item['dns_name']:
+            records.setdefault(item['dns_name'], set()).add(item['offer'])
+
+    dns_mode = cfg.get('dns_mode')
+    # The public Setup address is managed separately from generated offers and aliases.
+    username, separator, domain = str(cfg.get('public_bolt12_address') or '').strip().lower().partition('@')
+    if separator and username and domain:
+        public_dns_name = f'{username}.user._bitcoin-payment.{domain.rstrip(".")}'
+        records = {
+            name: expected_offers for name, expected_offers in records.items()
+            if name.rstrip('.').lower() != public_dns_name
+        }
+
+    manual_dns = []
+    if records and dns_mode == 'cloudflare':
+        cf = _require_cloudflare_config(cloudflare)
+        for name, expected_offers in sorted(records.items()):
+            if not name.rstrip('.').lower().endswith('.' + cf['zone_name']):
+                manual_dns.append(name)
+                continue
+            deleted = await _cloudflare_delete_txt_record(name=name, cloudflare_config=cf, expected_offers=expected_offers)
+            if deleted.get('retained_bolt12'):
+                manual_dns.append(name)
+    elif records:
+        manual_dns = sorted(records)
+
+    # Keep local ownership data available for retry if any DNS request failed.
+    latest = load_config()
+    current_aliases = latest.get('aliases') or {}
+    retired = set(latest.get('retired_payment_aliases', []))
+    for name, alias in aliases.items():
+        current = current_aliases.get(name) or {}
+        if current.get('backend_id') == backend_id and current.get('last_offer') == alias.get('last_offer'):
+            del current_aliases[name]
+            retired.add(name)
+    latest['aliases'] = current_aliases
+    latest['retired_payment_aliases'] = sorted(retired)
+    save_config(latest)
+    with _db_conn() as conn:
+        conn.executemany(
+            "DELETE FROM history_bip353 WHERE history_id IN (SELECT id FROM offer_history WHERE offer=?)",
+            ((offer,) for offer in offers),
+        )
+        conn.executemany("DELETE FROM offer_history WHERE offer=?", ((offer,) for offer in offers))
+        # Keep ownership registered for safe retries and later setup operations.
+
+    return latest, manual_dns
+
+
+@app.post("/api/setup/lightning-backend/phoenixd")
+async def manage_phoenix_connection(payload: PhoenixConnectionAction, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
+    if (payload.delete_history or payload.delete_publications) and payload.action != 'remove':
+        raise HTTPException(400, 'Cleanup is available only when removing the connection.')
+
+    manual_dns = []
+    async with lightning_backends.CONFIG_LOCK, lightning_backends.PAYMENT_LOCK:
+        cfg = load_config()
+        settings = lightning_backends.state(cfg)
+        instance = settings.get('phoenixd')
+        if not instance or (instance['id'], instance.get('revision')) != (payload.backend_id, payload.revision):
+            raise HTTPException(409, 'The Phoenixd connection has changed.')
+        backend_id = instance['id']
+
+        if payload.action == 'resume':
+            if instance.get('paused'):
+                await lightning_backends.checked_client(instance)
+                instance.pop('paused')
+                instance['revision'] = secrets.token_hex(16)
+                companion_push.stop_phoenixd_deliveries(DB_PATH, backend_id)
+                companion_push.phoenixd_push_start(DB_PATH, backend_id)
+                if not LND_REST_URL:
+                    settings['active'] = backend_id
+                cfg = load_config()
+                cfg['lightning_backend'] = settings
+                save_config(cfg)
+                _start_wallet_workers()
+        else:
+            if payload.delete_history:
+                with _db_conn() as conn:
+                    pending = conn.execute(
+                        "SELECT 1 FROM tx_history WHERE backend_id=? AND direction='outgoing' AND status='pending' LIMIT 1",
+                        (backend_id,),
+                    ).fetchone()
+                if pending:
+                    raise HTTPException(409, 'Resolve pending Phoenixd payments before deleting their history.')
+
+            cfg.setdefault('public_receiving_backend_id', _public_receiving_backend_id(cfg))
+            instance['paused'] = True
+            if payload.hide_alias_pages is not None:
+                hidden = set(settings.get('hidden_phoenixd_aliases', []))
+                if payload.hide_alias_pages:
+                    hidden.add(backend_id)
+                else:
+                    hidden.discard(backend_id)
+                settings['hidden_phoenixd_aliases'] = sorted(hidden)
+            if settings['active'] == backend_id:
+                settings['active'] = lightning_backends.LND_ID
+            cfg['lightning_backend'] = settings
+            save_config(cfg)
+            # Persist the paused state first so an interrupted removal can be
+            # retried without bringing the wallet back online.
+            if payload.delete_publications:
+                cfg, manual_dns = await _delete_phoenixd_publications(cfg, backend_id)
+                settings = cfg['lightning_backend']
+            companion_push.stop_phoenixd_deliveries(DB_PATH, backend_id, delete_history=payload.delete_history)
+            if payload.action == 'remove':
+                if instance.get('node_id'):
+                    settings.setdefault('detached_phoenixd', {})[instance['node_id']] = backend_id
+                settings['phoenixd'] = None
+                save_config(cfg)
+
+    result = lightning_backends.public_state(cfg)
+    result['lnd_configured'] = bool(LND_REST_URL)
+    if manual_dns:
+        result['manual_dns_names'] = manual_dns
+    return JSONResponse(result, headers=_no_store_headers())
 
 
 @app.get("/api/setup/config")
@@ -4777,13 +5030,13 @@ async def get_public_bip353_status(request: StarletteRequest):
 
 
 @app.post("/api/setup/public-bip353-repair")
-async def repair_public_bip353_record(request: StarletteRequest):
+async def repair_public_bip353_record(request: StarletteRequest, payload: PublicBip353RepairRequest | None = None):
     if _is_pay_ui_enabled():
         require_pay_auth(request)
         _require_csrf(request)
 
     return JSONResponse(
-        _start_public_bip353_repair_job(),
+        _start_public_bip353_repair_job(payload),
         status_code=202,
         headers=_no_store_headers({"Retry-After": "2"}),
     )
@@ -4821,6 +5074,7 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 @app.post("/api/setup/config")
+@_serialize_offer_publication
 async def set_setup_config(payload: dict, request: StarletteRequest):
     if _is_pay_ui_enabled():
         require_pay_auth(request)
@@ -5644,6 +5898,9 @@ async def create_public_alias_bolt11_fallback(
     alias_data = (cfg.get("aliases", {}) or {}).get(alias_name)
     if not isinstance(alias_data, dict):
         raise HTTPException(status_code=404, detail="Alias not found")
+    backend_id = alias_data.get('backend_id', lightning_backends.LND_ID)
+    if not lightning_backends.can_issue_public_invoice(cfg, backend_id):
+        raise HTTPException(status_code=404, detail="BOLT11 fallback is unavailable for this alias")
 
     fixed_amount_sat = alias_data.get("amount_sat")
     request_data: dict[str, Any] = {}
@@ -5674,7 +5931,7 @@ async def create_public_alias_bolt11_fallback(
     address = _alias_address(alias_name)
     description = str(alias_data.get("description") or "Lightning payment").strip()
     result = await _create_bound_invoice(
-        alias_data.get('backend_id', lightning_backends.LND_ID),
+        backend_id,
         amount_sat=amount_sat,
         memo=f"BOLT11 alias fallback: {address} · {description}",
         expiry=3600,
@@ -5688,6 +5945,7 @@ async def create_public_alias_bolt11_fallback(
     }
 
 @app.post("/api/alias/{name}/publish", response_model=AliasResponse)
+@_serialize_offer_publication
 async def publish_alias(name: str, request: StarletteRequest):
     require_pay_auth(request)
     cfg = load_config()
@@ -5728,6 +5986,7 @@ async def publish_alias(name: str, request: StarletteRequest):
     from fastapi.responses import HTMLResponse
 
 @app.post("/api/alias/{name}/refresh-offer", response_model=AliasResponse)
+@_serialize_offer_publication
 async def refresh_alias_offer(name: str, request: StarletteRequest):
     require_pay_auth(request)
     cfg = load_config()
@@ -5791,6 +6050,8 @@ async def public_index_page():
     items_html = ""
 
     for alias_name, alias in aliases.items():
+        if lightning_backends.alias_page_hidden(cfg, alias):
+            continue
         description_html = _public_description_html(alias.get("description"))
         amount_sat = alias.get("amount_sat")
         amount_html = _public_amount_html(amount_sat)
@@ -6910,13 +7171,14 @@ async def public_alias_page(alias_name: str):
     except HTTPException:
         return HTMLResponse(not_found_html, status_code=404)
 
-    if alias_name not in aliases:
-        return HTMLResponse(not_found_html, status_code=404)
+    alias = aliases.get(alias_name)
+    if alias is None or lightning_backends.alias_page_hidden(cfg, alias):
+        return HTMLResponse(not_found_html, status_code=404, headers=_no_store_headers())
 
-
-    alias = aliases[alias_name]
-
-    privacy_mode = privacy_mode_enabled()
+    invoice_fallback_enabled = (
+        not privacy_mode_enabled()
+        and lightning_backends.can_issue_public_invoice(cfg, alias.get("backend_id", lightning_backends.LND_ID))
+    )
 
     bip353_domain = get_bip353_base_domain()
 
@@ -6932,17 +7194,17 @@ async def public_alias_page(alias_name: str):
     last_offer = alias.get("last_offer") or ""
 
     lnurl_fallback = ""
-    try:
-        lnurl_info = _build_lnurl_info_for_address(lnurl_address)
-        lnurl_fallback = lnurl_info["lnurl"]
-    except Exception:
-        lnurl_fallback = ""
+    if invoice_fallback_enabled:
+        try:
+            lnurl_fallback = _build_lnurl_info_for_address(lnurl_address)["lnurl"]
+        except Exception:
+            lnurl_fallback = ""
 
-    subline_key = "page.private_subline" if privacy_mode else "page.subline"
+    subline_key = "page.subline" if invoice_fallback_enabled else "page.private_subline"
     subline = (
-        "BOLT12 only"
-        if privacy_mode
-        else "BOLT12 first · LNURL and BOLT11 as fallback"
+        "BOLT12 first · LNURL and BOLT11 as fallback"
+        if invoice_fallback_enabled
+        else "BOLT12 only"
     )
     offer_section = ""
     if last_offer:
@@ -6963,7 +7225,7 @@ async def public_alias_page(alias_name: str):
         </div>
         """
     bolt11_section = ""
-    if not privacy_mode:
+    if invoice_fallback_enabled:
         bolt11_amount_input = ""
         if not amount_sat:
             max_amount_sat = max(1, LNURL_MAX_SENDABLE_MSAT // 1000)
@@ -6989,7 +7251,8 @@ async def public_alias_page(alias_name: str):
           </div>
           {bolt11_amount_input}
           <div class="row">
-            <button id="aliasGenerateBolt11Btn" data-i18n="invoice.generate">Generate BOLT11 fallback invoice</button>
+            <button id="aliasGenerateBolt11Btn" data-i18n="invoice.generate"
+              data-endpoint="/api/alias/{escape(alias_name)}/bolt11-fallback">Generate BOLT11 fallback invoice</button>
           </div>
           <div id="aliasBolt11Result" hidden>
             <div class="qr">
@@ -7008,7 +7271,7 @@ async def public_alias_page(alias_name: str):
         """
 
     lnurl_section = ""
-    if lnurl_fallback and not privacy_mode:
+    if lnurl_fallback:
         lnurl_section = f"""
         <div class="section">
           <div id="aliasLnurlTitle" data-i18n="lnurl.title" class="sectionTitle">LNURL Fallback</div>
@@ -7385,7 +7648,7 @@ async function payBolt11Invoice() {{
 
     try {{
       const response = await fetch(
-        "/api/alias/{alias_name}/bolt11-fallback",
+        button.dataset.endpoint,
         {{
           method: "POST",
           cache: "no-store",
@@ -7498,7 +7761,7 @@ async function payBolt11Invoice() {{
 </body>
 </html>
 """
-    return HTMLResponse(html)
+    return HTMLResponse(html, headers=_no_store_headers())
 
 @app.get("/{alias_name}")
 async def legacy_alias_redirect(alias_name: str):
@@ -8667,7 +8930,7 @@ async def _sync_tx_history_once():
             app.state.lnd_history_sync_completed = time.monotonic()
         except Exception:
             failures.append("LND")
-    instance = lightning_backends.state(load_config()).get("phoenixd")
+    instance = lightning_backends.connected_phoenixd(load_config())
     if instance:
         try:
             count += await _phoenix_backend(instance).sync()
@@ -9098,6 +9361,14 @@ async def _zap_publisher_loop():
             pass
 
 
+def _companion_delivery_allowed(payment_hash):
+    backend_id, separator, _ = payment_hash.partition(':')
+    if not separator:
+        return True
+    instance = lightning_backends.connected_phoenixd(load_config())
+    return bool(instance and instance['id'] == backend_id)
+
+
 async def _companion_push_loop():
     while True:
         COMPANION_PUSH_WAKE_EVENT.clear()
@@ -9108,6 +9379,7 @@ async def _companion_push_loop():
                     DB_PATH,
                     vapid_private_key=private_key,
                     vapid_subject=_companion_vapid_subject(),
+                    allow_delivery=_companion_delivery_allowed,
                 )
         except Exception as exc:
             print(
@@ -9138,9 +9410,14 @@ def _start_wallet_workers():
 async def startup_background_tasks():
     init_db()
     companion_push.discard_legacy_phoenixd_deliveries(DB_PATH)
-    phoenixd = lightning_backends.state(load_config()).get('phoenixd')
+    cfg = load_config()
+    phoenixd = lightning_backends.connected_phoenixd(cfg)
     if phoenixd:
         companion_push.phoenixd_push_start(DB_PATH, phoenixd['id'])
+    else:
+        paused = lightning_backends.state(cfg).get('phoenixd')
+        if paused:
+            companion_push.stop_phoenixd_deliveries(DB_PATH, paused['id'])
     # LND may still be starting after a host reboot. Do not delay the web app;
     # the background loop performs an immediate first sync and then retries.
     app.state.tx_sync_task = asyncio.create_task(_tx_history_sync_loop())
@@ -9473,6 +9750,7 @@ def api_add_offer_history_item(payload: dict, request: StarletteRequest):
     if not offer.startswith("lno"):
         raise HTTPException(status_code=400, detail="BOLT12 offer required")
 
+    lightning_backends.bound(load_config(), _offer_backend_id(offer))
     save_offer_history_item(payload)
 
     return {"ok": True}
@@ -9546,6 +9824,7 @@ async def api_clear_offer_history(request: StarletteRequest):
     }
 
 @app.post("/api/history/{item_id}/publish-bip353")
+@_serialize_offer_publication
 async def api_publish_history_bip353(
     item_id: str,
     payload: PublishHistoryBIP353Request,
@@ -9571,6 +9850,7 @@ async def api_publish_history_bip353(
     dns_content = build_bip353_txt_value(offer)
 
     cfg = load_config()
+    lightning_backends.bound(cfg, _offer_backend_id(offer))
 
     dns_result = None
     if cfg.get("dns_mode") == "cloudflare":

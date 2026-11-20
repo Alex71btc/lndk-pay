@@ -7,7 +7,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 from bolt11 import Bolt11, encode
@@ -86,6 +86,7 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         self.pair_companion()
         push = app_module.companion_push
         instance = {**INSTANCE, 'id': 'phoenixd-import'}
+        config.save_config({'lightning_backend': {'active': instance['id'], 'phoenixd': instance}})
         service = app_module._phoenix_backend(instance)
         start = push.phoenixd_push_start(app_module.DB_PATH, instance['id'])
         missing_time_hash = 'ab' * 32
@@ -507,6 +508,269 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
             data = json.loads(state.body)
             self.assertTrue(data['lnd_configured'])
             self.assertNotIn('password', data['phoenixd'])
+            self.http_requests.clear()
+            with self.assertRaises(HTTPException) as error:
+                await app_module.save_lightning_backend({'active': 'phoenixd', 'url': ''}, request())
+            self.assertEqual(error.exception.status_code, 400)
+            self.assertEqual(self.http_requests, [])
+
+    async def test_pause_stops_background_sync_and_pushes_until_resumed(self):
+        self.pair_companion()
+        push = app_module.companion_push
+        now_ms = time.time_ns() // 1_000_000
+        self.incoming = [self.raw('incoming', completedAt=now_ms)]
+        await self.service.sync()
+        lnd_sync = AsyncMock(return_value=0)
+        with (
+            patch.object(app_module, 'require_pay_auth'),
+            patch.object(app_module, 'LND_REST_URL', 'https://lnd.test'),
+            patch.object(app_module, '_start_wallet_workers'),
+            patch.object(app_module, '_sync_lnd_tx_history_once', lnd_sync),
+        ):
+            paused = await app_module.manage_phoenix_connection(
+                app_module.PhoenixConnectionAction(
+                    action='pause', backend_id=INSTANCE['id'], hide_alias_pages=True,
+                ), request())
+            self.assertEqual(json.loads(paused.body)['active'], 'lnd-default')
+            self.assertTrue(json.loads(paused.body)['phoenixd']['alias_pages_hidden'])
+            self.assertTrue(config.load_config()['lightning_backend']['phoenixd']['paused'])
+            alias = {'backend_id': INSTANCE['id']}
+            self.assertTrue(backends.alias_page_hidden(config.load_config(), alias))
+            with self.assertRaises(HTTPException):
+                backends.bound(config.load_config(), INSTANCE['id'])
+            self.http_requests.clear()
+            await app_module._sync_tx_history_once()
+            self.assertEqual(self.http_requests, [])
+            lnd_sync.assert_awaited_once()
+            sender = AsyncMock()
+            self.assertEqual(await push.dispatch_due(
+                app_module.DB_PATH, vapid_private_key='test', vapid_subject='mailto:test@example.com',
+                sender=sender,
+            ), 0)
+            self.assertEqual(len(app_module.list_tx_history()), 1)
+
+            with patch.object(time, 'time_ns', return_value=(now_ms + 2000) * 1_000_000):
+                await app_module.manage_phoenix_connection(
+                    app_module.PhoenixConnectionAction(action='resume', backend_id=INSTANCE['id']), request())
+            config_after = config.load_config()
+            self.assertFalse(backends.alias_page_hidden(config_after, alias))
+            self.assertEqual(config_after['lightning_backend']['active'], 'lnd-default')
+            self.assertEqual(backends.bound(config_after, INSTANCE['id'])['password'], INSTANCE['password'])
+            self.incoming += [
+                self.raw('incoming', paymentHash='ab' * 32, completedAt=now_ms + 1000),
+                self.raw('incoming', paymentHash='cd' * 32, completedAt=now_ms + 3000),
+            ]
+            await app_module._sync_tx_history_once()
+            self.assertEqual(len(app_module.list_tx_history()), 3)
+            self.assertEqual(await push.dispatch_due(
+                app_module.DB_PATH, vapid_private_key='test', vapid_subject='mailto:test@example.com',
+                sender=sender,
+            ), 1)
+            self.assertEqual(json.loads(sender.await_args.kwargs['data'])['payment_hash'], 'cd' * 32)
+
+    async def test_remove_keeps_history_and_reattaches_only_the_same_wallet(self):
+        self.incoming = [self.raw('incoming')]
+        await self.service.sync()
+        with patch.object(app_module, 'require_pay_auth'), patch.object(app_module, '_start_wallet_workers'):
+            removed = await app_module.manage_phoenix_connection(
+                app_module.PhoenixConnectionAction(action='remove', backend_id=INSTANCE['id']), request())
+            self.assertIsNone(json.loads(removed.body)['phoenixd'])
+            self.assertNotIn(INSTANCE['password'], Path(config.CONFIG_PATH).read_text())
+            self.assertEqual(len(app_module.list_tx_history()), 1)
+            self.assertEqual(config.load_config()['public_receiving_backend_id'], INSTANCE['id'])
+            with self.assertRaises(HTTPException):
+                backends.bound(config.load_config(), INSTANCE['id'])
+            with patch.object(backends, 'checked_client', AsyncMock(return_value=(None, '02' + '44' * 32))):
+                different = await backends.configure(config.load_config(), INSTANCE)
+            self.assertNotEqual(different['lightning_backend']['phoenixd']['id'], INSTANCE['id'])
+
+            await app_module.save_lightning_backend({'url': INSTANCE['url'], 'password': INSTANCE['password']}, request())
+            self.assertEqual(backends.bound(config.load_config(), INSTANCE['id'])['node_id'], NODE)
+            with self.assertRaises(HTTPException) as error:
+                await app_module.manage_phoenix_connection(
+                    app_module.PhoenixConnectionAction(action='remove', backend_id=INSTANCE['id']), request())
+            self.assertEqual(error.exception.status_code, 409)
+            self.assertEqual(await app_module._sync_tx_history_once(), 0)
+            self.assertEqual(len(app_module.list_tx_history()), 1)
+
+    async def test_remove_with_history_deletes_only_phoenix_rows_and_notifications(self):
+        self.pair_companion()
+        push = app_module.companion_push
+        self.incoming = [self.raw('incoming', completedAt=time.time_ns() // 1_000_000)]
+        await self.service.sync()
+        lnd = {**app_module.list_tx_history()[0], 'backend_id': 'lnd-default'}
+        app_module.save_tx_history_item(lnd)
+        push.queue_settled_payment(app_module.DB_PATH, lnd)
+        with patch.object(app_module, 'require_pay_auth'):
+            await app_module.manage_phoenix_connection(
+                app_module.PhoenixConnectionAction(
+                    action='remove', backend_id=INSTANCE['id'], delete_history=True,
+                ), request())
+        self.assertEqual([row['backend_id'] for row in app_module.list_tx_history()], ['lnd-default'])
+        with app_module._db_conn() as db:
+            self.assertEqual([row[0] for row in db.execute('SELECT payment_hash FROM companion_push_events')], [HASH])
+        self.assertEqual(len(push.list_devices(app_module.DB_PATH)), 1)
+
+    async def test_remove_publications_scopes_aliases_offer_history_and_dns_to_the_wallet(self):
+        cfg = config.load_config()
+        cfg.update(
+            dns_mode='cloudflare', public_bolt12_address='pay@wallet.example',
+            public_receiving_backend_id=INSTANCE['id'],
+            cloudflare={'enabled': True, 'zone_name': 'example', 'zone_id': 'zone', 'api_token': 'test-token'},
+            aliases={
+                'alice': {'backend_id': INSTANCE['id'], 'last_offer': 'lno1alias', 'dns_name': 'alice.user._bitcoin-payment.wallet.example'},
+                'bob': {'backend_id': 'lnd-default', 'last_offer': 'lno1lnd', 'dns_name': 'bob.user._bitcoin-payment.wallet.example'},
+            },
+        )
+        config.save_config(cfg)
+        with app_module._db_conn() as db:
+            db.executemany("INSERT INTO backend_objects VALUES ('offer', ?, ?)", [
+                ('lno1phoenix', INSTANCE['id']), ('lno1public', INSTANCE['id']),
+            ])
+        for item_id, offer in (
+            ('phx', 'lno1phoenix'), ('alias', 'lno1alias'), ('lnd', 'lno1lnd'), ('public', 'lno1public'),
+        ):
+            app_module.save_offer_history_item({'id': item_id, 'offer': offer})
+        saved_dns = 'tip.user._bitcoin-payment.wallet.example'
+        app_module.save_history_bip353('phx', 'tip', 'tip@wallet.example', saved_dns)
+        app_module.save_history_bip353('public', 'pay', 'pay@wallet.example',
+                                        'PAY.user._bitcoin-payment.wallet.example.')
+        lnd_dns = 'bob.user._bitcoin-payment.wallet.example'
+        app_module.save_history_bip353('lnd', 'bob', 'bob@wallet.example', lnd_dns)
+        delete_dns = AsyncMock(return_value={'retained_bolt12': False})
+        with (
+            patch.object(app_module, 'require_pay_auth'),
+            patch.object(app_module, 'get_bip353_base_domain', return_value='wallet.example'),
+            patch.object(app_module, '_cloudflare_delete_txt_record', delete_dns),
+            patch.object(app_module, 'LNURL_ALIAS_MODE', 'open'),
+        ):
+            response = await app_module.manage_phoenix_connection(app_module.PhoenixConnectionAction(
+                action='remove', backend_id=INSTANCE['id'], delete_publications=True,
+            ), request())
+            with self.assertRaises(HTTPException) as missing:
+                app_module._resolve_lnurl_alias('alice')
+            self.assertEqual(missing.exception.status_code, 404)
+        self.assertEqual({call.kwargs['name']: call.kwargs['expected_offers'] for call in delete_dns.await_args_list}, {
+            'alice.user._bitcoin-payment.wallet.example': {'lno1alias'},
+            'alice.user._bitcoin-payment.example': {'lno1alias'},
+            saved_dns: {'lno1phoenix'},
+        })
+        self.assertNotIn('manual_dns_names', json.loads(response.body))
+        self.assertEqual([item['id'] for item in app_module.list_offer_history()], ['lnd'])
+        self.assertEqual([item['dns_name'] for item in app_module.list_all_history_bip353()], [lnd_dns])
+        self.assertEqual(set(config.load_config()['aliases']), {'bob'})
+        self.assertEqual(config.load_config()['public_receiving_backend_id'], INSTANCE['id'])
+
+    async def test_publication_cleanup_failure_keeps_data_for_retry(self):
+        cfg = config.load_config()
+        dns_name = 'alice.user._bitcoin-payment.wallet.example'
+        cfg.update(
+            dns_mode='cloudflare', cloudflare={'enabled': True, 'zone_name': 'example',
+                                             'zone_id': 'zone', 'api_token': 'test-token'},
+            aliases={'alice': {'backend_id': INSTANCE['id'], 'last_offer': 'lno1alias', 'dns_name': dns_name}},
+        )
+        config.save_config(cfg)
+        app_module.save_offer_history_item({'id': 'phx', 'offer': 'lno1alias'})
+        action = app_module.PhoenixConnectionAction(
+            action='remove', backend_id=INSTANCE['id'], delete_publications=True,
+        )
+        with (
+            patch.object(app_module, 'require_pay_auth'),
+            patch.object(app_module, 'get_bip353_base_domain', return_value='wallet.example'),
+            patch.object(app_module, '_cloudflare_delete_txt_record', AsyncMock(
+                side_effect=HTTPException(502, 'DNS offline'),
+            )),
+        ):
+            with self.assertRaises(HTTPException):
+                await app_module.manage_phoenix_connection(action, request())
+            self.assertTrue(config.load_config()['lightning_backend']['phoenixd']['paused'])
+            self.assertIn('alice', config.load_config()['aliases'])
+            self.assertIsNotNone(app_module.get_offer_history_item('phx'))
+
+            cfg = config.load_config()
+            cfg['dns_mode'] = 'manual'
+            config.save_config(cfg)
+            response = await app_module.manage_phoenix_connection(action, request())
+        self.assertEqual(json.loads(response.body)['manual_dns_names'], [
+            'alice.user._bitcoin-payment.example', dns_name,
+        ])
+        self.assertIsNone(app_module.get_offer_history_item('phx'))
+
+    async def test_scoped_dns_deletion_keeps_unrelated_txt_at_the_same_name(self):
+        name = 'alice.user._bitcoin-payment.wallet.example'
+        cloudflare = {'enabled': True, 'zone_name': 'example', 'zone_id': 'zone', 'api_token': 'test-token'}
+        records = [
+            {'id': key, 'name': name, 'type': 'TXT', 'content': content}
+            for key, content in (
+                ('owned', '"bitcoin:?lno=lno1phoenix"'),
+                ('other', '"bitcoin:?lno=lno1lnd"'),
+                ('extra', '"bitcoin:?lno=lno1phoenix&lightning=lnbc1other"'),
+                ('txt', '"other text"'),
+            )
+        ]
+        client = AsyncMock()
+        client.delete.return_value = httpx.Response(200, json={'success': True})
+        with (
+            patch.object(app_module, '_cloudflare_lookup_txt_records', AsyncMock(return_value=records)),
+            patch.object(app_module.httpx, 'AsyncClient') as make_client,
+        ):
+            make_client.return_value.__aenter__.return_value = client
+            result = await app_module._cloudflare_delete_txt_record(
+                name=name, cloudflare_config=cloudflare, expected_offers={'lno1phoenix'},
+            )
+        self.assertEqual(result['deleted_record_ids'], ['owned'])
+        self.assertTrue(result['retained_bolt12'])
+        client.delete.assert_awaited_once()
+        self.assertTrue(client.delete.await_args.args[0].endswith('/owned'))
+
+    async def test_scoped_dns_deletion_matches_long_offers_split_into_txt_chunks(self):
+        name = 'alice.user._bitcoin-payment.wallet.example'
+        cloudflare = {'enabled': True, 'zone_name': 'example', 'zone_id': 'zone', 'api_token': 'test-token'}
+        offer = 'lno1' + 'qp' * 220
+        content = f'bitcoin:?lno={offer}'
+        chunked = ' '.join(f'"{content[i:i + 255]}"' for i in range(0, len(content), 255))
+        records = [
+            {'id': 'long', 'name': name, 'type': 'TXT', 'content': chunked},
+            {'id': 'other', 'name': name, 'type': 'TXT', 'content': chunked + '"&lightning=lnbc1other"'},
+        ]
+        client = AsyncMock()
+        client.delete.return_value = httpx.Response(200, json={'success': True})
+        with (
+            patch.object(app_module, '_cloudflare_lookup_txt_records', AsyncMock(return_value=records)),
+            patch.object(app_module.httpx, 'AsyncClient') as make_client,
+        ):
+            make_client.return_value.__aenter__.return_value = client
+            result = await app_module._cloudflare_delete_txt_record(
+                name=name, cloudflare_config=cloudflare, expected_offers={offer},
+            )
+        self.assertEqual(result['deleted_record_ids'], ['long'])
+        self.assertTrue(result['retained_bolt12'])
+        client.delete.assert_awaited_once()
+        self.assertTrue(client.delete.await_args.args[0].endswith('/long'))
+
+    async def test_pause_invalidates_history_sync_already_in_flight(self):
+        loading = asyncio.Event()
+        release = asyncio.Event()
+
+        async def list_incoming(**kwargs):
+            loading.set()
+            await release.wait()
+            return [self.raw('incoming')]
+
+        client = AsyncMock()
+        client.list_incoming.side_effect = list_incoming
+        with patch.object(backends, 'checked_client', return_value=(client, NODE)), patch.object(app_module, 'require_pay_auth'):
+            sync = asyncio.create_task(self.service.sync())
+            try:
+                await asyncio.wait_for(loading.wait(), 1)
+                await app_module.manage_phoenix_connection(
+                    app_module.PhoenixConnectionAction(action='pause', backend_id=INSTANCE['id']), request())
+            finally:
+                release.set()
+            with self.assertRaises(HTTPException):
+                await sync
+        self.assertEqual(app_module.list_tx_history(), [])
+        client.list_outgoing.assert_not_awaited()
 
     async def test_withdraw_inspection_never_redeems_and_hides_voucher(self):
         requests = []
@@ -728,6 +992,91 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result['public_bip353']['published'])
         self.assertIn('lno1dnsoffer', dns.call_args.kwargs['content'])
         self.assertEqual(dns.call_args.kwargs['name'], 'alice.user._bitcoin-payment.example.com')
+        self.assertEqual(config.load_config()['public_receiving_backend_id'], INSTANCE['id'])
+
+    async def test_public_bip353_repair_can_explicitly_move_removed_phoenixd_address_to_lnd(self):
+        address = 'pay@wallet.example'
+        cfg = {
+            'dns_mode': 'cloudflare',
+            'public_bolt12_address': address,
+            'public_receiving_backend_id': INSTANCE['id'],
+            'cloudflare': {'zone_name': 'example', 'zone_id': 'zone', 'api_token': 'token'},
+            'aliases': {'alice': {'backend_id': INSTANCE['id'], 'last_offer': 'lno1phoenix'}},
+        }
+        config.save_config(cfg)
+        offer = app_module.OfferResponse(offer='lno1lnd', raw_output='lno1lnd')
+        create_offer = Mock(return_value=offer)
+        publish = AsyncMock()
+        client = self.client_factory(
+            transport=httpx.ASGITransport(app=app_module.app),
+            base_url='http://testserver', cookies={'csrf_token': 'test'},
+        )
+        with (
+            patch.object(app_module, 'LND_REST_URL', 'https://lnd.test'),
+            patch.object(app_module, 'require_pay_auth'),
+            patch.object(app_module, '_cloudflare_lookup_txt_records', AsyncMock(return_value=[])),
+            patch.object(app_module, '_cloudflare_upsert_txt_record', publish),
+            patch.object(app_module, '_create_offer_internal', create_offer),
+            patch.object(app_module, 'PUBLIC_BIP353_REPAIR_TASK', None),
+            patch.object(app_module, 'PUBLIC_BIP353_REPAIR_JOB', {}),
+        ):
+            async with client:
+                status = (await client.get('/api/setup/public-bip353-status')).json()
+                self.assertFalse(status['receiving_wallet_available'])
+                self.assertTrue(status['can_recreate_with_lnd'])
+                with self.assertRaises(HTTPException) as error:
+                    await app_module._repair_public_bip353_record()
+                self.assertEqual(error.exception.status_code, 409)
+                create_offer.assert_not_called()
+                response = await client.post(
+                    '/api/setup/public-bip353-repair', headers={'X-CSRF-Token': 'test'},
+                    json={'address': address, 'use_lnd': True},
+                )
+                self.assertEqual(response.status_code, 202)
+                await app_module.PUBLIC_BIP353_REPAIR_TASK
+                job = (await client.get('/api/setup/public-bip353-repair-status')).json()
+                self.assertEqual(job['state'], 'completed')
+                self.assertTrue(job['created'])
+        self.assertEqual(create_offer.call_args.args[0].description, address)
+        self.assertEqual(publish.await_args.kwargs['name'], 'pay.user._bitcoin-payment.wallet.example')
+        self.assertEqual(publish.await_args.kwargs['content'], app_module.build_bip353_txt_value(offer.offer))
+        updated = config.load_config()
+        self.assertEqual(updated['public_receiving_backend_id'], backends.LND_ID)
+        self.assertEqual(updated['aliases'], cfg['aliases'])
+
+    async def test_public_bip353_repair_keeps_binding_until_lnd_offer_is_published(self):
+        address = 'pay@wallet.example'
+        cfg = config.load_config()
+        cfg.update(dns_mode='cloudflare', public_bolt12_address=address,
+                   public_receiving_backend_id=INSTANCE['id'],
+                   cloudflare={'zone_name': 'example', 'zone_id': 'zone', 'api_token': 'token'})
+        config.save_config(cfg)
+        payload = app_module.PublicBip353RepairRequest(address=address, use_lnd=True)
+        lookup = AsyncMock(return_value=[])
+        publish = AsyncMock(side_effect=HTTPException(502, 'DNS unavailable'))
+        create = AsyncMock(return_value=app_module.OfferResponse(offer='lno1lnd', raw_output='lno1lnd'))
+        with (
+            patch.object(app_module, '_cloudflare_lookup_txt_records', lookup),
+            patch.object(app_module, '_cloudflare_upsert_txt_record', publish),
+            patch.object(app_module, '_create_bound_offer', create),
+        ):
+            self.assertFalse((await app_module._check_public_bip353_record())['can_recreate_with_lnd'])
+            with self.assertRaises(HTTPException) as unavailable:
+                await app_module._repair_public_bip353_record(payload)
+            self.assertEqual(unavailable.exception.status_code, 409)
+            create.assert_not_awaited()
+
+            with patch.object(app_module, 'LND_REST_URL', 'https://lnd.test'):
+                with self.assertRaises(HTTPException) as failure:
+                    await app_module._repair_public_bip353_record(payload)
+                self.assertEqual(failure.exception.status_code, 502)
+                self.assertEqual(config.load_config()['public_receiving_backend_id'], INSTANCE['id'])
+                existing = [{'content': 'bitcoin:?lno=lno1existing'}]
+                lookup.side_effect = [[], existing]
+                result = await app_module._repair_public_bip353_record(payload)
+                self.assertFalse(result['created'])
+
+        publish.assert_awaited_once()
         self.assertEqual(config.load_config()['public_receiving_backend_id'], INSTANCE['id'])
 
     async def test_first_phoenix_configuration_starts_workers_without_restart(self):

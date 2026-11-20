@@ -60,9 +60,11 @@ const assert = require('node:assert/strict');
 let current = {active:'lnd-default'};
 const t = key => key;
 const inputs = [{value:'http://phoenixd:9740'},{value:'saved-draft'}];
+const phoenixOption = {};
 const elements = {
- lightningBackendSelect:{value:'lnd-default'},
- phoenixdFields:{querySelectorAll:()=>inputs}, lndBackendHint:{}, backendUnsaved:{}
+ lightningBackendSelect:{value:'lnd-default', querySelector:()=>phoenixOption},
+ phoenixdFields:{querySelectorAll:()=>inputs}, lndBackendHint:{}, backendUnsaved:{},
+ phoenixdManagement:{}, pausePhoenixdBtn:{dataset:{}}, phoenixdPaused:{}
 };
 const document = {getElementById:id=>elements[id]};
 ''' + function + '''
@@ -78,6 +80,12 @@ assert.equal(current.active,'lnd-default');
 assert.equal(elements.backendUnsaved.textContent,'unsaved');
 current.active='phoenixd-test'; updateSelection();
 assert.equal(elements.backendUnsaved.textContent,'');
+current = {active:'lnd-default', phoenixd:{id:'phoenixd-test', paused:true}};
+elements.lightningBackendSelect.value='lnd-default'; updateSelection();
+assert.equal(phoenixOption.disabled,true);
+assert.equal(elements.phoenixdManagement.hidden,false);
+assert.equal(elements.pausePhoenixdBtn.textContent,'resume_phoenixd');
+assert.equal(elements.phoenixdPaused.hidden,false);
 ''')
 
     def test_activity_keeps_both_backend_rows_when_loading_and_refreshing(self):

@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.28] - 2026-11-20
+
+### Added
+
+- Deactivate a Phoenixd connection to stop background sync and notifications
+  on this installation. Reactivate it without replaying payments from the pause.
+- Keep existing Phoenixd Offers and BIP353 addresses available on alias pages
+  while disabling unavailable LNURL and BOLT11 fallbacks. Optionally hide those
+  public alias pages while the connection is deactivated.
+- Remove Phoenixd credentials from Setup and choose whether to keep the local
+  Lightning Activity history. Reconnecting the same node restores its wallet
+  bindings.
+- Optionally remove a Phoenixd wallet's local offers and alias pages along
+  with their matching Cloudflare BIP353 records. Report DNS records that need
+  checking with another provider.
+- Recreate a missing public BIP353 record with LND when the address was
+  previously bound to Phoenixd, even after removing that connection.
+
+### Fixed
+
+- Protect the public Setup address from bulk Phoenixd publication cleanup.
+- Match Cloudflare TXT records split into multiple quoted chunks when removing
+  Phoenixd alias publications.
+
 ## [0.3.27] - 2026-11-19
 
 ### Fixed

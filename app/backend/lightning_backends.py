@@ -27,10 +27,31 @@ def state(cfg):
 
 def public_state(cfg):
     result = state(cfg)
+    result.pop("detached_phoenixd", None)
+    hidden_aliases = result.pop("hidden_phoenixd_aliases", [])
     phoenix = result.get("phoenixd")
     if phoenix:
         phoenix["password_set"] = bool(phoenix.pop("password", ""))
+        phoenix["alias_pages_hidden"] = phoenix.get("id") in hidden_aliases
     return result
+
+
+def connected_phoenixd(cfg):
+    instance = (cfg.get("lightning_backend") or {}).get("phoenixd")
+    return instance if instance and not instance.get("paused") else None
+
+
+def can_issue_public_invoice(cfg, backend_id):
+    if backend_id == LND_ID:
+        return True
+    phoenix = connected_phoenixd(cfg)
+    return bool(phoenix and phoenix["id"] == backend_id)
+
+
+def alias_page_hidden(cfg, alias):
+    backend_id = alias.get("backend_id", LND_ID)
+    settings = cfg.get("lightning_backend") or {}
+    return backend_id in settings.get("hidden_phoenixd_aliases", []) and not can_issue_public_invoice(cfg, backend_id)
 
 
 def selected(cfg, expected=None):
@@ -40,7 +61,7 @@ def selected(cfg, expected=None):
         raise HTTPException(409, "Lightning backend changed. Reload before continuing.")
     if active == LND_ID:
         return None
-    instance = settings.get("phoenixd")
+    instance = connected_phoenixd(cfg)
     if not instance or instance.get("id") != active:
         raise HTTPException(409, "Lightning backend is not configured")
     return instance
@@ -50,7 +71,7 @@ def bound(cfg, backend_id):
     """Resolve a saved object's owner, independently of the current selector."""
     if backend_id == LND_ID:
         return None
-    instance = state(cfg).get('phoenixd')
+    instance = connected_phoenixd(cfg)
     if not instance or instance.get('id') != backend_id:
         raise HTTPException(409, 'The receiving wallet is unavailable; its binding was preserved.')
     return instance
@@ -105,19 +126,31 @@ async def checked_client(instance):
 
 
 async def configure(cfg, payload):
-    previous = state(cfg).get("phoenixd") or {}
-    url = str(payload.get("url") or previous.get("url") or "").strip().rstrip("/")
+    settings = state(cfg)
+    previous = settings.get("phoenixd") or {}
+    if previous.get("paused"):
+        raise HTTPException(409, "Resume Phoenixd before changing its connection.")
+    url = str(payload.get("url", previous.get("url")) or "").strip().rstrip("/")
+    if not url:
+        raise HTTPException(400, "Enter the Phoenixd server URL.")
     password = payload.get("password") or previous.get("password") or ""
     if not isinstance(password, str):
         raise HTTPException(400, "Invalid API password")
     candidate = {**previous, "url": url, "password": password}
-    client, node_id = await checked_client(candidate)
-    candidate.update(id=previous.get("id") or "phoenixd-" + uuid.uuid4().hex, node_id=node_id)
+    _, node_id = await checked_client(candidate)
+    detached = settings.get("detached_phoenixd", {})
+    known_id = detached.get(node_id)
+    candidate.update(
+        id=previous.get("id") or known_id or "phoenixd-" + uuid.uuid4().hex,
+        node_id=node_id,
+        revision=previous.get("revision") if previous else uuid.uuid4().hex,
+    )
+    detached.pop(node_id, None)
     active = payload.get("active", "phoenixd")
     if active not in {"phoenixd", LND_ID, candidate["id"]}:
         raise HTTPException(400, "Invalid Lightning backend")
     updated = {**cfg, "lightning_backend": {
-        "active": LND_ID if active == LND_ID else candidate["id"], "phoenixd": candidate,
+        **settings, "active": LND_ID if active == LND_ID else candidate["id"], "phoenixd": candidate,
     }}
     return updated
 
@@ -162,10 +195,11 @@ def payment_failure_detail(result, payment_type):
 
 
 class PhoenixBackend:
-    def __init__(self, instance, db_conn, save_item, notify_item=None):
+    def __init__(self, instance, db_conn, save_item, notify_item=None, require_connected=None):
         self.instance = copy.deepcopy(instance)
         self.db_conn, self.save_item = db_conn, save_item
         self.notify_item = notify_item
+        self.require_connected = require_connected
 
     def existing(self, payment_hash, direction):
         with self.db_conn() as conn:
@@ -176,6 +210,8 @@ class PhoenixBackend:
         return dict(row) if row else None
 
     def store(self, item):
+        if self.require_connected:
+            self.require_connected()
         old = self.existing(item["payment_hash"], item["direction"])
         if old:
             # Metadata and an invoice's face amount survive unpaid history refreshes.
@@ -235,6 +271,8 @@ class PhoenixBackend:
         except Exception:
             raise HTTPException(400, "Invalid BOLT11 invoice or missing amount") from None
         async with PAYMENT_LOCK:
+            if self.require_connected:
+                self.require_connected()
             previous = self.existing(payment_hash, "outgoing")
             if previous and previous["status"] in {"pending", "settled"}:
                 raise HTTPException(409, "Payment already submitted. Check Lightning Activity before retrying.")
@@ -287,6 +325,8 @@ class PhoenixBackend:
         # Offers are reusable; only unresolved submissions block the same target.
         legacy_attempt = 'phoenix-attempt-' + hashlib.sha256(offer.encode()).hexdigest()
         async with PAYMENT_LOCK:
+            if self.require_connected:
+                self.require_connected()
             with self.db_conn() as conn:
                 pending = conn.execute(
                     "SELECT payment_hash, raw_json FROM tx_history "
@@ -353,6 +393,8 @@ class PhoenixBackend:
             offset = 0
             candidates = {}
             while True:
+                if self.require_connected:
+                    self.require_connected()
                 rows = await listing(limit=100, offset=offset)
                 if not isinstance(rows, list):
                     raise ValueError("Invalid Phoenixd history response")
@@ -372,6 +414,8 @@ class PhoenixBackend:
                 if len(rows) < 100:
                     break
                 offset += len(rows)
+            if self.require_connected:
+                self.require_connected()
             for item in candidates.values():
                 changed += int(self.store(item))
         return changed

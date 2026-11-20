@@ -526,6 +526,15 @@ async def _handle_request_event_once(
         await _send_nwc_error(ws, event, code, message)
         return
 
+    backend_id = matched.get('backend_id', 'lnd-default')
+    if backend_id != 'lnd-default':
+        from .app import lightning_backends, load_config
+
+        instance = lightning_backends.connected_phoenixd(load_config())
+        if not instance or instance['id'] != backend_id:
+            await _send_nwc_error(ws, event, "RESTRICTED", "Phoenixd connection paused or unavailable")
+            return
+
     method = str(payload.get("method") or "").strip()
     params = payload.get("params") or {}
 

@@ -22,7 +22,8 @@
     const liquidity = document.getElementById('liquiditySection');
     if (liquidity && current) liquidity.hidden = !current.lnd_configured;
     const phoenix = current && current.active !== 'lnd-default';
-    const label = current ? (phoenix ? 'Phoenixd' : 'LND') : t('unavailable');
+    const available = phoenix || current?.lnd_configured;
+    const label = available ? (phoenix ? 'Phoenixd' : 'LND') : t(current ? 'no_wallet' : 'unavailable');
     document.querySelectorAll('[data-lightning-backend-label]').forEach(el => {
       el.textContent = '';
       el.style.display = 'flex';
@@ -36,7 +37,7 @@
       caption.style.cssText = 'color:#cbd5e1;font-weight:400';
       const identity = document.createElement('span');
       identity.style.cssText = 'display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-weight:600';
-      if (current) {
+      if (available) {
         const icon = document.createElement('img');
         icon.src = `/assets/backend-icons/${phoenix ? 'phoenixd' : 'lnd'}.svg?v=5`;
         icon.alt = phoenix ? '' : 'LND';
@@ -50,14 +51,14 @@
         }
         identity.append(icon);
       }
-      if (!current || phoenix) identity.append(document.createTextNode(label));
+      if (!available || phoenix) identity.append(document.createTextNode(label));
       el.append(caption, identity);
       if (!el.closest('#lightningBackendPanel')) {
         const setupLink = document.createElement('a');
         setupLink.href = '/app?setup=1#lightningBackendPanel';
         setupLink.textContent = t('configure');
         setupLink.style.cssText = 'font-size:13px;color:#94a3b8;text-underline-offset:3px';
-        const canSwitch = current && (phoenix ? current.lnd_configured : current.phoenixd?.id);
+        const canSwitch = current && (phoenix ? current.lnd_configured : current.phoenixd && !current.phoenixd.paused);
         if (canSwitch) {
           const switchButton = document.createElement('button');
           switchButton.type = 'button';
@@ -93,7 +94,7 @@
 
 
     });
-    document.querySelectorAll('[data-phoenix-tools]').forEach(el => { el.hidden = !current; });
+    document.querySelectorAll('[data-phoenix-tools]').forEach(el => { el.hidden = !available; });
     updateSelection();
     document.querySelectorAll('#lightningBackendPanel [data-backend-text], [data-phoenix-tools] [data-backend-text]').forEach(el => {
       el.textContent = t(el.dataset.backendText);
@@ -103,6 +104,8 @@
     const select = document.getElementById('lightningBackendSelect');
     if (!select) return;
     const phoenix = select.value === 'phoenixd';
+    const paused = Boolean(current?.phoenixd?.paused);
+    select.querySelector('option[value="phoenixd"]').disabled = paused;
     const fields = document.getElementById('phoenixdFields');
     fields.hidden = !phoenix;
     fields.querySelectorAll('input, button').forEach(el => { el.disabled = !phoenix; });
@@ -110,6 +113,11 @@
     const saved = current?.active === 'lnd-default' ? 'lnd-default' : current ? 'phoenixd' : null;
     const pending = document.getElementById('backendUnsaved');
     pending.textContent = saved && select.value !== saved ? t('unsaved') : '';
+    document.getElementById('phoenixdManagement').hidden = !current?.phoenixd;
+    const toggle = document.getElementById('pausePhoenixdBtn');
+    toggle.dataset.backendText = paused ? 'resume_phoenixd' : 'pause_phoenixd';
+    toggle.textContent = t(toggle.dataset.backendText);
+    document.getElementById('phoenixdPaused').hidden = !paused;
   }
   async function refresh() {
     current = await api('/api/lightning-backend');
@@ -138,6 +146,31 @@
       #lightningBackendPanel > p { margin:0;line-height:1.5; }
       #lightningBackendPanel > p:empty { display:none; }
       #lightningBackendPanel > .row { margin-top:4px; }
+      #phoenixdManagement { display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap; }
+      #phoenixdPaused { font-size:.85rem;color:#94a3b8; }
+      #phoenixdManagement button {
+        width:auto;min-height:32px;padding:4px 9px;font-size:.82rem;
+      }
+      #pausePhoenixdBtn, #confirmPhoenixdAction[data-action="pause"] {
+        color:#bfdbfe;background:#172b48;border:1px solid #35649a;
+      }
+      #pausePhoenixdBtn:hover, #confirmPhoenixdAction[data-action="pause"]:hover { background:#203b60; }
+      #removePhoenixdBtn, #confirmPhoenixdAction[data-action="remove"] {
+        color:#fecaca;background:#3b2029;border:1px solid #8b4553;
+      }
+      #removePhoenixdBtn:hover, #confirmPhoenixdAction[data-action="remove"]:hover { background:#522936; }
+      #phoenixdOptions {
+        box-sizing:border-box;width:min(440px, calc(100% - 32px));max-height:calc(100% - 32px);
+        padding:16px;border:1px solid #475569;border-radius:14px;background:#0f172a;color:#e2e8f0;
+      }
+      #phoenixdOptions::backdrop { background:rgba(0,0,0,.6); }
+      #phoenixdOptions h3 { margin:0 0 8px; }
+      #phoenixdOptions p { margin:0 0 12px; }
+      #phoenixdOptions label { display:flex;align-items:center;gap:8px; }
+      #phoenixdOptions input { width:auto;flex:none; }
+      #phoenixdOptions small { display:block;margin:6px 0 0 24px;color:#cbd5e1; }
+      #deletePhoenixdPublicationsOption { margin-top:12px; }
+      #phoenixdOptions .row { justify-content:flex-end; }
     `;
     document.head.append(style);
     const setup = document.getElementById('setupCard');
@@ -149,6 +182,12 @@
         <h2 data-backend-text="title"></h2>
         <p data-backend-text="hint"></p>
         <p data-lightning-backend-label role="status" style="font-size:16px;padding:10px 0"></p>
+        <div id="phoenixdManagement" hidden>
+          <strong>Phoenixd</strong>
+          <span id="phoenixdPaused" hidden data-backend-text="phoenixd_paused"></span>
+          <button id="pausePhoenixdBtn" type="button" class="secondary" data-backend-text="pause_phoenixd"></button>
+          <button id="removePhoenixdBtn" type="button" class="secondary" data-backend-text="remove_phoenixd"></button>
+        </div>
         <label for="lightningBackendSelect" data-backend-text="selection"></label>
         <select id="lightningBackendSelect"><option value="lnd-default">LND</option><option value="phoenixd">Phoenixd</option></select>
         <p id="backendUnsaved" role="status"></p>
@@ -163,7 +202,33 @@
         <div class="row"><button id="testPhoenixdBtn" type="button" data-backend-text="test"></button></div>
         </div></fieldset>
         <div class="row"><button id="saveBackendBtn" type="button" data-backend-text="save"></button></div>
-        <p id="backendResult" role="status" style="overflow-wrap:anywhere"></p>`;
+        <p id="backendResult" role="status" style="overflow-wrap:anywhere;white-space:pre-line"></p>
+        <dialog id="phoenixdOptions" aria-labelledby="phoenixdOptionsTitle" aria-describedby="phoenixdOptionsMessage">
+          <form method="dialog">
+            <h3 id="phoenixdOptionsTitle">Phoenixd</h3>
+            <p id="phoenixdOptionsMessage"></p>
+            <div id="hidePhoenixdAliasesOption">
+              <label><input id="hidePhoenixdAliases" type="checkbox">
+                <span data-backend-text="hide_phoenixd_aliases"></span>
+              </label>
+              <small data-backend-text="hide_phoenixd_aliases_hint"></small>
+            </div>
+            <label id="deletePhoenixdHistoryOption">
+              <input id="deletePhoenixdHistory" type="checkbox">
+              <span data-backend-text="delete_phoenixd_history"></span>
+            </label>
+            <div id="deletePhoenixdPublicationsOption" hidden>
+              <label><input id="deletePhoenixdPublications" type="checkbox">
+                <span data-backend-text="delete_phoenixd_publications"></span>
+              </label>
+              <small data-backend-text="delete_phoenixd_publications_hint"></small>
+            </div>
+            <div class="row">
+              <button value="cancel" class="secondary" data-backend-text="cancel" autofocus></button>
+              <button value="confirm" id="confirmPhoenixdAction"></button>
+            </div>
+          </form>
+        </dialog>`;
       // Backend choice comes before domain/DNS settings on a fresh installation.
       // Keep both Save buttons independent; do not reset the selected wallet.
       const generalSetup = setup.querySelector(':scope > section.section');
@@ -188,6 +253,66 @@
       panel.querySelector('select').onchange = updateSelection;
       panel.querySelector('#testPhoenixdBtn').onclick = () => submit(true);
       panel.querySelector('#saveBackendBtn').onclick = () => submit(false);
+      async function manage(action) {
+        const deleteHistory = action === 'remove' && panel.querySelector('#deletePhoenixdHistory').checked;
+        const deletePublications = action === 'remove' && panel.querySelector('#deletePhoenixdPublications').checked;
+        const hideAliasPages = action === 'pause' ? panel.querySelector('#hidePhoenixdAliases').checked : undefined;
+        const buttons = panel.querySelectorAll('button');
+        buttons.forEach(button => { button.disabled = true; });
+        result.textContent = t('working');
+        try {
+          current = await api('/api/setup/lightning-backend/phoenixd', {
+            action, backend_id: current.phoenixd.id, revision: current.phoenixd.revision,
+            delete_history: deleteHistory, hide_alias_pages: hideAliasPages, delete_publications: deletePublications,
+          });
+          window.LightningBackend.id = current.active;
+          panel.querySelector('select').value = current.active === 'lnd-default' ? 'lnd-default' : 'phoenixd';
+          panel.querySelector('#phoenixdUrl').value = current.phoenixd?.url || '';
+          panel.querySelector('#phoenixdPassword').value = '';
+          panel.querySelector('#deletePhoenixdHistory').checked = false;
+          render();
+          result.textContent = action === 'pause' ? '' : t(action === 'remove' ? 'phoenixd_removed' : 'connected');
+          if (current.manual_dns_names?.length) {
+            result.textContent += '\n' + t('check_manual_dns') + '\n' + current.manual_dns_names.join('\n');
+          }
+        } catch (error) {
+          try { await refresh(); } catch (_) {}
+          result.textContent = error.message;
+        }
+        finally { buttons.forEach(button => { button.disabled = false; }); updateSelection(); }
+      }
+      const options = panel.querySelector('#phoenixdOptions');
+      const historyOption = panel.querySelector('#deletePhoenixdHistory');
+      const optionsMessage = panel.querySelector('#phoenixdOptionsMessage');
+      let pendingAction;
+      const updateOptionsMessage = () => {
+        const key = pendingAction === 'pause' ? 'phoenixd_management_hint'
+          : historyOption.checked ? 'confirm_remove_history' : 'confirm_remove';
+        optionsMessage.dataset.backendText = key;
+        optionsMessage.textContent = t(key);
+      };
+      function showOptions(action) {
+        pendingAction = action;
+        options.returnValue = '';
+        historyOption.checked = false;
+        panel.querySelector('#deletePhoenixdPublications').checked = false;
+        panel.querySelector('#hidePhoenixdAliases').checked = Boolean(current.phoenixd.alias_pages_hidden);
+        panel.querySelector('#hidePhoenixdAliasesOption').hidden = action !== 'pause';
+        panel.querySelector('#deletePhoenixdHistoryOption').hidden = action !== 'remove';
+        panel.querySelector('#deletePhoenixdPublicationsOption').hidden = action !== 'remove';
+        const confirm = panel.querySelector('#confirmPhoenixdAction');
+        confirm.dataset.action = action;
+        confirm.dataset.backendText = action === 'pause' ? 'pause_phoenixd' : 'remove_phoenixd';
+        confirm.textContent = t(confirm.dataset.backendText);
+        updateOptionsMessage();
+        options.showModal();
+      }
+      historyOption.onchange = updateOptionsMessage;
+      options.addEventListener('close', () => {
+        if (options.returnValue === 'confirm') void manage(pendingAction);
+      });
+      panel.querySelector('#pausePhoenixdBtn').onclick = () => current.phoenixd.paused ? manage('resume') : showOptions('pause');
+      panel.querySelector('#removePhoenixdBtn').onclick = () => showOptions('remove');
     }
     const payButton = document.getElementById('payOfferBtn');
     if (payButton) {
