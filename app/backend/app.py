@@ -37,6 +37,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, Field
+from backend.config import hash_ui_password as _hash_password
 from backend.config import load_config, save_config
 from backend import companion_push, lightning_backends
 from backend.offer_preview import amount_hint as offer_amount_hint
@@ -248,10 +249,6 @@ def _check_public_alias_invoice_rate_limit(
 
     for key, _limit in keys_and_limits:
         _PUBLIC_ALIAS_INVOICE_RATE_LIMITS.setdefault(key, []).append(now)
-
-def _hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
 
 def _get_ui_password_hash() -> str:
     cfg = load_config()

@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import tempfile
@@ -63,3 +64,20 @@ def save_config(cfg):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def hash_ui_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def initialize_ui_password(password: str) -> None:
+    cfg = load_config()
+    if str(cfg.get("ui_password_hash") or "").strip():
+        return
+
+    password = password.strip()
+    if not password:
+        raise ValueError("The initial BOLT12 Pay password is empty.")
+
+    cfg["ui_password_hash"] = hash_ui_password(password)
+    save_config(cfg)

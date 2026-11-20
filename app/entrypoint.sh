@@ -24,4 +24,16 @@ copy_if_missing "${DEFAULTS_DIR}/config.runtime.default.json" "${APP_DATA_DIR}/c
 # Nested config defaults
 copy_if_missing "${DEFAULTS_DIR}/config/secrets.default.json" "${APP_DATA_DIR}/config/secrets.default.json"
 
+if [ "${BOLT12_PAY_INITIAL_PASSWORD+x}" = x ]; then
+  python - <<'PYTHON'
+import os
+
+from backend.config import initialize_ui_password
+
+legacy_password = os.getenv("PAY_UI_PASSWORD", "").strip()
+initialize_ui_password(legacy_password or os.environ["BOLT12_PAY_INITIAL_PASSWORD"])
+PYTHON
+  unset BOLT12_PAY_INITIAL_PASSWORD
+fi
+
 exec uvicorn backend.app:app --host 0.0.0.0 --port 8081

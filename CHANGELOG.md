@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.29] - 2026-11-20
+
+### Security
+
+- The Docker image can initialize the BOLT12 Pay password before serving
+  requests when the installation supplies an initial password. The stored
+  password takes precedence on upgrades and restarts.
+
 ## [0.3.28] - 2026-11-20
 
 ### Added
