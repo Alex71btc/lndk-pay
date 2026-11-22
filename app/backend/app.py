@@ -263,16 +263,8 @@ def _is_pay_ui_configured() -> bool:
     return bool(_get_ui_password_hash() or PAY_UI_PASSWORD)
 
 
-def _verify_ui_password(password: str) -> bool:
-    stored_hash = _get_ui_password_hash()
-
-    if stored_hash:
-        return hmac.compare_digest(_hash_password(password or ""), stored_hash)
-
-    if PAY_UI_PASSWORD:
-        return hmac.compare_digest(password or "", PAY_UI_PASSWORD)
-
-    return False
+def _get_effective_ui_password_hash() -> str:
+    return _get_ui_password_hash() or (_hash_password(PAY_UI_PASSWORD) if PAY_UI_PASSWORD else "")
 
 
 def get_public_bolt12_address():
@@ -5124,9 +5116,6 @@ async def set_setup_config(payload: dict, request: StarletteRequest):
     }
     cfg["cloudflare"] = cloudflare_config
 
-    if password:
-        cfg["ui_password_hash"] = _hash_password(password)
-
     public_bip353 = None
     if dns_mode == "cloudflare":
         dns_name = _public_bip353_dns_name(
@@ -5197,9 +5186,17 @@ async def set_setup_config(payload: dict, request: StarletteRequest):
                     [],
                 )
 
-    cfg["lightning_backend"] = lightning_backends.state(load_config())
+    current_cfg = load_config()
+    previous_hash = str(current_cfg.get("ui_password_hash", "")).strip()
+    cfg["ui_password_hash"] = _hash_password(password) if password else previous_hash
+    cfg["lightning_backend"] = lightning_backends.state(current_cfg)
     cfg.setdefault('public_receiving_backend_id', _public_receiving_backend_id(cfg))
     save_config(cfg)
+    if password and cfg["ui_password_hash"] != previous_hash:
+        for sessions in (PAY_SESSIONS, NWC_SESSIONS):
+            for token, meta in sessions.copy().items():
+                if meta.get("password_hash") != cfg["ui_password_hash"]:
+                    sessions.pop(token, None)
 
     return {"ok": True, "public_bip353": public_bip353}
 @app.post("/api/create-offer", response_model=OfferResponse)
@@ -6342,20 +6339,29 @@ def _verify_totp(secret: str, code: str, window: int = 1, timestep: int = 30, di
     return False
 
 
-def _create_pay_session() -> str:
+def _create_pay_session(password_hash: str) -> str:
     token = secrets.token_urlsafe(32)
+    now = int(time.time())
     PAY_SESSIONS[token] = {
-        "created_at": int(time.time()),
-        "expires_at": int(time.time()) + PAY_UI_SESSION_TTL,
+        "created_at": now,
+        "expires_at": now + PAY_UI_SESSION_TTL,
+        "password_hash": password_hash,
     }
     return token
 
 
-def _cleanup_pay_sessions() -> None:
+def _is_ui_session_valid(sessions: dict[str, dict], token: str | None) -> bool:
     now = int(time.time())
-    expired = [token for token, meta in PAY_SESSIONS.items() if int(meta.get("expires_at", 0)) <= now]
-    for token in expired:
-        PAY_SESSIONS.pop(token, None)
+    for expired_token, meta in sessions.copy().items():
+        if int(meta.get("expires_at", 0)) <= now:
+            sessions.pop(expired_token, None)
+    if not token or not (meta := sessions.get(token)):
+        return False
+    password_hash = _get_effective_ui_password_hash()
+    if not password_hash or meta.get("password_hash") != password_hash:
+        sessions.pop(token, None)
+        return False
+    return True
 
 
 def _get_pay_session_token(request: StarletteRequest) -> Optional[str]:
@@ -6372,17 +6378,7 @@ def _require_csrf(request: StarletteRequest):
         raise HTTPException(status_code=403, detail="CSRF validation failed")
 
 def _is_pay_session_valid(request: StarletteRequest) -> bool:
-    _cleanup_pay_sessions()
-    token = _get_pay_session_token(request)
-    if not token:
-        return False
-    meta = PAY_SESSIONS.get(token)
-    if not meta:
-        return False
-    if int(meta.get("expires_at", 0)) <= int(time.time()):
-        PAY_SESSIONS.pop(token, None)
-        return False
-    return True
+    return _is_ui_session_valid(PAY_SESSIONS, _get_pay_session_token(request))
 
 
 def require_pay_auth(request: StarletteRequest) -> None:
@@ -6403,22 +6399,16 @@ def _companion_bearer_token(request: StarletteRequest) -> str:
     return token.strip()
 
 
-def _issue_nwc_session() -> tuple[str, int]:
+def _issue_nwc_session(password_hash: str) -> tuple[str, int]:
     now = int(time.time())
     token = secrets.token_urlsafe(32)
     expires_at = now + NWC_SESSION_TTL
     NWC_SESSIONS[token] = {
         "created_at": now,
         "expires_at": expires_at,
+        "password_hash": password_hash,
     }
     return token, expires_at
-
-
-def _cleanup_nwc_sessions() -> None:
-    now = int(time.time())
-    expired = [token for token, meta in NWC_SESSIONS.items() if int(meta.get("expires_at", 0)) <= now]
-    for token in expired:
-        NWC_SESSIONS.pop(token, None)
 
 
 def _get_nwc_session_token(request: StarletteRequest) -> Optional[str]:
@@ -6430,17 +6420,7 @@ def _read_nwc_session_token(request: StarletteRequest) -> Optional[str]:
 
 
 def _is_nwc_session_valid(request: StarletteRequest) -> bool:
-    _cleanup_nwc_sessions()
-    token = _get_nwc_session_token(request)
-    if not token:
-        return False
-    meta = NWC_SESSIONS.get(token)
-    if not meta:
-        return False
-    if int(meta.get("expires_at", 0)) <= int(time.time()):
-        NWC_SESSIONS.pop(token, None)
-        return False
-    return True
+    return _is_ui_session_valid(NWC_SESSIONS, _get_nwc_session_token(request))
 
 
 def require_nwc_auth(request: StarletteRequest) -> None:
@@ -6691,7 +6671,8 @@ def pay_login_page(request: StarletteRequest):
 
 @app.post("/api/auth/login")
 def api_auth_login(payload: PayLoginRequest, request: StarletteRequest):
-    if not _is_pay_ui_enabled():
+    password_hash = _get_effective_ui_password_hash()
+    if not password_hash:
         return JSONResponse({"ok": True, "disabled": True}, headers=_no_store_headers())
 
     ip = _client_ip(request)
@@ -6707,13 +6688,13 @@ def api_auth_login(payload: PayLoginRequest, request: StarletteRequest):
             headers=_no_store_headers(),
         )
 
-    if not _verify_ui_password(payload.password or ""):
+    if not hmac.compare_digest(_hash_password(payload.password or ""), password_hash):
         attempts = _record_login_failure(ip)
         _login_failure_delay(attempts)
         raise HTTPException(status_code=401, detail="Invalid password")
 
     _record_login_success(ip)
-    token = _create_pay_session()
+    token = _create_pay_session(password_hash)
 
     resp = JSONResponse({"ok": True}, headers=_no_store_headers())
     csrf_token = secrets.token_hex(16)
@@ -10512,7 +10493,7 @@ async def api_admin_nwc_unlock(payload: NwcUnlockRequest, request: StarletteRequ
     if _hash_password(password) != configured_hash:
         raise HTTPException(status_code=401, detail="Invalid password")
 
-    token, expires_at = _issue_nwc_session()
+    token, expires_at = _issue_nwc_session(configured_hash)
     resp = JSONResponse({
         "ok": True,
         "expires_in": max(0, expires_at - int(time.time()))
