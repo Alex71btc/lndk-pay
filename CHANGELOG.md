@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.30] - 2026-11-22
+
+### Security
+
+- Invalidate existing Pay sessions and NWC admin unlocks when the UI password
+  changes, including resets through StartOS. Sign in with the new password
+  and unlock NWC again to access its settings.
+
 ## [0.3.29] - 2026-11-20
 
 ### Security
