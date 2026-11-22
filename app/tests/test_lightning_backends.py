@@ -345,11 +345,11 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.http_requests,[])
 
     async def test_http_routes_validate_backend_auth_and_csrf(self):
-        session = 'phoenix-test-session'
-        with patch.object(app_module,'PAY_UI_PASSWORD','test-password'), patch.dict(app_module.PAY_SESSIONS,{session:{'expires_at':int(time.time())+600}}):
+        with patch.object(app_module,'PAY_UI_PASSWORD','test-password'), patch.dict(app_module.PAY_SESSIONS, clear=True):
             async with self.client_factory(transport=httpx.ASGITransport(app=app_module.app),base_url='http://test') as client:
                 denied=await client.post('/api/setup/lightning-backend/test',json={})
                 self.assertEqual(denied.status_code,401)
+                session = app_module._create_pay_session(app_module._get_effective_ui_password_hash())
                 client.cookies.set('pay_session',session)
                 denied=await client.post('/api/setup/lightning-backend/test',json={})
                 self.assertEqual(denied.status_code,403)
