@@ -449,6 +449,7 @@
   "nwc.load_failed": "Impossible de charger les connexions NWC.",
   "nwc.max_required": "Saisissez un montant maximal valide en sats.",
   "nwc.request_failed": "Échec de la requête NWC.",
+  "nwc.signer_mismatch": "La clé de signature de l’application a changé. Créez une nouvelle connexion NWC et reconnectez votre client Nostr. Une fois la nouvelle connexion opérationnelle, supprimez cette ancienne connexion.",
   "nwc.toggle_failed": "Impossible de modifier l’état de la connexion NWC.",
   "nwc.updated": "Connexion NWC mise à jour.",
   "pay.checking": "Vérification du paiement…",

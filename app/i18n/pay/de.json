@@ -449,6 +449,7 @@
   "nwc.load_failed": "NWC-Verbindungen konnten nicht geladen werden.",
   "nwc.max_required": "Gib einen gültigen Höchstbetrag in Sats ein.",
   "nwc.request_failed": "NWC-Anfrage fehlgeschlagen.",
+  "nwc.signer_mismatch": "App-Signierer geändert. Erstelle eine neue NWC-Verbindung und verbinde deinen Nostr-Client erneut. Sobald die neue Verbindung funktioniert, lösche diese alte Verbindung.",
   "nwc.toggle_failed": "Der Status der NWC-Verbindung konnte nicht geändert werden.",
   "nwc.updated": "NWC-Verbindung aktualisiert.",
   "pay.checking": "Zahlung wird geprüft…",

@@ -4578,8 +4578,10 @@ async def lnurl_callback(
         description_hash_b64 = _sha256_b64(nostr.encode("utf-8"))
         memo = ""
 
+    receiving_backend_id = alias["backend_id"]
+
     invoice = await _create_bound_invoice(
-        alias['backend_id'],
+        receiving_backend_id,
         amount_sat=amount_sat,
         memo=memo,
         description_hash=description_hash_b64,
@@ -8049,6 +8051,7 @@ from contextlib import suppress
 
 import coincurve
 import websockets
+from .zap_relay_security import connect_public_zap_relay
 
 def _hex_to_bytes(value: str) -> bytes:
     return bytes.fromhex((value or "").strip())
@@ -8275,11 +8278,20 @@ async def _publish_nostr_event_to_relay(relay_url, event):
     notice = ""
 
     try:
-        async with websockets.connect(
-            relay_url,
-            open_timeout=NOSTR_RELAY_OPEN_TIMEOUT,
-            close_timeout=1,
-        ) as ws:
+        if event.get("kind") == 9735:
+            connection = await connect_public_zap_relay(
+                relay_url,
+                open_timeout=NOSTR_RELAY_OPEN_TIMEOUT,
+                close_timeout=1,
+            )
+        else:
+            connection = websockets.connect(
+                relay_url,
+                open_timeout=NOSTR_RELAY_OPEN_TIMEOUT,
+                close_timeout=1,
+            )
+
+        async with connection as ws:
             await ws.send(json.dumps(["EVENT", event]))
 
             deadline = time.monotonic() + NOSTR_RELAY_ACK_TIMEOUT
@@ -10729,9 +10741,15 @@ async def api_admin_nwc_connections(request: StarletteRequest):
     require_nwc_auth(request)
 
     items = list_nwc_connections()
+    current_signer = _nostr_server_pubkey_hex()
     out = []
     for item in items:
         item_copy = dict(item)
+        stored_signer = str(item.get("wallet_service_pubkey") or "").strip().lower()
+        item_copy["signer_mismatch"] = bool(
+            current_signer and stored_signer
+            and stored_signer != current_signer.lower()
+        )
         item_copy = _augment_nwc_budget_info(item_copy)
         item_copy["uri"] = build_nwc_uri(item_copy)
         item_copy["client_secret_masked"] = (

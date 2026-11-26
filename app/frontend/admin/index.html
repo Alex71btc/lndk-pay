@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="/assets/csrf-fetch.js?v=0.3.31"></script>
+    <script src="/assets/csrf-fetch.js?v=0.3.32"></script>
     <script>
       (() => {
         const prefix = "#companion-action=";
@@ -23,12 +23,12 @@
       })();
     </script>
     <meta name="theme-color" content="#0f172a" />
-    <script src="/assets/i18n/runtime.js?v=0.3.31"></script>
-    <script src="/assets/i18n/pay.js?v=0.3.31&amp;rev=10"></script>
+    <script src="/assets/i18n/runtime.js?v=0.3.32"></script>
+    <script src="/assets/i18n/pay.js?v=0.3.32&amp;rev=10"></script>
     <script>window.Bolt12I18n.use("pay");</script>
     <link rel="manifest" href="/pay.webmanifest" />
     <script
-      src="/pwa-install.js?v=0.3.31"
+      src="/pwa-install.js?v=0.3.32"
       data-manifest="/pay.webmanifest"
       data-label-ready="nav.install"
       data-label-checking="nav.install_checking"
@@ -1376,8 +1376,8 @@
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
 <link rel="stylesheet" href="/assets/channel-liquidity.css?v=2">
 <script defer src="/assets/channel-liquidity.js?v=4"></script>
-<script defer src="/assets/payment-notifications.js?v=0.3.31-4"></script>
-    <script src="/assets/lightning-backend.js?v=0.3.31&amp;rev=3" defer></script>
+<script defer src="/assets/payment-notifications.js?v=0.3.32-4"></script>
+    <script src="/assets/lightning-backend.js?v=0.3.32&amp;rev=3" defer></script>
 </head>
   <body>
 
@@ -4666,6 +4666,11 @@
            `
                : ""
            }
+           ${item.signer_mismatch === true ? `
+             <div class="hint" style="margin-top:8px;color:var(--warn);">
+               ${esc(window.__t("nwc.signer_mismatch"))}
+             </div>
+           ` : ""}
            <div class="hint" style="margin-top:8px;">
              get_info: ${perms.get_info ? yes : no} •
              get_balance: ${perms.get_balance ? yes : no} •

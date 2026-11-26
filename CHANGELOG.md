@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.32] - 2026-11-26
+
+### Fixed
+
+- Restore Nostr Zap receipt publication for LND and Phoenixd.
+- Restore native Nostr Zap notifications.
+
+### Improved
+
+- Detect existing NWC connections with an incompatible app signer.
+- Provide reconnection and cleanup instructions in all five languages.
+
+### Security
+
+- Harden outgoing Zap receipt relay connections.
+- Retain all security improvements introduced in v0.3.31.
+
+### Upgrade note
+
+If an existing NWC connection is marked as incompatible, create
+a new connection and reconnect your Nostr client. Once the new
+connection works, delete the old connection.
+
 ## [0.3.31] - 2026-11-26
 
 ### Security

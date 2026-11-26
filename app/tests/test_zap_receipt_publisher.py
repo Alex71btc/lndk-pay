@@ -217,9 +217,9 @@ class ZapRelayPublishTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            app_module.websockets,
-            "connect",
-            return_value=connection,
+            app_module,
+            "connect_public_zap_relay",
+            new=AsyncMock(return_value=connection),
         ):
             result = await app_module._publish_nostr_event_to_relay(
                 "wss://relay.example",
@@ -238,9 +238,9 @@ class ZapRelayPublishTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            app_module.websockets,
-            "connect",
-            return_value=connection,
+            app_module,
+            "connect_public_zap_relay",
+            new=AsyncMock(return_value=connection),
         ):
             result = await app_module._publish_nostr_event_to_relay(
                 "wss://relay.example",
@@ -250,6 +250,80 @@ class ZapRelayPublishTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["ok"])
         self.assertFalse(result["accepted"])
         self.assertEqual(result["message"], "auth-required")
+
+
+class ZapCallbackBackendTests(unittest.IsolatedAsyncioTestCase):
+    async def _assert_zap_queued(self, backend_id, expected_key):
+        recipient = "11" * 32
+        payment_hash = "ab" * 32
+        amount = 21_000
+        event = signed_zap_request(
+            recipient_pubkey=recipient,
+            amount_msat=amount,
+        )
+        raw_event = json.dumps(event, ensure_ascii=False)
+
+        alias = {
+            "username": "zap",
+            "identifier": "zap@example.com",
+            "description": "Zap regression test",
+            "fixed_amount_sat": None,
+            "backend_id": backend_id,
+        }
+        invoice = {
+            "payment_hash": payment_hash,
+            "payment_request": "lnbc-test-invoice",
+        }
+        store = {}
+
+        def save_config(config):
+            store.clear()
+            store.update(copy.deepcopy(config))
+
+        with (
+            patch.object(app_module, "privacy_mode_enabled", return_value=False),
+            patch.object(app_module, "_receiving_lnurl_alias", return_value=alias),
+            patch.object(app_module, "_lnurl_metadata_for_alias", return_value="[]"),
+            patch.object(app_module, "_get_nostr_pubkey_hex_for_name", return_value=recipient),
+            patch.object(app_module, "_nostr_server_pubkey_hex", return_value="aa" * 32),
+            patch.object(app_module, "_create_bound_invoice", new=AsyncMock(return_value=invoice)) as create,
+            patch.object(app_module, "load_config", side_effect=lambda: copy.deepcopy(store)),
+            patch.object(app_module, "save_config", side_effect=save_config),
+            patch.object(app_module, "NOSTR_ZAP_WAKE_EVENT") as wake,
+        ):
+            result = await app_module.lnurl_callback(
+                "zap", amount, None, raw_event, None
+            )
+
+        self.assertEqual(result["pr"], invoice["payment_request"])
+        create.assert_awaited_once()
+        self.assertEqual(create.await_args.args[0], backend_id)
+        self.assertEqual(create.await_args.kwargs["method"], "zap")
+
+        self.assertIn(expected_key, store.get("pending_zaps", {}))
+        item = store["pending_zaps"][expected_key]
+
+        self.assertEqual(item["backend_id"], backend_id)
+        self.assertEqual(item["payment_hash"], payment_hash)
+        self.assertEqual(item["zap_request_raw"], raw_event)
+        self.assertEqual(item["amount_msat"], amount)
+        self.assertEqual(item["recipient_pubkey_hex"], recipient)
+        self.assertEqual(item["relays"], ["wss://relay.example"])
+        self.assertFalse(item["published"])
+        wake.set.assert_called_once()
+
+    async def test_lnd_zap_callback_queues_receipt(self):
+        await self._assert_zap_queued(
+            app_module.lightning_backends.LND_ID,
+            "ab" * 32,
+        )
+
+    async def test_phoenix_zap_callback_queues_receipt(self):
+        backend_id = "phoenixd-test"
+        await self._assert_zap_queued(
+            backend_id,
+            f"{backend_id}:" + "ab" * 32,
+        )
 
 
 class ZapQueueTests(unittest.IsolatedAsyncioTestCase):

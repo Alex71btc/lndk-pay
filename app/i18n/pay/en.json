@@ -449,6 +449,7 @@
   "nwc.load_failed": "Could not load NWC connections.",
   "nwc.max_required": "Enter a valid maximum payment in sats.",
   "nwc.request_failed": "NWC request failed.",
+  "nwc.signer_mismatch": "App signer changed. Create a new NWC connection and reconnect your Nostr client. Once the new connection works, delete this old connection.",
   "nwc.toggle_failed": "Could not change the NWC connection state.",
   "nwc.updated": "NWC connection updated.",
   "pay.checking": "Checking payment…",

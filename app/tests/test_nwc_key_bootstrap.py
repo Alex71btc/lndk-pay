@@ -66,6 +66,27 @@ class NwcKeyBootstrapTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first['connection']['wallet_service_pubkey'], second['connection']['wallet_service_pubkey'])
         self.assertEqual(len(nwc.list_nwc_connections()), 2)
 
+    async def test_existing_connection_signer_mismatch_is_reported_read_only(self):
+        await self.create()
+        before = nwc.NWC_CONNECTIONS_PATH.read_bytes()
+        current = backend._nostr_server_pubkey_hex()
+
+        with (patch.object(backend, 'require_pay_auth'),
+              patch.object(backend, 'require_nwc_auth')):
+            response = await backend.api_admin_nwc_connections(self.request)
+            self.assertFalse(response['connections'][0]['signer_mismatch'])
+
+            other = 'ab' * 32 if current != 'ab' * 32 else 'cd' * 32
+            with patch.object(backend, '_nostr_server_pubkey_hex', return_value=other):
+                response = await backend.api_admin_nwc_connections(self.request)
+                self.assertTrue(response['connections'][0]['signer_mismatch'])
+
+            with patch.object(backend, '_nostr_server_pubkey_hex', return_value=''):
+                response = await backend.api_admin_nwc_connections(self.request)
+                self.assertFalse(response['connections'][0]['signer_mismatch'])
+
+        self.assertEqual(nwc.NWC_CONNECTIONS_PATH.read_bytes(), before)
+
     async def test_simultaneous_first_connections_share_one_signer(self):
         first, second = await asyncio.gather(self.create(), self.create())
         self.assertEqual(first['connection']['wallet_service_pubkey'], second['connection']['wallet_service_pubkey'])

@@ -449,6 +449,7 @@
   "nwc.load_failed": "Nie udało się wczytać połączeń NWC.",
   "nwc.max_required": "Wpisz prawidłową maksymalną kwotę płatności w satoshi.",
   "nwc.request_failed": "Błąd żądania NWC.",
+  "nwc.signer_mismatch": "Klucz podpisujący aplikacji uległ zmianie. Utwórz nowe połączenie NWC i ponownie połącz klienta Nostr. Gdy nowe połączenie będzie działać, usuń to stare połączenie.",
   "nwc.toggle_failed": "Nie udało się zmienić stanu połączenia NWC.",
   "nwc.updated": "Zaktualizowano połączenie NWC.",
   "pay.checking": "Sprawdzanie płatności…",
