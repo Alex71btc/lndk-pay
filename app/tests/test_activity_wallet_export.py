@@ -61,7 +61,8 @@ class ActivityWalletExportTests(unittest.TestCase):
             phoenix = self.client.get("/api/tx-history/export.csv?wallet=phoenixd")
             invalid = self.client.get("/api/tx-history/export.csv?since=1767225601&before=1767225600")
 
-        self.assertEqual(require_auth.call_count, 4)
+        # Checked once by the API middleware and once by the handler itself.
+        self.assertEqual(require_auth.call_count, 8)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.headers["cache-control"].startswith("no-store"))
         self.assertIn("attachment", response.headers["content-disposition"])

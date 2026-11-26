@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="/assets/csrf-fetch.js?v=0.3.31"></script>
     <script>
       (() => {
         const prefix = "#companion-action=";
@@ -22,12 +23,12 @@
       })();
     </script>
     <meta name="theme-color" content="#0f172a" />
-    <script src="/assets/i18n/runtime.js?v=0.3.30"></script>
-    <script src="/assets/i18n/pay.js?v=0.3.30&amp;rev=10"></script>
+    <script src="/assets/i18n/runtime.js?v=0.3.31"></script>
+    <script src="/assets/i18n/pay.js?v=0.3.31&amp;rev=10"></script>
     <script>window.Bolt12I18n.use("pay");</script>
     <link rel="manifest" href="/pay.webmanifest" />
     <script
-      src="/pwa-install.js?v=0.3.30"
+      src="/pwa-install.js?v=0.3.31"
       data-manifest="/pay.webmanifest"
       data-label-ready="nav.install"
       data-label-checking="nav.install_checking"
@@ -53,8 +54,8 @@
     <meta name="application-name" content="BOLT12 Pay" />
     <title>BOLT12 Pay</title>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" integrity="sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+" crossorigin="anonymous"></script>
 
     <style>
       :root {
@@ -1375,8 +1376,8 @@
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
 <link rel="stylesheet" href="/assets/channel-liquidity.css?v=2">
 <script defer src="/assets/channel-liquidity.js?v=4"></script>
-<script defer src="/assets/payment-notifications.js?v=0.3.30-4"></script>
-    <script src="/assets/lightning-backend.js?v=0.3.30&amp;rev=3" defer></script>
+<script defer src="/assets/payment-notifications.js?v=0.3.31-4"></script>
+    <script src="/assets/lightning-backend.js?v=0.3.31&amp;rev=3" defer></script>
 </head>
   <body>
 
@@ -1457,8 +1458,8 @@
         </button>
         <button
           class="secondary"
+          id="openConsoleBtn"
           type="button"
-          onclick="window.location.href = '/app'"
         >
           <span data-i18n="nav.console">Zur Console</span>
         </button>
@@ -4629,6 +4630,7 @@
       }
 
       function buildNwcConnectionItemHtml(item) {
+        const esc = escapeContactHtml;
         const perms = item.permissions || {};
         const limits = item.limits || {};
         const state = item.enabled
@@ -4648,17 +4650,17 @@
          <div class="historyItem">
            <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
              <div>
-               <div style="font-weight:700;">${item.name || window.__t("nwc.default_name")}</div>
-               <div class="historyMeta">${state} • ${window.__t(item.backend_id && item.backend_id !== 'lnd-default' ? 'backend.name_phoenixd' : 'backend.name_lnd')} • ${window.__t("label.relay")}: <span class="mono">${relay}</span></div>
+               <div style="font-weight:700;">${esc(item.name || window.__t("nwc.default_name"))}</div>
+               <div class="historyMeta">${state} • ${window.__t(item.backend_id && item.backend_id !== 'lnd-default' ? 'backend.name_phoenixd' : 'backend.name_lnd')} • ${window.__t("label.relay")}: <span class="mono">${esc(relay)}</span></div>
              </div>
-             <div class="historyMeta">${window.__t("label.max")}: ${maxSat} sats</div>
+             <div class="historyMeta">${window.__t("label.max")}: ${esc(maxSat)} sats</div>
            </div>
            ${
              budgetAmount > 0
                ? `
              <div class="historyMeta">
-               ${window.__t("label.budget")}: ${budgetSpent} / ${budgetAmount} ${window.__t("label.sats")}
-               ${budgetRemaining !== null ? `• ${window.__t("label.remaining")}: ${budgetRemaining} ${window.__t("label.sats")}` : ""}
+               ${window.__t("label.budget")}: ${esc(budgetSpent)} / ${esc(budgetAmount)} ${window.__t("label.sats")}
+               ${budgetRemaining !== null ? `• ${window.__t("label.remaining")}: ${esc(budgetRemaining)} ${window.__t("label.sats")}` : ""}
                ${budgetPeriod !== "none" ? `• ${window.__t(`label.period_${budgetPeriod}`)}` : ""}
              </div>
            `
@@ -4675,7 +4677,7 @@
              data-nwc-action="copy-uri"
              data-nwc-uri="${encodeURIComponent(uri || "")}"
            >
-             ${uri || ""}
+             ${esc(uri)}
            </div>
 
            <div class="historyActions">
@@ -4699,14 +4701,14 @@
                class="secondary"
                type="button"
                data-nwc-action="toggle"
-               data-nwc-id="${item.id || ""}"
+               data-nwc-id="${esc(item.id)}"
              >${item.enabled ? window.__t("btn.disable") : window.__t("btn.enable")}</button>
 
              <button
                class="danger"
                type="button"
                data-nwc-action="delete"
-               data-nwc-id="${item.id || ""}"
+               data-nwc-id="${esc(item.id)}"
              >${window.__t("btn.delete")}</button>
            </div>
          </div>
@@ -5231,7 +5233,7 @@
                 >
                   <span
                     class="contactAction contactActionDelete deleteContactBtn"
-                    data-contact-id="${contact.id}"
+                    data-contact-id="${escapeContactHtml(contact.id)}"
                     data-contact-alias="${escapeContactHtml(aliasRaw)}"
                     title="${window.__t("contacts.delete")}"
                   >
@@ -5240,7 +5242,7 @@
 
                   <span
                     class="contactAction contactActionEdit editContactBtn"
-                    data-contact-id="${contact.id}"
+                    data-contact-id="${escapeContactHtml(contact.id)}"
                     title="${window.__t("contacts.edit")}"
                   >
                     ${window.__t("contacts.edit")}
@@ -6980,11 +6982,15 @@
           const arrow = isIncoming ? "↓" : "↑";
           const arrowClass = isIncoming ? "txIncoming" : "txOutgoing";
           const timestamp = formatTxTimestamp(item);
+          // Everything below is interpolated into innerHTML. Item fields come
+          // from the wallet backend and include payer-chosen text (LNURL
+          // comments, memos, payer notes), so every value must be escaped.
+          const esc = escapeContactHtml;
           const timestampHtml = timestamp.iso
-            ? `<time class="txTimestamp" datetime="${timestamp.iso}">🕒 ${timestamp.text}</time>`
-            : `<span class="txTimestamp">🕒 ${timestamp.text}</span>`;
+            ? `<time class="txTimestamp" datetime="${esc(timestamp.iso)}">🕒 ${esc(timestamp.text)}</time>`
+            : `<span class="txTimestamp">🕒 ${esc(timestamp.text)}</span>`;
           const fee = item.fee_sat
-            ? ` • ${window.__t("history.fee")} ${item.fee_sat} sat`
+            ? ` • ${window.__t("history.fee")} ${esc(item.fee_sat)} sat`
             : "";
 
           const raw = item.raw_json || {};
@@ -7048,7 +7054,7 @@
             item.memo || "",
             item.payer_note || "",
           ].join("|");
-          const txKeyAttr = String(txKey).replace(/"/g, "&quot;");
+          const txKeyAttr = esc(txKey);
           const txDetailsOpenAttr = openTxDetails.has(txKey) ? " open" : "";
           const preimage = raw.payment_preimage || raw.r_preimage || "";
           const paymentRequest = raw.payment_request || raw.paymentRequest || "";
@@ -7063,14 +7069,14 @@
             zap: `⚡ ${window.__t("history.nostr_zap")}`,
             mining: `⛏ ${window.__t("history.mining")}`,
             donation: `❤️ ${window.__t("history.donation")}`,
-          }[method] || method || window.__t("history.unknown_method");
+          }[method] || esc(method || window.__t("history.unknown_method"));
 
           const statusLabel = {
             settled: `✅ ${window.__t("history.settled")}`,
             pending: `🟡 ${window.__t("history.pending")}`,
             expired: `⌛ ${window.__t("history.expired")}`,
             failed: `❌ ${window.__t("history.failed")}`,
-          }[item.status] || item.status;
+          }[item.status] || esc(item.status);
 
           let originLabel = {
             web: "",
@@ -7088,7 +7094,7 @@
 
           const typeText = {
             payment: window.__t("history.payment"),
-          }[item.type] || item.type;
+          }[item.type] || esc(item.type);
 
           const typeLabel =
             ["invoice", "offer", "mining", "zap"].includes(item.type)
@@ -7097,7 +7103,7 @@
           let walletLine = "";
 
           if (item.method === "nwc" && item.counterparty) {
-            walletLine = `<div class="txWallet">🔌 ${window.__t("history.wallet")}: ${item.counterparty}</div>`;
+            walletLine = `<div class="txWallet">🔌 ${window.__t("history.wallet")}: ${esc(item.counterparty)}</div>`;
           }
 
           const counterparty = item.counterparty || "";
@@ -7156,9 +7162,9 @@
                   <button
                     class="txAmount"
                     type="button"
-                    title="${window.__t("history.copy_amount", { amount: amountClipboardValue })}"
-                    aria-label="${window.__t("history.copy_amount", { amount: amountClipboardValue })}"
-                  >${amountClipboardValue} sats</button>
+                    title="${esc(window.__t("history.copy_amount", { amount: amountClipboardValue }))}"
+                    aria-label="${esc(window.__t("history.copy_amount", { amount: amountClipboardValue }))}"
+                  >${esc(amountClipboardValue)} sats</button>
                 </div>
 
                 <div class="txMeta">
@@ -7202,7 +7208,7 @@
                     ? `
                 <div
                   class="txContact txContactExisting"
-                  data-contact-id="${matchingContact.id}"
+                  data-contact-id="${esc(matchingContact.id)}"
                 >
                   <img
                     src="/assets/icons/contacts.svg"
@@ -7245,7 +7251,7 @@
               ${paymentRequest ? `
               <details class="txSubDetails" data-sub-key="${txKeyAttr}|invoice" ${openTxSubDetails.has(txKey + "|invoice") ? "open" : ""}>
                 <summary>${window.__t("history.invoice")} (BOLT11)</summary>
-                <code>${paymentRequest}</code>
+                <code>${esc(paymentRequest)}</code>
               </details>
               ` : ""}
 
@@ -7255,20 +7261,20 @@
               ${paymentHash ? `
                 <details class="txSubDetails" data-sub-key="${txKeyAttr}|paymenthash" ${openTxSubDetails.has(txKey + "|paymenthash") ? "open" : ""}>
                   <summary>${window.__t("history.payment_hash")}</summary>
-                  <code>${paymentHash}</code>
+                  <code>${esc(paymentHash)}</code>
                  </details>
               ` : ""}
 
               ${preimage ? `
                  <details class="txSubDetails" data-sub-key="${txKeyAttr}|preimage" ${openTxSubDetails.has(txKey + "|preimage") ? "open" : ""}>
                     <summary>${window.__t("history.preimage")}</summary>
-                    <code>${preimage}</code>
+                    <code>${esc(preimage)}</code>
                  </details>
               ` : ""}
 
               <details class="txSubDetails" data-sub-key="${txKeyAttr}|rawjson" ${openTxSubDetails.has(txKey + "|rawjson") ? "open" : ""}>
                 <summary>${window.__t("history.raw_json")}</summary>
-                <pre>${detailsJson}</pre>
+                <pre>${esc(detailsJson)}</pre>
               </details>
 
            </details>
@@ -10075,6 +10081,12 @@
             window.__t("toast.identity_result_copied"),
           );
         });
+
+        document
+          .getElementById("openConsoleBtn")
+          ?.addEventListener("click", () => {
+            window.location.href = "/app";
+          });
 
         document
           .getElementById("logoutBtn")

@@ -1920,21 +1920,30 @@ app = FastAPI(
     version=APP_VERSION,
 )
 
+_CORS_ORIGIN_LIST = [origin.strip() for origin in CORS_ORIGINS.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in CORS_ORIGINS.split(",") if origin.strip()],
-    allow_credentials=True,
+    allow_origins=_CORS_ORIGIN_LIST,
+    # With a wildcard, Starlette echoes the caller's Origin back when credentials
+    # are allowed, which would let any page the owner visits drive the
+    # authenticated API. Public LNURL/NIP-05 callers never need cookies.
+    allow_credentials="*" not in _CORS_ORIGIN_LIST,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 # --- Identity Config (Nostr / NIP-05 / Zap) -------------------------------
 
 class IdentityConfigPayload(BaseModel):
-    alias: str
-    nostr_pubkey: str
-    relays: list[str] | None = None
+    alias: str = Field(min_length=1, max_length=64)
+    nostr_pubkey: str = Field(max_length=128)
+    relays: list[str] | None = Field(default=None, max_length=20)
     nip05_enabled: bool = True
     zap_enabled: bool = True
+
+
+IDENTITY_RELAY_URL_MAX_LENGTH = 256
+IDENTITY_MAP_MAX_ENTRIES = 200
 
 
 def _normalize_nostr_pubkey(value: str) -> str:
@@ -2007,7 +2016,8 @@ def _get_nostr_identity_for_name(name: str) -> dict:
 
 
 @app.get("/api/identity-config")
-async def get_identity_config(alias: str):
+async def get_identity_config(alias: str, request: StarletteRequest):
+    require_pay_auth(request)
     alias = (alias or "").strip().lower()
     if not alias:
         raise HTTPException(status_code=400, detail="alias is required")
@@ -2034,7 +2044,9 @@ async def get_identity_config(alias: str):
 
 
 @app.post("/api/identity-config")
-async def save_identity_config(payload: IdentityConfigPayload):
+async def save_identity_config(payload: IdentityConfigPayload, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
     alias = (payload.alias or "").strip().lower()
     if not alias:
         raise HTTPException(status_code=400, detail="alias is required")
@@ -2045,8 +2057,12 @@ async def save_identity_config(payload: IdentityConfigPayload):
         raise HTTPException(status_code=400, detail=str(exc))
 
     relays = [str(x).strip() for x in (payload.relays or []) if str(x).strip()]
+    if any(len(relay) > IDENTITY_RELAY_URL_MAX_LENGTH for relay in relays):
+        raise HTTPException(status_code=400, detail="relay URL is too long")
 
     identity_map = _get_identity_map()
+    if alias not in identity_map and len(identity_map) >= IDENTITY_MAP_MAX_ENTRIES:
+        raise HTTPException(status_code=400, detail="too many identity entries")
     identity_map[alias] = {
         "nostr_pubkey": normalized_pubkey,
         "relays": relays,
@@ -5005,6 +5021,8 @@ def get_setup_config(request: StarletteRequest):
         require_pay_auth(request)
 
     cfg = load_config()
+    # The browser never needs the password hash; keep it out of script reach.
+    cfg.pop("ui_password_hash", None)
     cfg['bip353_base_domain'] = get_bip353_base_domain()
     cfg["lightning_backend"] = lightning_backends.public_state(cfg)
     return cfg
@@ -5067,11 +5085,16 @@ app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 async def set_setup_config(payload: dict, request: StarletteRequest):
     if _is_pay_ui_enabled():
         require_pay_auth(request)
-
-    cfg = load_config()
+        _require_csrf(request)
 
     safe_payload = dict(payload or {})
     password = str(safe_payload.pop("password", "")).strip()
+    current_password = str(safe_payload.pop("current_password", "") or "")
+    if password:
+        # A session alone must not be enough to take over the account.
+        _require_current_ui_password(request, current_password)
+
+    cfg = load_config()
     delete_previous_bip353_record = (
         safe_payload.pop("delete_previous_bip353_record", False) is True
     )
@@ -5208,7 +5231,9 @@ async def create_offer(payload: OfferRequest, request: StarletteRequest) -> Offe
     return await _create_bound_offer(payload, lightning_backends.state(cfg).get('active', lightning_backends.LND_ID), cfg)
 
 @app.post("/api/decode-offer", response_model=DecodeResponse)
-async def decode_offer(payload: DecodeRequest) -> DecodeResponse:
+async def decode_offer(payload: DecodeRequest, request: StarletteRequest) -> DecodeResponse:
+    require_pay_auth(request)
+    _require_csrf(request)
     instance = lightning_backends.selected(load_config(), payload.backend_id)
     if instance:
         offer = payload.offer.strip()
@@ -5811,7 +5836,9 @@ def create_alias(payload: AliasCreateRequest, request: StarletteRequest):
 
 
 @app.delete("/api/alias/{name}")
-async def delete_alias(name: str, delete_dns: bool = False):
+async def delete_alias(name: str, request: StarletteRequest, delete_dns: bool = False):
+    require_pay_auth(request)
+    _require_csrf(request)
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
@@ -5837,7 +5864,9 @@ async def delete_alias(name: str, delete_dns: bool = False):
     }
 
 @app.patch("/api/alias/{name}", response_model=AliasResponse)
-def update_alias(name: str, payload: AliasUpdateRequest):
+def update_alias(name: str, payload: AliasUpdateRequest, request: StarletteRequest):
+    require_pay_auth(request)
+    _require_csrf(request)
     cfg = load_config()
     aliases = cfg.get("aliases", {}) or {}
 
@@ -6374,8 +6403,25 @@ def _require_csrf(request: StarletteRequest):
     csrf_cookie = request.cookies.get("csrf_token")
     csrf_header = request.headers.get("x-csrf-token")
 
-    if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+    if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
         raise HTTPException(status_code=403, detail="CSRF validation failed")
+
+def _require_current_ui_password(request: StarletteRequest, supplied: str) -> None:
+    current_hash = _get_effective_ui_password_hash()
+    if not current_hash:
+        return  # First-run setup: there is no password to confirm yet.
+    ip = _client_ip(request)
+    locked, remaining = _login_is_locked(ip)
+    if locked:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many password attempts. Try again in {remaining}s.",
+        )
+    # Same comparison as /api/auth/login, so whatever logs in also confirms.
+    if not hmac.compare_digest(_hash_password(supplied), current_hash):
+        _record_login_failure(ip)
+        raise HTTPException(status_code=403, detail="Current password is incorrect")
+
 
 def _is_pay_session_valid(request: StarletteRequest) -> bool:
     return _is_ui_session_valid(PAY_SESSIONS, _get_pay_session_token(request))
@@ -6427,6 +6473,160 @@ def require_nwc_auth(request: StarletteRequest) -> None:
     require_pay_auth(request)
     if not _is_nwc_session_valid(request):
         raise HTTPException(status_code=401, detail="NWC unlock required")
+
+
+# --- API access policy -------------------------------------------------------
+# Every /api/* route requires a Pay session unless it is listed here. A new
+# route is therefore private until someone decides otherwise; tests walk the
+# route table to keep this list honest.
+PUBLIC_API_ROUTES: frozenset[tuple[str, str]] = frozenset({
+    # Liveness probe for container health checks.
+    ("GET", "/api/health"),
+    # The public address and its current offer; the console shows the same data.
+    ("GET", "/api/info"),
+    # Pure LNURL bech32 encoding of a Lightning Address; reads no state.
+    ("GET", "/api/lnurl/address/{address:path}"),
+    # LNURL-pay callback: payers' wallets request invoices here.
+    ("GET", "/api/lnurl/callback/{username}"),
+    # QR images embedded in the public alias page.
+    ("GET", "/api/qr/{value}"),
+    # "BOLT11 fallback" button on the public alias page (rate limited, off in privacy mode).
+    ("POST", "/api/alias/{name}/bolt11-fallback"),
+    # Session management itself.
+    ("POST", "/api/auth/login"),
+    ("GET", "/api/auth/session"),
+    ("POST", "/api/auth/logout"),
+    # Companion app: authenticated by a one-time pairing token or its bearer token.
+    ("POST", "/api/companion/pair"),
+    ("PUT", "/api/companion/subscription"),
+    ("DELETE", "/api/companion/subscription"),
+})
+
+# Reachable without a session only while no UI password exists (first-run setup),
+# exactly as these handlers already allowed. Once a password is set they are
+# ordinary authenticated routes.
+FIRST_RUN_API_ROUTES: frozenset[tuple[str, str]] = frozenset({
+    ("GET", "/api/setup/status"),
+    ("GET", "/api/setup/config"),
+    ("POST", "/api/setup/config"),
+    ("GET", "/api/setup/public-bip353-status"),
+    ("POST", "/api/setup/public-bip353-repair"),
+    ("GET", "/api/setup/public-bip353-repair-status"),
+    ("GET", "/api/admin/nostr-status"),
+    ("POST", "/api/admin/nostr-secret-store/reset"),
+    ("POST", "/api/admin/nostr-notify-key"),
+    ("POST", "/api/admin/nostr-server-key/generate"),
+    ("POST", "/api/create-invoice"),
+})
+
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _matched_route_template(scope) -> Optional[str]:
+    from starlette.routing import Match
+
+    for route in app.router.routes:
+        match, _ = route.matches(scope)
+        if match == Match.FULL:
+            return getattr(route, "path", None)
+    return None
+
+
+def _is_cross_origin_browser_request(request: StarletteRequest) -> bool:
+    # Browsers label every request; another origin on the same host (a different
+    # port, e.g. another service's UI) is "same-site", which SameSite cookies do
+    # not stop and which can read the non-HttpOnly CSRF cookie.
+    return request.headers.get("sec-fetch-site", "").lower() in {"cross-site", "same-site"}
+
+
+@app.middleware("http")
+async def enforce_api_authentication(request: StarletteRequest, call_next):
+    path = request.url.path
+    if not path.startswith("/api/") or request.method == "OPTIONS":
+        return await call_next(request)
+
+    template = _matched_route_template(request.scope)
+    if template is None:
+        return await call_next(request)  # 404/405 from the router; no handler runs.
+
+    method = "GET" if request.method == "HEAD" else request.method
+    key = (method, template)
+    if key in PUBLIC_API_ROUTES:
+        return await call_next(request)
+
+    unsafe = method not in _SAFE_METHODS
+    if unsafe and _is_cross_origin_browser_request(request):
+        return JSONResponse({"detail": "Cross-origin request rejected"}, status_code=403)
+
+    if key in FIRST_RUN_API_ROUTES and not _is_pay_ui_configured():
+        return await call_next(request)
+
+    try:
+        # The same checks handlers use: 403 before setup, 401 without a session.
+        require_pay_auth(request)
+        if unsafe:
+            _require_csrf(request)
+    except HTTPException as exc:
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
+    return await call_next(request)
+
+
+# --- Admin page delivery (Content-Security-Policy) ---------------------------
+_SCRIPT_OPEN_TAG = re.compile(r"<script(?=[\s>])", re.IGNORECASE)
+
+
+def _admin_csp(nonce: str) -> str:
+    return "; ".join((
+        "default-src 'self'",
+        # Every <script> the server ships carries the per-response nonce, so
+        # markup injected later (innerHTML, inline on*= handlers) cannot run.
+        f"script-src 'nonce-{nonce}'",
+        # Inline style attributes are used throughout; CSS cannot run script.
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "media-src 'self' blob: mediastream:",
+        "worker-src 'self'",
+        "manifest-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ))
+
+
+def _admin_page_response(file: Path, request: StarletteRequest) -> HTMLResponse:
+    nonce = secrets.token_urlsafe(18)
+    html = _SCRIPT_OPEN_TAG.sub(f'<script nonce="{nonce}"', file.read_text(encoding="utf-8"))
+    resp = HTMLResponse(
+        html,
+        headers=_no_store_headers(
+            {
+                "Content-Security-Policy": _admin_csp(nonce),
+                "Referrer-Policy": "no-referrer",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+            }
+        ),
+    )
+    if _is_pay_session_valid(request) and not request.cookies.get("csrf_token"):
+        # The CSRF cookie is a browser-session cookie while the Pay session
+        # outlives a browser restart; reissue it so writes keep working.
+        _set_csrf_cookie(resp)
+    return resp
+
+
+def _set_csrf_cookie(resp: Response) -> None:
+    resp.set_cookie(
+        key="csrf_token",
+        value=secrets.token_hex(16),
+        httponly=False,
+        secure=PAY_UI_COOKIE_SECURE,
+        samesite="strict",
+        path="/",
+    )
 
 
 def _pay_login_html() -> str:
@@ -6602,15 +6802,7 @@ async def app_shell(request: StarletteRequest):
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="frontend/public/index.html not found")
 
-    resp = FileResponse(index_file)
-    for k, v in _no_store_headers(
-        {
-            "Referrer-Policy": "no-referrer",
-            "X-Content-Type-Options": "nosniff",
-        }
-    ).items():
-        resp.headers[k] = v
-    return resp
+    return _admin_page_response(index_file, request)
 
 
 @app.get("/pay")
@@ -6631,15 +6823,7 @@ def pay_page(request: StarletteRequest):
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="frontend/admin/index.html not found")
 
-    resp = FileResponse(index_file)
-    for k, v in _no_store_headers(
-        {
-            "Referrer-Policy": "no-referrer",
-            "X-Content-Type-Options": "nosniff",
-        }
-    ).items():
-        resp.headers[k] = v
-    return resp
+    return _admin_page_response(index_file, request)
 
 
 @app.get("/admin")
@@ -6658,15 +6842,7 @@ def pay_login_page(request: StarletteRequest):
     file = ADMIN_DIR / "pay-login.html"
     if not file.exists():
         raise HTTPException(status_code=404, detail="frontend/admin/pay-login.html not found")
-    resp = FileResponse(file, media_type="text/html")
-    for k, v in _no_store_headers(
-        {
-            "Referrer-Policy": "no-referrer",
-            "X-Content-Type-Options": "nosniff",
-        }
-    ).items():
-        resp.headers[k] = v
-    return resp
+    return _admin_page_response(file, request)
 
 
 @app.post("/api/auth/login")
@@ -9429,7 +9605,8 @@ def debug_tx_history(request: StarletteRequest):
     return list_tx_history(limit=200)
 
 @app.get("/api/debug/payments")
-async def api_debug_payments():
+async def api_debug_payments(request: StarletteRequest):
+    require_pay_auth(request)
     return await _list_payments()
 
 @app.get("/api/tx-history")
@@ -9570,7 +9747,8 @@ async def api_sync_tx_history(request: StarletteRequest):
 # ============================================================================
 
 @app.get("/api/contacts")
-async def api_contacts():
+async def api_contacts(request: StarletteRequest):
+    require_pay_auth(request)
     return {
         "contacts": list_contacts()
     }
@@ -10473,7 +10651,8 @@ async def api_admin_nostr_server_key_generate(request: StarletteRequest):
     return {"ok": True, "status": _get_nostr_admin_status()}
 
 @app.get("/api/debug/pending-zaps")
-def debug_zaps():
+def debug_zaps(request: StarletteRequest):
+    require_pay_auth(request)
     return _get_pending_zaps()
 
 
@@ -10490,7 +10669,15 @@ async def api_admin_nwc_unlock(payload: NwcUnlockRequest, request: StarletteRequ
     if not configured_hash:
         raise HTTPException(status_code=400, detail="No Pay UI password configured")
 
-    if _hash_password(password) != configured_hash:
+    ip = _client_ip(request)
+    locked, remaining = _login_is_locked(ip)
+    if locked:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many password attempts. Try again in {remaining}s.",
+        )
+    if not hmac.compare_digest(_hash_password(password), configured_hash):
+        _record_login_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid password")
 
     token, expires_at = _issue_nwc_session(configured_hash)

@@ -35,6 +35,7 @@ class BackendUiTests(unittest.TestCase):
         run('''
 const assert = require('node:assert/strict');
 const window = {__t: key => key};
+const esc = value => String(value ?? '');
 function labels(item) {
 ''' + source[start:stop] + '''
   return {methodLabel, originLabel};

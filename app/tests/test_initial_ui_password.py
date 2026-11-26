@@ -70,7 +70,9 @@ class InitialUiPasswordTests(unittest.TestCase):
         assert client.post("/api/setup/config", json={"password": "different-password"}).status_code == 401
         assert client.post("/api/auth/login", json={"password": INITIAL_PASSWORD}).status_code == 200
         assert client.get("/api/setup/config").status_code == 200
-        assert client.post("/api/admin/nwc/unlock", json={"password": INITIAL_PASSWORD}).status_code == 200
+        csrf = {"X-CSRF-Token": client.cookies["csrf_token"]}
+        assert client.post("/api/admin/nwc/unlock", json={"password": INITIAL_PASSWORD}).status_code == 403
+        assert client.post("/api/admin/nwc/unlock", json={"password": INITIAL_PASSWORD}, headers=csrf).status_code == 200
 
     def test_restart_preserves_saved_password_and_config(self):
         config_path, ready = self.config_path, self.ready

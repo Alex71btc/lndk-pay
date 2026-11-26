@@ -470,7 +470,7 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(backends, 'checked_client', AsyncMock(return_value=(client, NODE))), patch.object(app_module, 'require_pay_auth'), patch.object(app_module, '_read_macaroon_hex', side_effect=AssertionError('LND accessed')):
             created = await app_module.create_offer(app_module.OfferRequest(description='test', backend_id=INSTANCE['id']), request())
             self.assertEqual(created.offer, 'lno1test')
-            decoded = await app_module.decode_offer(app_module.DecodeRequest(offer='lno1test',backend_id=INSTANCE['id']))
+            decoded = await app_module.decode_offer(app_module.DecodeRequest(offer='lno1test',backend_id=INSTANCE['id']), request())
             self.assertIn('description', decoded.raw_output)
             paid = await app_module.pay_offer(app_module.PayOfferRequest(offer='lno1test', amount_sat=21, backend_id=INSTANCE['id']), request())
             self.assertIn('SUCCEEDED', paid.raw_output)

@@ -6,11 +6,12 @@
   <title>BOLT12 Pay</title>
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="/pay.webmanifest" />
-  <script src="/assets/i18n/runtime.js?v=0.3.30"></script>
-  <script src="/assets/i18n/console.js?v=0.3.30&amp;rev=6"></script>
+  <script src="/assets/csrf-fetch.js?v=0.3.31"></script>
+  <script src="/assets/i18n/runtime.js?v=0.3.31"></script>
+  <script src="/assets/i18n/console.js?v=0.3.31&amp;rev=7"></script>
   <script>Bolt12I18n.use('console');</script>
   <script
-    src="/pwa-install.js?v=0.3.30"
+    src="/pwa-install.js?v=0.3.31"
     data-manifest="/pay.webmanifest"
     data-label-ready="console.btn.install"
     data-label-checking="console.btn.install_checking"
@@ -26,7 +27,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous">
 
 
 
@@ -759,8 +760,8 @@
       }
     </style>
 <link rel="stylesheet" href="/assets/payment-notifications.css?v=3">
-<script defer src="/assets/payment-notifications.js?v=0.3.30-4"></script>
-  <script src="/assets/lightning-backend.js?v=0.3.30&amp;rev=3" defer></script>
+<script defer src="/assets/payment-notifications.js?v=0.3.31-4"></script>
+  <script src="/assets/lightning-backend.js?v=0.3.31&amp;rev=3" defer></script>
 </head>
 <body>
 <main class="card" id="setupCard" hidden style="position:relative;">
@@ -803,8 +804,7 @@ protocol.custom-init=39</pre>
 
 <button
   type="button"
-  class="btn secondary bolt12-onion-copy-btn"
-  onclick="copyToClipboard('[protocol]\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39').then(() => showConfigCopied(this))">
+  class="btn secondary bolt12-onion-copy-btn">
   <span data-i18n="setup.copyUmbrelConfig"></span>
 </button>
 
@@ -922,6 +922,8 @@ protocol.custom-init=39</pre>
 
       </div>
       
+      <label class="label" for="setupCurrentPassword" style="margin-top:14px;" data-i18n="setup.label.current_password"></label>
+      <input id="setupCurrentPassword" type="password" autocomplete="current-password" data-i18n-placeholder="setup.ph.current_password" />
       <label class="label" for="setupPassword" style="margin-top:14px;" data-i18n="setup.label.password"></label>
       <input id="setupPassword" type="password" data-i18n-placeholder="setup.ph.password" />
       <label class="label" for="setupPasswordConfirm" style="margin-top:14px;" data-i18n="setup.label.password_confirm"></label>
@@ -1282,6 +1284,14 @@ protocol.custom-init=39</pre>
       setTimeout(() => setLabel(label, 'setup.copyUmbrelConfig'), 2000);
     }
 
+    // Bound here rather than with onclick= so the page works under its CSP.
+    document.querySelectorAll('.bolt12-onion-copy-btn').forEach((button) => {
+      button.addEventListener('click', () => {
+        copyToClipboard('[protocol]\nprotocol.custom-message=513\nprotocol.custom-nodeann=39\nprotocol.custom-init=39')
+          .then(() => showConfigCopied(button));
+      });
+    });
+
 function getCookie(name) {
   return document.cookie.split("; ")
     .find(row => row.startsWith(name + "="))
@@ -1343,6 +1353,7 @@ function getCookie(name) {
     const cfApiToken = document.getElementById('cfApiToken');
     const setupPassword = document.getElementById('setupPassword');
     const setupPasswordConfirm = document.getElementById('setupPasswordConfirm');
+    const setupCurrentPassword = document.getElementById('setupCurrentPassword');
     const paymentModeInputs = document.querySelectorAll('input[name="paymentMode"]');
 
     const aliasNameInput = document.getElementById('aliasNameInput');
@@ -2016,7 +2027,9 @@ async function saveSetup() {
         zone_id: (cfZoneId.value || '').trim(),
         api_token: (cfApiToken.value || '').trim(),
       },
-      password: password
+      password: password,
+      // Changing the password requires the current one (ignored on first run).
+      current_password: password ? (setupCurrentPassword?.value || '') : ''
     };
 
     const response = await fetch('/api/setup/config', {

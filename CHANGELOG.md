@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.31] - 2026-11-26
+
+### Security
+
+- Hardened API authentication and authorization.
+- Improved protection against cross-site scripting and CSRF.
+- Strengthened browser security policies and login rate limiting.
+- Added a security policy and enabled private vulnerability reporting.
+
+This is an important security update. All users are strongly
+encouraged to upgrade.
+
+Thanks to dritzps for responsible vulnerability discovery and
+Matt Hill for developing the security fixes.
+
 ## [0.3.30] - 2026-11-22
 
 ### Security
